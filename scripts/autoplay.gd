@@ -2,7 +2,7 @@ extends Node
 ## Autoload "Autoplay": a bot that plays the whole flow with real taps and saves screenshots.
 ## Off unless the game is started with `-- --autoplay`. Run it (needs a screen, so xvfb):
 ##   tools/autoplay.sh            -> docs/renders/flow_*.png, prints one PASS line per check
-## The last line is "AUTOPLAY PASS" or "AUTOPLAY FAIL <step>"; CI fails on anything else.
+## It ends with "AUTOPLAY PASS" or "AUTOPLAY FAIL <step>"; CI fails without the PASS or on any FAIL line.
 ## Uses its own settings/save folder (XDG_DATA_HOME in the script), never the player's.
 ##
 ## When the game grows, extend `_run()`: drive the real game the way a player would, and add a
