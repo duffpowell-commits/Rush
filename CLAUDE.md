@@ -6,7 +6,8 @@ first; it is the handoff between sessions.
 
 ## Where things stand
 - Pitch: docs/PITCH.md. Queue (what to work on): QUEUE.md. Progress: tasks/todo.md.
-- Latest build: Releases -> `dev` -> `<repo>.apk` (rebuilt on every push to main).
+- Latest build: Releases -> `dev` -> `<repo>.apk` (rebuilt on every push to main). Template's own: https://github.com/duffpowell-commits/godot-game-starter/releases/tag/dev (first green CI Nov 19, build 2).
+- Waiting on Duff: tick Settings -> Template repository, and add the `LM_KEYSTORE_PASS` secret (until then CI signs with a throwaway key and warns).
 - Done: Milestone 0, all 14 approved foundation items (list below).
 - Next: start a game from this template (docs/NEW_GAME.md), then Milestone 1 = the game's core loop.
 
