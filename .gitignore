@@ -1,0 +1,8 @@
+.godot/
+build/
+*.keystore
+build.txt
+build_code.txt
+repo.txt
+export.log
+autoplay.log
