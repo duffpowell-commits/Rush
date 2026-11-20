@@ -7,7 +7,7 @@ first; it is the handoff between sessions.
 ## Where things stand
 - Pitch: docs/PITCH.md. Queue (what to work on): QUEUE.md. Progress: tasks/todo.md.
 - Latest build: Releases -> `dev` -> `<repo>.apk` (rebuilt on every push to main). Template's own: https://github.com/duffpowell-commits/godot-game-starter/releases/tag/dev (first green CI Nov 19, build 2).
-- Waiting on Duff: tick Settings -> Template repository, and add the `LM_KEYSTORE_PASS` secret (until then CI signs with a throwaway key and warns).
+- Waiting on Duff: tick Settings -> Template repository; make the keystone (docs/SIGNING.md: `KEYSTONE_PASS` secret here, then Actions -> make keystone). Until then CI signs with a throwaway key and warns.
 - Done: Milestone 0, all 14 approved foundation items (list below).
 - Next: start a game from this template (docs/NEW_GAME.md), then Milestone 1 = the game's core loop.
 
@@ -15,7 +15,7 @@ first; it is the handoff between sessions.
 1. Repo files: this CLAUDE.md, QUEUE.md, docs/PITCH.md, docs/style-guide.md, tasks/todo.md + lessons.md.
 2. CI (`.github/workflows/build.yml`): parse every script (with autoloads), rule tests, autoplay
    flow, signed APK; on main uploads the APK + version.json to the `dev` release.
-3. One signing key for ALL games: `signing/games.keystore.enc` + `LM_KEYSTORE_PASS` secret (docs/SIGNING.md).
+3. One signing key for every game except Lethemoor, the **keystone** (Nov 20): `signing/keystone.keystore.enc` + `keystone.sha256`, `KEYSTONE_PASS` secret, made once by `make_keystone.yml`; `signing/unlock.sh` picks the key in CI (docs/SIGNING.md). Lethemoor keeps its own key: never sign another game with it.
 4. In-app updater (`scripts/updater.gd`) + version number on the title (`v0.1.<build>`).
 5. REPORT A BUG on title + pause (`scripts/bug_report.gd`): GitHub issue or copy-to-text, build/device/state added.
 6. Scene flow: boot -> intro (once, skippable) -> title -> game -> pause -> GAME OVER -> title.
@@ -41,7 +41,7 @@ Cut by Duff: playtest link + feedback sheet, phone frame-rate check.
   `settings_sheet.gd`. `game.gd` = placeholder "Orb Catch": replace its PLAY section, keep the rest.
 - `tests/run_tests.gd` rule tests. `tools/` check_scripts.gd, autoplay.sh, gen_audio.py (placeholder sounds).
 - `assets/audio/` (list every clip in SOURCES.md), `assets/art/`. `grok_art/` art drops, never ships.
-- `signing/games.keystore.enc` the shared key, encrypted. `docs/renders/` autoplay screenshots.
+- `signing/` the keystone (encrypted) + `unlock.sh` (CI) + `make_keystone.sh` (once). `docs/renders/` autoplay screenshots.
 
 ## Commands
 - Godot in the cloud sandbox: 4.5-stable Linux zip from GitHub releases -> `/usr/local/bin/godot`.
