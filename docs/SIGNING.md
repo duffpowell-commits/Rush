@@ -21,9 +21,8 @@ A repo with no copy of the keystone fetches it from godot-game-starter at build 
 the fingerprint; commit a copy into the repo when convenient.
 
 ## What CI does (`signing/unlock.sh`, same file in every repo)
-keystone if KEYSTONE_PASS unlocks it (a wrong passphrase fails the build) -> DuffQuest only, until
-the keystone exists: the old Lethemoor key as a bridge -> else a throwaway key + a warning (that APK
-can't update an installed copy).
+keystone if KEYSTONE_PASS unlocks it (a wrong passphrase fails the build) -> else a throwaway key +
+a warning (that APK can't update an installed copy).
 
 ## Never
 - Never commit the unlocked keystore or the passphrase, or paste the passphrase in chat.
