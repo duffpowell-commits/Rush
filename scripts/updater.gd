@@ -10,7 +10,7 @@ extends CanvasLayer
 ## installer (OS.shell_open; Godot's FileProvider makes the content:// URI).
 ##
 ## Needs: REQUEST_INSTALL_PACKAGES + INTERNET in the Android preset, and every build signed
-## with the SAME key (signing/games.keystore.enc, unlocked by the LM_KEYSTORE_PASS secret).
+## with the SAME key (the keystone, signing/keystone.keystore.enc, unlocked by KEYSTONE_PASS).
 ## Off-phone check: UPDATER_TEST=1 UPDATER_CODE=1 UPDATER_URL=<json url> UPDATER_SHOT=<png>.
 
 const UI = preload("res://scripts/ui.gd")

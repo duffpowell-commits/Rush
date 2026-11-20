@@ -71,27 +71,13 @@ jobs:
           mkdir -p ~/.local/share/godot/export_templates
           unzip -q tpl.tpz -d /tmp/tpl
           mv /tmp/tpl/templates ~/.local/share/godot/export_templates/${GODOT_VERSION/-/.}
-      - name: Signing key (the same one for every game)
-        # Android only installs an update over an app signed with the SAME key. One key signs
-        # all of Duff's games: signing/games.keystore.enc (alias androiddebugkey, store/key
-        # password android), encrypted. The LM_KEYSTORE_PASS repo secret unlocks it; each repo
-        # needs that secret (docs/SIGNING.md). Without it a throwaway key is made and the APK
-        # can't update an installed copy (the job warns).
+      - name: Signing key (the keystone)
+        # Android only installs an update over an app signed with the SAME key. The keystone signs
+        # every Duff game except Lethemoor (own key). signing/unlock.sh picks the key; docs/SIGNING.md.
         env:
-          LM_KEYSTORE_PASS: ${{ secrets.LM_KEYSTORE_PASS }}
+          KEYSTONE_PASS: ${{ secrets.KEYSTONE_PASS }}
         run: |
-          LM_KEYSTORE_PASS=$(printf '%s' "$LM_KEYSTORE_PASS" | tr -d '[:space:]`')
-          export LM_KEYSTORE_PASS
-          if [ -n "$LM_KEYSTORE_PASS" ]; then
-            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in signing/games.keystore.enc \
-              -out debug.keystore -pass env:LM_KEYSTORE_PASS
-            keytool -list -keystore debug.keystore -storepass android | grep -i "SHA-256"
-            echo "Signing with the shared games key"
-          else
-            echo "::warning::LM_KEYSTORE_PASS not set in this repo: throwaway key, this APK can't update an installed copy. See docs/SIGNING.md"
-            keytool -genkeypair -keystore debug.keystore -storepass android -alias androiddebugkey \
-              -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          bash signing/unlock.sh
           mkdir -p ~/.config/godot
           cat > ~/.config/godot/editor_settings-4.5.tres <<TRES
           [gd_resource type="EditorSettings" format=3]
