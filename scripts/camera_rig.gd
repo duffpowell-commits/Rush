@@ -14,6 +14,9 @@ extends Node3D
 @export var wall_mask := 1            # what the camera may not pass through
 @export var wall_margin := 0.35
 @export var fov := 45.0
+## Live sliders in DEV MENU -> TUNE (scripts/tune_panel.gd).
+const TUNE := {"pitch_deg": [20.0, 85.0], "distance": [3.0, 16.0], "look_ahead": [0.0, 1.0],
+	"smooth": [1.0, 20.0], "fov": [25.0, 80.0]}
 
 var follow: Node3D
 var frame_target: Node3D
@@ -27,6 +30,10 @@ var _base := Vector3.ZERO
 
 func _ready() -> void:
 	add_to_group("camera_rig")
+	add_to_group("tunable")
+	var dm := get_node_or_null("/root/DebugMenu")
+	if dm != null:
+		dm.apply_tune(self)
 	cam = Camera3D.new()
 	cam.fov = fov
 	cam.current = true
@@ -99,6 +106,7 @@ func _process(dt: float) -> void:
 
 
 func _apply(_dt: float) -> void:
+	cam.fov = fov
 	var s := trauma * trauma
 	var off := Vector3(_noise.get_noise_2d(_t * 40.0, 0), _noise.get_noise_2d(0, _t * 40.0), 0) * 0.35 * s
 	cam.global_position = _base + off

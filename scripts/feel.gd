@@ -4,11 +4,22 @@ extends Node
 ## power 0..1: 0.3 = a jab, 0.6 = a heavy hit, 1.0 = a finisher.
 
 const SPARK_COLOR := Color(1.0, 0.85, 0.45)
+## Live sliders in DEV MENU -> TUNE (scripts/tune_panel.gd). 1.0 = as coded.
+const TUNE := {"stop_scale": [0.0, 3.0], "shake_scale": [0.0, 3.0], "spark_scale": [0.0, 3.0], "buzz_scale": [0.0, 3.0]}
+
+var stop_scale := 1.0                 # hit-stop length (Character3D.hit reads it)
+var shake_scale := 1.0                # screen shake per hit
+var spark_scale := 1.0                # sparks per hit
+var buzz_scale := 1.0                 # vibration length per hit
 
 var shakes := 0                       # counters: the autoplay bot proves each part fires
 var bursts := 0
 var buzzes := 0
 var sounds := 0
+
+
+func _ready() -> void:
+	add_to_group("tunable")
 
 
 func impact(pos: Vector3, power: float, parent: Node3D) -> void:
@@ -17,10 +28,10 @@ func impact(pos: Vector3, power: float, parent: Node3D) -> void:
 		audio.sfx("hit_heavy" if power >= 0.5 else "hit", randf_range(0.92, 1.08))
 		sounds += 1
 	for rig in get_tree().get_nodes_in_group("camera_rig"):
-		rig.add_trauma(0.2 + power * 0.45)
+		rig.add_trauma((0.2 + power * 0.45) * shake_scale)
 		shakes += 1
 	burst(pos, power, parent)
-	buzz(int(18 + 30 * power))
+	buzz(int((18 + 30 * power) * buzz_scale))
 
 
 func buzz(ms: int) -> void:
@@ -36,7 +47,7 @@ func burst(pos: Vector3, power: float, parent: Node3D) -> CPUParticles3D:
 	var p := CPUParticles3D.new()
 	p.one_shot = true
 	p.explosiveness = 1.0
-	p.amount = (6 if low else 14) + int(power * 12)
+	p.amount = maxi(1, int(((6 if low else 14) + int(power * 12)) * spark_scale))
 	p.lifetime = 0.35
 	p.direction = Vector3.UP
 	p.spread = 80.0
