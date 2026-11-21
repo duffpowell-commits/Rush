@@ -9,7 +9,8 @@ every session checks the PR's combined status, not just the check runs.
 
 ## Steps (the session that opened the PR does this, once CI is green)
 1. Start a reviewer with no history: a subagent, or the `code-review` skill. Give it ONLY the PR
-   number/diff, this repo's CLAUDE.md and GROK_STANDARDS.md. Never your summary of the change.
+   number/diff, this repo's AGENTS.md (the rules), CLAUDE.md and GROK_STANDARDS.md. Never your summary of the change.
+   Why AGENTS.md (Nov 21): the rules moved there from CLAUDE.md (docs/DECISIONS.md).
 2. It checks, and reports with file:line:
    - Does the diff do what the PR title says, and nothing else? Files touched that shouldn't be?
    - Bugs: wrong logic, nulls, a freed node, a missed `await`, save format changed without a `Save.VERSION` bump.

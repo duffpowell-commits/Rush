@@ -12,6 +12,10 @@
   no force push, no direct push to main, no push of code the tests didn't pass on (`tools/test.sh`
   records the tree), no new/changed/committed signing keys or secret files (by name). Corrected twice = add a rule;
   a rule nobody trips in a month = delete it.
+- **Every agent gets the push rules, not just Claude**: `.githooks/pre-push` runs the same guard.py
+  on `git push` after `git config core.hooksPath .githooks` (first step of every session, AGENTS.md).
+  `--no-verify` skips it; CI and the fresh-eyes gate stay the backstop. Self-test: `tools/test_push_guard.sh`.
+  Why (Nov 21): Claude Code hooks only fire inside Claude Code, so other agents could skip them.
 - **Fresh-eyes review before merge** (`.github/workflows/fresh_eyes.yml`, `docs/FRESH_EYES.md`): the
   `fresh-eyes` status stays pending until a reviewer with a fresh context posts
   `FRESH-EYES REVIEW: PASS` on the PR's head commit. Pending is not green: sessions
