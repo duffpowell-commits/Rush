@@ -171,6 +171,7 @@ func _run() -> void:
 	var coach_was: bool = get_tree().current_scene.has_node("UI/Root/Coach_move")
 	await _movement_checks(get_tree().current_scene)
 	await _standards_checks(get_tree().current_scene, coach_was)
+	await _tune_checks(get_tree().current_scene)
 	if clip != "":
 		await _record_clip(get_tree().current_scene)
 
@@ -634,6 +635,34 @@ func _record_clip(ct: Node) -> void:
 
 
 # ---------------------------------------------------------------- helpers
+
+## Live tuning (DEV MENU -> TUNE): a slider moves every live node of its kind, and the value sticks.
+func _tune_checks(ct: Node) -> void:
+	var dm: Node = get_node("/root/DebugMenu")
+	var Tune = preload("res://scripts/tune_panel.gd")
+	dm.open()
+	await _frames(5)
+	await _click("TUNE")
+	await _frames(10)
+	var panel: Node = dm.tune_panel
+	var sl: HSlider = panel.find_child("character3d__max_speed", true, false) if panel != null else null
+	var cam_sl: HSlider = panel.find_child("camera_rig__distance", true, false) if panel != null else null
+	var feel_sl: HSlider = panel.find_child("feel__stop_scale", true, false) if panel != null else null
+	var was: float = ct.hero.max_speed
+	if sl != null:
+		sl.value = was + 1.5
+	await _frames(3)
+	_shot("tune_panel")
+	var moved: bool = sl != null and absf(ct.hero.max_speed - (was + 1.5)) < 0.02
+	var kept: bool = Tune.saved("character3d", "max_speed") != null
+	var all_kinds: bool = cam_sl != null and feel_sl != null
+	var shared: bool = "character3d.max_speed" in "\n".join(Tune.changed_lines(get_tree(), dm.tune_defaults))
+	await _click("RESET TO CODE VALUES")
+	await _frames(3)
+	_check(moved and kept and shared and all_kinds and dm.tune_panel == null
+		and is_equal_approx(ct.hero.max_speed, was) and Tune.saved("character3d", "max_speed") == null,
+		"TUNE PASS (live sliders for hero, camera, feel; saved, shared, reset)")
+
 
 func _check(ok: bool, line: String) -> void:
 	if ok:

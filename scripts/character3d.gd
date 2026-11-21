@@ -43,6 +43,9 @@ const DEATH := "Death01"
 const MODES := ["ground", "crouch", "air", "swim", "climb"]
 const BUFFER := 0.15                    # a press this early still counts (s)
 const COYOTE := 0.12                    # a jump this late off an edge still counts (s)
+## Live sliders in DEV MENU -> TUNE (scripts/tune_panel.gd).
+const TUNE := {"max_speed": [1.0, 12.0], "accel": [4.0, 40.0], "air_control": [0.0, 1.0],
+	"turn_speed": [2.0, 30.0], "jump_speed": [2.0, 10.0], "gravity": [5.0, 30.0], "crouch_speed": [0.5, 4.0]}
 
 @export var model_path := MODEL_DEFAULT
 @export var max_speed := 6.0
@@ -108,6 +111,10 @@ func _ready() -> void:
 	add_child(_col)
 	floor_snap_length = 0.35
 	floor_max_angle = deg_to_rad(46)
+	add_to_group("tunable")
+	var dm := get_node_or_null("/root/DebugMenu")
+	if dm != null:
+		dm.apply_tune(self)
 	model = (load(model_path) as PackedScene).instantiate()
 	add_child(model)
 	anim = model.find_children("*", "AnimationPlayer", true, false)[0]
@@ -626,7 +633,8 @@ func hit(from_pos: Vector3, power := 0.3) -> void:
 	if dead:
 		return
 	_flash = 1.0
-	hit_stop(0.06)
+	var feel := get_node_or_null("/root/Feel")
+	hit_stop(0.06 * (feel.stop_scale if feel != null else 1.0))
 	var d := from_pos - global_position
 	if power >= 0.5:
 		heading = atan2(d.x, d.z)          # face the hit; the clip throws you back

@@ -317,3 +317,22 @@ func test_coach_hints_short() -> void:
 			continue
 		for m in re.search_all(FileAccess.get_file_as_string(f)):
 			check(m.get_string(1).split(" ", false).size() <= 4, "hint '%s' is 4 words or fewer" % m.get_string(1))
+
+
+func test_tune_saves_applies_and_reports() -> void:
+	var Tune = preload("res://scripts/tune_panel.gd")
+	var feel: Node = root.get_node("Feel")
+	var dm: Node = root.get_node("DebugMenu")
+	Tune.clear()
+	check(feel.is_in_group("tunable") and "feel" in Tune.kinds(self), "Feel is tunable")
+	check(dm.tune_defaults.get("feel.shake_scale") == 1.0, "code value remembered")
+	Tune.save_value("feel", "shake_scale", 2.0)
+	feel.shake_scale = 1.0
+	Tune.apply(feel)
+	check(is_equal_approx(feel.shake_scale, 2.0), "saved value applied")
+	var lines: PackedStringArray = Tune.changed_lines(self, dm.tune_defaults)
+	check("feel.shake_scale = 2.0 (code 1.0)" in lines, "changed value reported: %s" % [lines])
+	check("labels=tuning" in Tune.share_url("x"), "share link files a tuning issue")
+	Tune.clear()
+	feel.shake_scale = 1.0
+	check(Tune.saved("feel", "shake_scale") == null, "reset clears saved values")

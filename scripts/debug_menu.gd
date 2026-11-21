@@ -2,10 +2,12 @@ extends CanvasLayer
 ## Autoload "DebugMenu": dev-only tools. Exists in debug exports (the dev APK) and the editor,
 ## never in a release export. Open it: tap the version number on the title 5 times, tap with
 ## three fingers anywhere, or press F1.
+## TUNE = live sliders for game feel (scripts/tune_panel.gd).
 ## Scenes opt in to SKIP LEVEL with `func debug_skip_level()`. Games read DebugMenu.god_mode.
 
 const UI = preload("res://scripts/ui.gd")
 const Config = preload("res://scripts/config.gd")
+const Tune = preload("res://scripts/tune_panel.gd")
 
 var enabled := false
 var god_mode := false
@@ -13,6 +15,8 @@ var show_fps := false
 var box: VBoxContainer
 var _fps: Label
 var _touches := {}
+var tune_defaults := {}                 # "kind.prop" -> the value in code, before saved tuning
+var tune_panel: Control
 
 
 func _ready() -> void:
@@ -27,6 +31,35 @@ func _ready() -> void:
 	_fps.add_theme_constant_override("outline_size", 4)
 	_fps.visible = false
 	add_child(_fps)
+	var feel := get_node_or_null("/root/Feel")
+	if feel != null:
+		apply_tune(feel)
+
+
+## Tunable nodes call this at the end of _ready(): remembers the code values, then puts saved
+## tuning on (dev builds only; a release build always plays the code values).
+func apply_tune(n: Object) -> void:
+	if not ("TUNE" in n):
+		return
+	var k := Tune.kind_of(n)
+	for prop in n.TUNE:
+		if not tune_defaults.has(k + "." + prop):
+			tune_defaults[k + "." + prop] = n.get(prop)
+	if enabled:
+		Tune.apply(n)
+
+
+func open_tune() -> void:
+	close()
+	if tune_panel != null:
+		return
+	tune_panel = Tune.open(self, tune_defaults, close_tune)
+
+
+func close_tune() -> void:
+	if tune_panel != null:
+		tune_panel.queue_free()
+		tune_panel = null
 
 
 func _process(_dt: float) -> void:
@@ -77,6 +110,7 @@ func open() -> void:
 		god_mode = not god_mode
 		god_b.text = "GOD MODE: " + ("ON" if god_mode else "OFF"))
 	box.add_child(god_b)
+	box.add_child(UI.button("TUNE (LIVE SLIDERS)", open_tune))
 	box.add_child(UI.button("SKIP LEVEL", func():
 		var s := get_tree().current_scene
 		if s != null and s.has_method("debug_skip_level"):
@@ -91,6 +125,7 @@ func open() -> void:
 		get_node("/root/Loader").go("res://scenes/character_test.tscn")))
 	box.add_child(UI.button("CLEAR SAVE", func():
 		get_node("/root/Save").clear()
+		Tune.clear()
 		close()))
 	box.add_child(UI.button("CLOSE", close))
 

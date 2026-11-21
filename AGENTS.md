@@ -9,6 +9,6 @@ Then read **CLAUDE.md** (this repo's handoff: what's built, commands, layout). R
 in CLAUDE.md win where they are more specific.
 
 Before every push:
-- `godot --headless --path . --script tools/check_scripts.gd` prints `SCRIPTS OK`
-- `XDG_DATA_HOME=$(mktemp -d) godot --headless --path . --script tests/run_tests.gd` prints `ALL PASS`
+- `tools/test.sh` prints `TESTS PASS` (parse check + rule tests; Claude Code's push guard needs it)
 - `tools/autoplay.sh` prints `AUTOPLAY PASS`
+Before any merge: a fresh-eyes review (docs/FRESH_EYES.md); CI keeps the PR pending until then.
