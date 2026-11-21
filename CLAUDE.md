@@ -27,7 +27,7 @@ Template for every new Duff game: Godot 4.6.3, GDScript, portrait phone, Android
 
 ## Guards (enforced, not just written down)
 - `.claude/hooks/guard.py` blocks: force push, direct push to main, pushing code the tests didn't pass
-  on, writing/generating signing keys, committing secrets. Settings: `.claude/hooks/guard.cfg`.
+  on, writing/generating signing keys, committing secret files (.env, keystores, secrets.*; names only, not contents). Settings: `.claude/hooks/guard.cfg`.
 - Before a push: `tools/test.sh` (parse check + rule tests; records the passing tree), then `tools/autoplay.sh`.
 - PRs: the `fresh-eyes` status stays pending until a fresh-context review posts
   `FRESH-EYES REVIEW: PASS` on the head commit (docs/FRESH_EYES.md). Pending is not green: sessions
