@@ -14,4 +14,5 @@
   a rule nobody trips in a month = delete it.
 - **Fresh-eyes review before merge** (`.github/workflows/fresh_eyes.yml`, `docs/FRESH_EYES.md`): the
   `fresh-eyes` status stays pending until a reviewer with a fresh context posts
-  `FRESH-EYES REVIEW: PASS` on the PR's head commit. Pending is not green, so nothing merges unreviewed.
+  `FRESH-EYES REVIEW: PASS` on the PR's head commit. Pending is not green: sessions
+  check the combined status and don't merge (GitHub itself doesn't block it).

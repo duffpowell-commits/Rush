@@ -114,7 +114,11 @@ static func open(parent: Node, defaults: Dictionary, on_close: Callable) -> Cont
 	tab.name = "TuneTab"
 	tab.visible = false
 	tab.custom_minimum_size = Vector2(160, UI.MIN_TOUCH)
-	tab.position = Vector2(8, 8)
+	tab.anchor_left = 1.0          # top right: clear of the BACK / pause corner
+	tab.anchor_right = 1.0
+	tab.offset_left = -168
+	tab.offset_right = -8
+	tab.offset_top = 8
 	root.add_child(tab)
 	var hide_b := UI.button("HIDE", func():
 		panel.visible = false

@@ -35,6 +35,8 @@ func impact(pos: Vector3, power: float, parent: Node3D) -> void:
 
 
 func buzz(ms: int) -> void:
+	if ms <= 0:
+		return
 	var s: Node = get_node_or_null("/root/Settings")
 	if s != null and s.get_value("vibration"):
 		Input.vibrate_handheld(ms)

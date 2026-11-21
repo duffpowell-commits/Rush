@@ -30,7 +30,8 @@ Template for every new Duff game: Godot 4.6.3, GDScript, portrait phone, Android
   on, writing/generating signing keys, committing secrets. Settings: `.claude/hooks/guard.cfg`.
 - Before a push: `tools/test.sh` (parse check + rule tests; records the passing tree), then `tools/autoplay.sh`.
 - PRs: the `fresh-eyes` status stays pending until a fresh-context review posts
-  `FRESH-EYES REVIEW: PASS` on the head commit (docs/FRESH_EYES.md). Pending is not green: no merge.
+  `FRESH-EYES REVIEW: PASS` on the head commit (docs/FRESH_EYES.md). Pending is not green: sessions
+  check the combined status and don't merge (GitHub itself doesn't block it).
 - Signing: one keystone for every game except Lethemoor (docs/SIGNING.md). Never make another key.
 
 ## Layout
