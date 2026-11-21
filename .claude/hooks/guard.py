@@ -42,12 +42,35 @@ def cfg(repo):
                 out[k.strip()] = v.strip()
     return out
 
+CODE_DEFAULT = r"\.(gd|tscn|tres|cfg|godot|gdshader|json|txt)$"
+SKIP = (".claude/", "docs/", ".github/")
+
+def code_hash(repo, at_head):
+    """One hash over every code file's blob id: of HEAD, or of the working tree as it is now.
+    tools/test.sh stores the working-tree one; a push needs HEAD's to match (renders, docs and
+    other non-code files can change in between without re-running the tests)."""
+    pat = re.compile(cfg(repo).get("code_files", CODE_DEFAULT))
+    rows = []
+    if at_head:
+        for line in git(repo, "ls-tree", "-r", "HEAD").splitlines():
+            meta, path = line.split("\t", 1)
+            if pat.search(path) and not path.startswith(SKIP):
+                rows.append(path + " " + meta.split()[2])
+    else:
+        files = git(repo, "ls-files", "-co", "--exclude-standard").splitlines()
+        files = [f for f in files if pat.search(f) and not f.startswith(SKIP) and os.path.isfile(os.path.join(repo, f))]
+        if files:
+            r = subprocess.run(["git", "-C", repo, "hash-object", "--", *files], capture_output=True, text=True)
+            rows = [f + " " + h for f, h in zip(files, r.stdout.split())]
+    import hashlib
+    return hashlib.sha1("\n".join(sorted(rows)).encode()).hexdigest()
+
 def code_changed(repo, c):
     """True if this push carries files that the tests cover (default: Godot code and data)."""
-    pat = re.compile(c.get("code_files", r"\.(gd|tscn|tres|cfg|godot|gdshader|json|txt)$"))
+    pat = re.compile(c.get("code_files", CODE_DEFAULT))
     base = git(repo, "merge-base", "HEAD", "origin/main") or git(repo, "rev-parse", "HEAD~1")
     files = git(repo, "diff", "--name-only", base, "HEAD").splitlines() if base else []
-    return any(pat.search(f) and not f.startswith((".claude/", "docs/", ".github/")) for f in files)
+    return any(pat.search(f) and not f.startswith(SKIP) for f in files)
 
 def check_bash(cmd, cwd):
     if re.search(r"\bgit\b[^|;&]*\bpush\b", cmd):
@@ -61,7 +84,7 @@ def check_bash(cmd, cwd):
         if repo:
             c = cfg(repo)
             if c.get("test_cmd") and code_changed(repo, c):
-                tree = git(repo, "rev-parse", "HEAD^{tree}")
+                tree = code_hash(repo, True)
                 mark = os.path.join(repo, ".claude/state/tests_pass")
                 passed = open(mark).read().strip() if os.path.exists(mark) else ""
                 if tree != passed:
@@ -87,6 +110,9 @@ def check_write(path):
              "change; Lethemoor's key never goes into another repo." % path)
 
 def main():
+    if len(sys.argv) > 2 and sys.argv[1] == "--hash":   # used by tools/test.sh
+        print(code_hash(sys.argv[2], False))
+        return
     try:
         e = json.load(sys.stdin)
     except Exception:

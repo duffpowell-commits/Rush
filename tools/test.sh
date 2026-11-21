@@ -13,9 +13,7 @@ if [ -n "$PASS" ] && ! grep -qE "$PASS" "$LOG"; then STATUS=1; fi
 if grep -q "SCRIPT ERROR" "$LOG"; then STATUS=1; fi
 rm -f "$LOG"
 if [ "$STATUS" -ne 0 ]; then echo "TESTS FAILED: push stays blocked"; exit 1; fi
-# Hash of the working tree as it is now (tracked + new files), without touching the real index.
-IDX=$(mktemp); cp "$(git rev-parse --git-dir)/index" "$IDX" 2>/dev/null
-TREE=$(GIT_INDEX_FILE=$IDX git add -A >/dev/null 2>&1 && GIT_INDEX_FILE=$IDX git write-tree)
-rm -f "$IDX"
+# Hash of the code files as they are now; the push guard checks the pushed commit has the same code.
+TREE=$(python3 .claude/hooks/guard.py --hash "$PWD")
 mkdir -p .claude/state && echo "$TREE" > .claude/state/tests_pass
-echo "TESTS PASS: tree $TREE recorded; commit exactly this and push"
+echo "TESTS PASS: code $TREE recorded; commit this code and push"
