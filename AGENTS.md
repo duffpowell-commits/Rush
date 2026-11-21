@@ -5,12 +5,15 @@ through the `@AGENTS.md` line at the top of CLAUDE.md. CLAUDE.md keeps only the 
 things stand) and Claude-only notes. Topic rules live in `standards/` (index: GROK_STANDARDS.md);
 this file points to them rather than copying them. Repo-specific rules here win where they are more
 specific than `standards/`.
+Why (Nov 21, 2026): Claude Code skips AGENTS.md when a CLAUDE.md exists unless CLAUDE.md imports it,
+so rules kept only here were invisible to Claude, and rules kept only in CLAUDE.md to everyone else.
 
 ## First step of every session (required, once per clone)
 ```sh
 git config core.hooksPath .githooks
 ```
 This turns on `.githooks/pre-push` for every agent, not just Claude Code (details under Guards).
+Why: Claude Code hooks only fire inside Claude Code, so Grok and other agents could skip them.
 
 ## Commands
 - Engine: Godot 4.6.3-stable. Version lives in `GODOT_VERSION` (build.yml) + `config/features`.
@@ -30,6 +33,7 @@ Before any merge: a fresh-eyes review (docs/FRESH_EYES.md); CI keeps the PR pend
 - `standards/00-core.md` always (phone-only, "green merges itself", what done means), then only the
   `standards/*.md` files your task touches (movement, controls, performance, art, build/signing...).
 - CLAUDE.md for where things stand. QUEUE.md for what to work on (only NOW).
+- docs/DECISIONS.md: dated log of what changed and why, plus open questions. Read it to catch up.
 
 ## Standing rules (the full set is in standards/; these are the ones sessions trip on)
 - Duff is phone-only (Godot Android editor, GitHub app). GDScript only. No desktop steps.
@@ -47,7 +51,8 @@ Before any merge: a fresh-eyes review (docs/FRESH_EYES.md); CI keeps the PR pend
 - One rule script, two triggers: `.claude/hooks/guard.py`. Settings: `.claude/hooks/guard.cfg`.
   - Claude Code runs it before every tool call (`.claude/settings.json`).
   - Every agent runs it on `git push` through `.githooks/pre-push`, once `core.hooksPath` is set (above).
-- It blocks: force push, direct push to main, pushing code the tests didn't pass on, writing/generating
+- It blocks: force push (caveat: in Claude Code's mode `--force-with-lease` still gets through; the
+  Git hook blocks it), direct push to main, pushing code the tests didn't pass on, writing/generating
   signing keys, committing secret files (.env, keystores, secrets.*; names only, not contents).
 - The Git hook sees what a push does, not its flags: any push that rewrites the remote branch counts
   as a force push (so `--force-with-lease` is blocked there too), and deleting main is blocked.
