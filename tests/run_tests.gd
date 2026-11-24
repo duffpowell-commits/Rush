@@ -402,6 +402,30 @@ func test_kitchen_walks_and_stress() -> void:
 	check(k.crew[1].out and k.crew[1].hand.is_empty(), "at the stress cap a cook walks out")
 
 
+## A cook who walks out mid-carry puts the dish back to refire, so the ticket can still go out.
+func test_kitchen_walkout_drops_plate() -> void:
+	var k := _kitchen()
+	k.start(1)
+	var t: Dictionary = k.tickets[0]
+	t.items[0].state = "carried"
+	k.crew[1].hand = {"tid": t.id, "dish": t.items[0].dish}
+	k.crew[1].stress = k.stress_cap - 1
+	k.crew[1].acted = true
+	t.time = 2   # red, so working adds the last point of stress
+	k.end_turn()
+	check(k.crew[1].out and k.crew[1].hand.is_empty(), "cook walked out")
+	check(t.items[0].state == "wait", "the dropped plate goes back to refire (%s)" % t.items[0].state)
+
+
+## Saving mid-service keeps only finished services' tickets, so a reload can't count them twice.
+func test_rush_save_no_double_count() -> void:
+	var g = load("res://scripts/game.gd").new()
+	g._night_before = 3
+	g.score = 7
+	check(int(g.state().score) == 3, "mid-service save stores finished services only (%s)" % g.state().score)
+	g.free()
+
+
 ## The greedy bot gets most of service 1 out: the slice is playable, not a wall.
 func test_kitchen_service1_beatable() -> void:
 	var k := _kitchen()
