@@ -1,6 +1,6 @@
-# godot-game-starter
+# Rush
 
-Starter for Duff's Godot 4 phone games, with Milestone 0 (foundation) already built: CI + signed
+A dinner service played like XCOM: the tickets are the enemy. Made from Duff's godot-game-starter, so CI + signed
 APK, in-app updates, bug reports, full scene flow, autosave, settings and accessibility, dev menu,
 autoplay bot. New game: docs/NEW_GAME.md. Details: CLAUDE.md.
 

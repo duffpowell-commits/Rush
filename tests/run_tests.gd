@@ -7,6 +7,7 @@ const Config = preload("res://scripts/config.gd")
 const UI = preload("res://scripts/ui.gd")
 const Updater = preload("res://scripts/updater.gd")
 const BugReport = preload("res://scripts/bug_report.gd")
+const Kitchen = preload("res://scripts/kitchen.gd")
 
 var n := 0
 var bad := 0
@@ -339,3 +340,77 @@ func test_tune_saves_applies_and_reports() -> void:
 	Tune.clear()
 	feel.shake_scale = 1.0
 	check(Tune.saved("feel", "shake_scale") == null, "reset clears saved values")
+
+
+# ---------------------------------------------------------------- Rush rules (scripts/kitchen.gd)
+
+func _kitchen() -> Kitchen:
+	var k := Kitchen.new()
+	k.start(1)
+	return k
+
+
+## A dish goes the whole way: fire, cook, plate, walk to the pass, run. Ticket out, tips paid.
+func test_kitchen_fire_to_table() -> void:
+	var k := _kitchen()
+	check(k.tickets.size() == 1 and k.tickets[0].items[0].dish == "BURGER", "first ticket is a burger")
+	check(k.action_here(0) == "FIRE" and k.fire(0), "DEV fires at the grill")
+	check(k.crew[0].ap == k.ap - 1, "firing costs 1 action")
+	check(not k.plate(0), "can't plate a raw burger")
+	k.end_turn()
+	k.end_turn()
+	check(k.pans[0].left == 0 and k.action_here(0) == "PLATE", "burger is up after 2 minutes")
+	check(k.plate(0) and k.crew[0].hand.dish == "BURGER", "plated into DEV's hand")
+	check(not k.move(0, 3), "can't cross 3 stations on 2 actions")
+	check(k.move(0, 2) and k.crew[0].ap == 0, "2 stations = 2 actions")
+	k.end_turn()
+	check(k.move(0, 3) and k.action_here(0) == "RUN" and k.run(0), "walk to the pass and run it")
+	check(k.served == 1 and k.tips > 0 and k.ticket(1).is_empty(), "ticket out, tips paid")
+
+
+## A finished pan left sitting burns: the dish goes back to wait (refire) and the cook there stresses.
+func test_kitchen_burn_refires() -> void:
+	var k := _kitchen()
+	k.fire(0)
+	for i in 2 + k.burn_after + 1:
+		k.crew[0].acted = true   # stays working, so no rest
+		k.end_turn()
+	check(k.pans[0].is_empty(), "burnt pan is cleared")
+	check(k.tickets[0].items[0].state == "wait", "dish is back to wait for a refire")
+	check(k.crew[0].stress >= 2, "the grill cook took the burn (stress %d)" % k.crew[0].stress)
+
+
+## Nobody cooks: tickets run out of time and walk. Working through red tickets stresses; idling rests.
+func test_kitchen_walks_and_stress() -> void:
+	var k := _kitchen()
+	k.ticket_time = 3
+	k.start(1)
+	k.crew[0].acted = true
+	k.end_turn()
+	check(k.crew[0].stress == 1, "worked through a red ticket: +1 stress")
+	check(k.crew[1].stress == 0, "idle cook stays calm")
+	k.crew[0].stress = 4
+	k.end_turn()
+	check(k.crew[0].stress == 2, "a turn off rests 2")
+	for i in 10:
+		k.end_turn()
+	check(k.walked >= 1, "untouched tickets walk (%d)" % k.walked)
+	k.crew[1].stress = k.stress_cap - 1
+	k.crew[1].acted = true
+	k.tickets.append({"id": 999, "table": 9, "items": [{"dish": "FRIES", "state": "wait"}], "time": 2, "big": false})
+	k.end_turn()
+	check(k.crew[1].out and k.crew[1].hand.is_empty(), "at the stress cap a cook walks out")
+
+
+## The greedy bot gets most of service 1 out: the slice is playable, not a wall.
+func test_kitchen_service1_beatable() -> void:
+	var k := _kitchen()
+	var total := k.tickets.size() + k.incoming.size()
+	var guard := 0
+	while not k.done and guard < 100:
+		k.bot_turn()
+		k.end_turn()
+		guard += 1
+	check(k.done, "service ends")
+	check(k.served * 10 >= total * 7, "bot served %d of %d (needs 70%%)" % [k.served, total])
+	check(k.walked < 3, "bot walked %d, under the game over line" % k.walked)

@@ -102,18 +102,28 @@ func _run() -> void:
 	var ld: Node = get_node("/root/Loader")
 	_check(ld.loads >= 2 and not ld.busy(), "LOAD PASS (%d scenes loaded in the background, %d frames drawn meanwhile)" % [ld.loads, ld.frames_while_loading])
 
-	# Play: tap the green orbs for a few seconds.
-	# Real time, not frame counts: a slow box runs few frames, so give it up to 15 s and stop at 3 points.
+	# Play: a real service. First a player's taps (pick DEV, walk to GRILL, FIRE there), then the
+	# greedy bot cooks turn by turn until a ticket goes out.
 	var start_score: int = game.score
+	var k: Object = game.k
+	var fired_by_tap := false
+	var coach_up: bool = game.has_node("Coach_fire")
+	await _shot("first_minute")
+	# Walk MO one station left with a tap, then back: moves cost actions.
+	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
+	await _tap_at(game.field.get_global_transform() * game.station_rect(1).get_center())
+	var moved: bool = k.crew[1].at == 1 and k.crew[1].ap == k.ap - 1
+	await _tap_at(game.field.get_global_transform() * game.cook_pos(0))
+	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
+	await _frames(2)
+	fired_by_tap = k.pans[0].get("dish", "") == "BURGER"
+	_check(coach_up and moved and fired_by_tap, "TAP PASS (hint shown, MO walked to FRY for 1 action, DEV fired the burger)")
 	var until := Time.get_ticks_msec() + 15000
-	while Time.get_ticks_msec() < until and game.score < start_score + 3:
-		for o in game.orbs:
-			if not o.bad and o.pos.y > 150:
-				await _tap_at(game.field.get_global_transform() * o.pos)
-				break
+	while Time.get_ticks_msec() < until and game.score < start_score + 1 and not game.over:
+		game.bot_play_turn()
 		await _frames(3)
-	_shot("game")
-	_check(game.score > start_score, "PLAY PASS (score %d)" % game.score)
+	await _shot("game")
+	_check(game.score > start_score, "PLAY PASS (%d ticket out by %s)" % [game.score, game.k.clock()])
 	var bat: Node = get_node("/root/Battery")
 	var playing_full: bool = bat.state == "play" and Engine.max_fps == 60
 
@@ -170,13 +180,12 @@ func _run() -> void:
 	await _click("RESUME")
 	await _frames(5)
 
-	# Stop tapping and let the orbs fall: GAME OVER.
-	Engine.time_scale = 4.0
+	# Do nothing and keep ending turns: tables walk, GAME OVER.
 	var waited := 0
-	while not game.over and waited < 60 * 60:
+	while not game.over and waited < 200:
+		game.end_turn()
 		await _frames(1)
 		waited += 1
-	Engine.time_scale = 1.0
 	await _frames(10)
 	_shot("gameover")
 	_check(game.over and _find("TRY AGAIN") != null and not get_node("/root/Save").exists(),

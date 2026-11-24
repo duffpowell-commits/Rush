@@ -1,5 +1,10 @@
 # Decisions log (catch-up file for Claude, Grok and any agent)
 
+## 2026-11-24 — Rush made from the starter
+Duff picked Rush (kitchen tactics) from the Nov 24 games scan and chose a one-week side test next to
+Lethemoor. First playable: rules in scripts/kitchen.gd, screen in game.gd, 4 rule tests, autoplay
+plays a real service. Open: Duff's playtest decides whether the slice gets real art.
+
 ## 2026-11-23 — Studio publisher
 
 Startup shows the approved weathered 3 Eyed Fox Studios logo from the studio Drive folder

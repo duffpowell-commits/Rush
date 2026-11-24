@@ -1,25 +1,20 @@
 @AGENTS.md
 
-# Starter Game (godot-game-starter)
+# Rush (made from godot-game-starter)
 
-Template for every new Duff game: Godot 4.6.3, GDScript, portrait phone, Android APK. Milestone 0
-(foundation) is done here, so a new game starts at Milestone 1. Owner: Duff. This is the handoff.
-Commands, standing rules, guards and layout: AGENTS.md (imported above), shared by every coding AI.
-Why the import (Nov 21): Claude Code skips AGENTS.md when CLAUDE.md exists unless it's imported.
-Catch-up log: docs/DECISIONS.md.
+A dinner service played like XCOM: the tickets are the enemy. Owner: Duff. Read this first; it is
+the handoff between sessions. Commands, standing rules, guards and layout: AGENTS.md (imported above).
 
 ## Where things stand
-- Rulebook for every game and every coding AI: **AGENTS.md** (commands + standing rules) ->
-  **GROK_STANDARDS.md** -> `standards/*.md` (one topic each, <= 60 lines). Change rules here, then
-  copy them into the game repos (list at the bottom of AGENTS.md).
-- What Milestone 0 built (items 1-19, Nov 19-21): `docs/MILESTONE0.md`. Queue: QUEUE.md. Progress: tasks/todo.md.
-- Latest build: Releases -> `dev` -> `<repo>.apk`, rebuilt on every push to main.
-- Waiting on Duff: tick Settings -> Template repository; make the keystone (docs/SIGNING.md). Until
-  then CI signs with a throwaway key and warns.
-- Nov 21: live tuning sliders (DEV MENU -> TUNE), push-guard hooks, fresh-eyes review gate.
-- Nov 21 (Grok): Git pre-push hook for every agent (`.githooks/pre-push`, same rules as guard.py);
-  rules moved into AGENTS.md, which this file imports.
-- Next: start a game from this template (docs/NEW_GAME.md); Milestone 1 = the game's core loop.
+- Side test: one week, Nov 24 to Dec 1, 2026. Lethemoor is the active game. Pitch + kill criteria:
+  docs/PITCH.md. Queue: QUEUE.md (NOW = M1 slice). Progress: tasks/todo.md.
+- Rules: `scripts/kitchen.gd` (pure logic, no nodes). Screen: `scripts/game.gd` PLAY section.
+  Tests: `test_kitchen_*` in tests/run_tests.gd. Autoplay: TAP PASS + PLAY PASS drive a real service.
+- Tuning lives in game.gd TUNE (ticket_time, crew_ap, stress_cap, service_turns): DEV MENU -> TUNE.
+  Defaults: 9-minute tickets, 3 actions, stress cap 6, 20-minute service. Greedy bot clears ~6 of 7
+  tickets in service 1 and ~4 of 9 in service 2.
+- Latest build: Releases -> `dev` -> `rush.apk`.
+- Next: Duff plays the APK; then real art and sound for the one service (QUEUE.md NOW).
 
 ## Claude-only notes
 - `.claude/settings.json` runs `.claude/hooks/guard.py` before every Bash/Write/Edit call. A blocked

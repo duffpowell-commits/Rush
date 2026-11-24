@@ -2,12 +2,21 @@
 Work only on NOW. New asks go under IDEAS with a date until Duff swaps them into NOW.
 
 ## NOW
-- (template) Nothing: this repo is the starter. Make a game from it (docs/NEW_GAME.md).
+- M1: vertical slice, one Friday service (one-week side test, Nov 24 to Dec 1, 2026).
+  - [x] Rules: tickets with clocks, 3 stations + pass, 2 cooks with 3 actions, burns, stress, walkouts.
+  - [x] Playable screen: rail + next 3, the line, crew, FIRE / PLATE / RUN, END TURN, first-minute hint.
+  - [ ] Duff plays the APK: is one service fun? (kill criteria in docs/PITCH.md)
+  - [ ] Real art and sound for that one service (Foxboard).
+  - [ ] Tonight's events: a 12-top push, an 86, a refire call-out.
+  - [ ] End-of-service grade screen.
 
 ## NEXT
-- In a new game: Milestone 1 = the core loop from docs/PITCH.md, replacing the PLAY section of scripts/game.gd.
+- M2: the week: 7 services strung together, grading, pick a trait or upgrade between services.
+- M3: content to the v1 column: 5 stations, 12 dishes, 4 crew, 8 events, Saturday boss.
+- M4: demo: free first service on itch and CrazyGames, store page with a clip.
 
 ## DONE
+- Rush first playable (Nov 24, 2026): rules engine + screen + tests + autoplay.
 - Milestone 0: foundation, items 1-14 (Nov 19, 2026). See CLAUDE.md.
 
 ## IDEAS
