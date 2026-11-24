@@ -10,6 +10,8 @@ extends Node
 
 var shots := ""
 var clip := ""                          # --clip=DIR: save a gameplay clip's frames there
+const UI = preload("res://scripts/ui.gd")
+const Kitchen = preload("res://scripts/kitchen.gd")
 const CLIP_SECS := 15.0                 # vertical 9:16 (the game is portrait), sized for Shorts/Reels/TikTok
 var failed := false
 var _start_ms := 0                      # when game code first runs (engine/driver start-up excluded)
@@ -124,6 +126,25 @@ func _run() -> void:
 		await _frames(3)
 	await _shot("game")
 	_check(game.score > start_score, "PLAY PASS (%d ticket out by %s)" % [game.score, game.k.clock()])
+	# Both cooks at an end station stay fully on screen, a touch target apart.
+	var at_before: Array = [game.k.crew[0].at, game.k.crew[1].at]
+	var edge_ok := true
+	var gap := 0.0
+	for s in [0, Kitchen.PASS_IX]:
+		game.k.crew[0].at = s
+		game.k.crew[1].at = s
+		var a: Vector2 = game.cook_pos(0)
+		var b: Vector2 = game.cook_pos(1)
+		gap = absf(a.x - b.x)
+		for p in [a, b]:
+			edge_ok = edge_ok and p.x - game.COOK_R >= 0.0 and p.x + game.COOK_R <= game.field.size.x
+		edge_ok = edge_ok and gap >= game.COOK_R * 2.0 + UI.GAP - 0.5
+	game.field.queue_redraw()
+	await _shot("two_cooks_edge")
+	game.k.crew[0].at = at_before[0]
+	game.k.crew[1].at = at_before[1]
+	game.field.queue_redraw()
+	_check(edge_ok, "EDGE PASS (two cooks at GRILL and PASS on screen, %d apart)" % int(gap))
 	var bat: Node = get_node("/root/Battery")
 	var playing_full: bool = bat.state == "play" and Engine.max_fps == 60
 

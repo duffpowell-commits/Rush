@@ -286,8 +286,13 @@ func cook_pos(c: int) -> Vector2:
 			if i == c:
 				idx = same
 			same += 1
-	var off := 0.0 if same <= 1 else (idx - (same - 1) / 2.0) * (COOK_R * 2.0 + UI.GAP)
-	return Vector2(r.get_center().x + off, r.end.y + 70.0)
+	var step := COOK_R * 2.0 + UI.GAP          # a full touch target apart
+	var half := (same - 1) / 2.0 * step
+	var off := 0.0 if same <= 1 else idx * step - half
+	# Keep the pair on screen at the end stations: clamp the pair's centre, not each cook.
+	var edge := COOK_R + 8.0 + half
+	var cx := clampf(r.get_center().x, edge, field.size.x - edge)
+	return Vector2(cx + off, r.end.y + 70.0)
 
 
 const COOK_R := 36.0         # 72 wide: the touch rule
