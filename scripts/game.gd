@@ -69,7 +69,7 @@ func _ready() -> void:
 # ---------------------------------------------------------------- state + saving
 
 func state() -> Dictionary:
-	return {"level": level, "score": score, "lives": lives}
+	return {"level": level, "score": _night_before, "lives": lives}   # finished services only: a reload restarts the service
 
 
 func checkpoint() -> void:
@@ -207,7 +207,11 @@ func end_turn() -> void:
 		k.walked = walked_before   # god mode: walked tables don't count
 	for e in k.events:
 		if e.begins_with("BURN"):
+			get_node("/root/Audio").sfx("bad", 0.8)
 			get_node("/root/Subs").cue("[sizzle: burn]")
+		elif e.ends_with("WALKED OUT"):
+			get_node("/root/Audio").sfx("bad", 0.6)
+			get_node("/root/Subs").cue("[door slams: cook walked out]")
 	if lives <= 0 or k.crew.all(func(c): return c.out):
 		game_over()
 		return
@@ -282,7 +286,7 @@ func cook_pos(c: int) -> Vector2:
 			if i == c:
 				idx = same
 			same += 1
-	var off := 0.0 if same <= 1 else (idx - (same - 1) / 2.0) * 62.0
+	var off := 0.0 if same <= 1 else (idx - (same - 1) / 2.0) * (COOK_R * 2.0 + UI.GAP)
 	return Vector2(r.get_center().x + off, r.end.y + 70.0)
 
 
@@ -364,12 +368,15 @@ func _draw_field(f: Control) -> void:
 		if i < k.pans.size() and not k.pans[i].is_empty():
 			var p: Dictionary = k.pans[i]
 			var up: bool = p.left <= 0
-			var tone := ("bad" if p.sat >= k.burn_after else "warn") if up else "info"
+			var burning: bool = up and p.sat >= k.burn_after
+			var tone := ("bad" if burning else "warn") if up else "info"
 			if not low and up:
 				f.draw_circle(r.get_center() + Vector2(0, 20), 46.0, Color(UI.key(tone), 0.2))
 			f.draw_circle(r.get_center() + Vector2(0, 20), 34.0, UI.key(tone))
+			if burning:   # shape cue, not colour alone: a thick ring the turn before it burns
+				f.draw_arc(r.get_center() + Vector2(0, 20), 40.0, 0.0, TAU, 32, UI.key("bad"), 5.0)
 			f.draw_string(font, r.position + Vector2(0, r.size.y - 18), p.dish, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), ink)
-			f.draw_string(font, r.get_center() + Vector2(-30, 30), "UP!" if up else "%d'" % p.left,
+			f.draw_string(font, r.get_center() + Vector2(-30, 30), ("BURN!" if burning else "UP!") if up else "%d'" % p.left,
 				HORIZONTAL_ALIGNMENT_CENTER, 60, UI.font_size(22), Color.BLACK)
 		elif i == Kitchen.PASS_IX:
 			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), "RUN HERE", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), UI.DIM)

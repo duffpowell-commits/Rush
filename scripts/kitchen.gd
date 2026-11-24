@@ -29,7 +29,7 @@ var turns := 20          # service length in minutes (7:00 to 7:20 PM)
 var ticket_time := 9     # minutes a ticket has before it's walked
 var ap := 3              # actions per cook per turn
 var stress_cap := 6
-var burn_after := 1      # turns a finished pan can sit before it burns
+var burn_after := 1      # a finished pan burns at the end of the turn its wait passes this (2 turns to plate at 1)
 
 var service := 1
 var turn := 0
@@ -67,7 +67,7 @@ func start(n: int, seed_value: int = 0) -> void:
 	var last_arrival := maxi(turns - ticket_time - 2, 4)
 	for i in count:
 		var arrive := int(round(float(i) * last_arrival / maxf(count - 1, 1)))
-		var big := i == count / 2 + 1 and n >= 1
+		var big := i == count / 2 + 1
 		incoming.append({"arrive": arrive, "ticket": _make_ticket(big)})
 	if n == 1:   # the first ticket of the night teaches the grill: DEV starts there
 		incoming[0].ticket.items = [{"dish": "BURGER", "state": "wait"}]
@@ -285,7 +285,7 @@ func end_turn() -> void:
 			cr.stress = maxi(0, cr.stress - 2)
 		if cr.stress >= stress_cap:
 			cr.out = true
-			cr.hand = {}
+			_drop_hand(cr)
 			_say("%s WALKED OUT" % cr.name)
 		cr.ap = ap
 		cr.acted = false
@@ -293,6 +293,18 @@ func end_turn() -> void:
 	_arrivals()
 	if (tickets.is_empty() and incoming.is_empty()) or crew.all(func(cr): return cr.out) or turn >= turns + ticket_time + 3:
 		done = true
+
+
+## A cook leaves holding a plate: that dish goes back on the ticket to refire, like a burn.
+func _drop_hand(cr: Dictionary) -> void:
+	if cr.hand.is_empty():
+		return
+	var t := ticket(cr.hand.tid)
+	for it in t.get("items", []):
+		if it.state == "carried" and it.dish == cr.hand.dish:
+			it.state = "wait"
+			break
+	cr.hand = {}
 
 
 func _say(s: String) -> void:
