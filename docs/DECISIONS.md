@@ -60,3 +60,7 @@ Approved by Duff on Nov 21 ("Build the pre-push hook", "Build the shared ruleboo
 - Hunter's Godot version: its BUILD_SPEC says 4.5-stable, while this template and standards/ use 4.6.3.
 - Is Hunter the active game? Hunter's docs/PITCH.md says Lethemoor is; its QUEUE.md says Hunter
   coding was greenlit Nov 20. Both logged in hunter's QUEUE.md; nothing changed until Duff says.
+
+## 2026-11-24: Godot 4.7.2 for every game
+
+- Duff: "Lets go 4.7 for all of our games." 4.7.2 is the latest stable; 4.7 adds a stable Godot Android Build Environment (GABE) for exporting from the phone, HDR output and AreaLight3D. CI `GODOT_VERSION`, `config/features` and the engine lines in AGENTS.md / standards moved from 4.6.3 to 4.7.2. Older entries below keep their original version numbers as history.
