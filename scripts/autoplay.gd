@@ -251,10 +251,16 @@ func _run() -> void:
 	var twist: Node = game.find_child("Twist", true, false)
 	var twist_name: String = twist.text if twist != null else "?"
 	await _shot("tonight")
+	# A phone call / back gesture on the card pauses on top of it; after RESUME, HEARD! still works.
+	game.pause()
+	await _frames(3)
+	await _click("RESUME")
+	await _frames(3)
 	await _click("HEARD!")
 	await _frames(3)
-	_check(game.k.event != "" and twist_name == game.k.EVENTS[game.k.event][0] and _find("HEARD!") == null,
-		"TWIST PASS (service 2 twist %s shown, HEARD! closes it)" % twist_name)
+	var sheets_left: int = get_tree().get_nodes_in_group("sheet").filter(func(n): return not n.is_queued_for_deletion()).size()
+	_check(game.k.event != "" and twist_name == game.k.EVENTS[game.k.event][0] and _find("HEARD!") == null and sheets_left == 0,
+		"TWIST PASS (service 2 twist %s shown; paused on top, resumed, HEARD! still closes it)" % twist_name)
 	var saved: Dictionary = get_node("/root/Save").read()
 	_check(int(saved.get("level", 0)) == 2, "AUTOSAVE PASS (level 2 saved)")
 	# A few minutes into service 2, so CONTINUE has a service in progress to pick back up.

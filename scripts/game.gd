@@ -49,6 +49,7 @@ var score := 0               # tickets out, whole night
 var lives := LIVES
 var lives_max := LIVES     # LIVES, +1 with COMP CARDS
 var cash := 0                # tips banked tonight, spent in the SHOP between services
+var twist_box: VBoxContainer   # the TONIGHT card while it's up
 var perks: Array = []        # upgrades owned tonight (upgrades.gd)
 var k: Kitchen
 var sel := 0                 # selected cook
@@ -254,6 +255,7 @@ func end_turn() -> void:
 	if paused or over or between:
 		return
 	var walked_before := k.walked
+	var critic_before := k.critic
 	k.end_turn()
 	if k.walked > walked_before and not get_node("/root/DebugMenu").god_mode:
 		lives = lives_max - k.walked
@@ -262,6 +264,7 @@ func end_turn() -> void:
 		UI.buzz(80)
 	elif k.walked > walked_before:
 		k.walked = walked_before   # god mode: walked tables don't count
+		k.critic = critic_before
 	for e in k.events:
 		if e.begins_with("BURN"):
 			get_node("/root/Audio").sfx("bad", 0.8)
@@ -305,7 +308,7 @@ func _service_done() -> void:
 	var grade := UI.label(g, 96, UI.key("good" if g in ["A", "B"] else ("warn" if g == "C" else "bad")))
 	grade.name = "Grade"
 	sheet_box.add_child(grade)
-	sheet_box.add_child(UI.label("%d of %d tickets out\n%d table%s walked\nTips $%d" % [k.served, k.total, k.walked, "" if k.walked == 1 else "s", k.tips], 24))
+	sheet_box.add_child(UI.label("%d of %d tickets out\n%d walk%s against you\nTips $%d" % [k.served, k.total, k.walked, "" if k.walked == 1 else "s", k.tips], 24))
 	sheet_box.add_child(UI.label("Next: %d tickets." % maxi(1, int(first_tickets) + int(more_tickets) * (level - 1)), 20, UI.DIM))
 	var shop := UI.button("", func(): open_shop())
 	shop.name = "ShopButton"
@@ -382,16 +385,20 @@ func next_service() -> void:
 ## The twist card at the top of a service: what's different tonight, one line.
 func tonight() -> void:
 	var ev: Array = Kitchen.EVENTS[k.event]
+	get_node("/root/Subs").clear()   # the twist's own cue, not the last turn's sizzle
 	get_node("/root/Subs").cue("[bell: %s]" % ev[0].to_lower())
-	sheet_box = UI.sheet(self)
-	sheet_box.add_child(UI.label("TONIGHT", 22, UI.DIM))
+	# Its own box, not sheet_box: a pause (back, focus-out) on top swaps sheet_box, and HEARD! must
+	# still close this card afterwards.
+	var box := UI.sheet(self)
+	twist_box = box
+	box.add_child(UI.label("TONIGHT", 22, UI.DIM))
 	var head := UI.label(ev[0], 36, MenuArt.FLAME)
 	head.name = "Twist"
-	sheet_box.add_child(head)
-	sheet_box.add_child(UI.label(ev[1], 24))
-	sheet_box.add_child(MenuArt.primary(UI.button("HEARD!", func():
-		UI.close_sheet(sheet_box)
-		sheet_box = null, 88)))
+	box.add_child(head)
+	box.add_child(UI.label(ev[1], 24))
+	box.add_child(MenuArt.primary(UI.button("HEARD!", func():
+		UI.close_sheet(box)
+		twist_box = null, 88)))
 
 
 func debug_skip_level() -> void:
@@ -453,7 +460,7 @@ func _coach_steps() -> Array:
 
 
 func _coach_next() -> void:
-	if k == null or paused or over or between:
+	if k == null or paused or over or between or is_instance_valid(twist_box):
 		return
 	for ch in get_children():
 		if ch.name.begins_with("Coach_"):
@@ -599,10 +606,12 @@ func _draw_field(f: Control) -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 56, UI.font_size(18), ink)
 		if t.big:   # small, between the table number and the clock, so it never runs into either
 			f.draw_string(font, r.position + Vector2(46, 25), "BIG", HORIZONTAL_ALIGNMENT_LEFT, 28, UI.font_size(11), UI.key("warn"))
-		for tag in ["vip", "critic"]:   # tonight's twist: a word tag plus a doubled frame (not colour alone)
-			if t.get(tag, false):
+		for tag in ["vip", "critic"]:   # tonight's twist: a word band on the bottom plus a doubled frame
+			if t.get(tag, false) and t.id != pick_tid:   # picked: the COOK FIRST tab wins the band
 				f.draw_rect(r.grow(-6.0), MenuArt.FLAME, false, 2.0)
-				f.draw_string(font, r.position + Vector2(46, 25), tag.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, 40, UI.font_size(11), MenuArt.FLAME)
+				f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), MenuArt.FLAME)
+				f.draw_string(font, Vector2(r.position.x, r.end.y - 7), tag.to_upper(), HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
+					UI.font_size(13), MenuArt.PAPER_INK)
 		# Clock: number plus a shape cue (filled bars), not colour alone.
 		f.draw_string(font, r.position + Vector2(r.size.x - 44, 28), "%d'" % t.time,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(24), UI.key(tone))
@@ -747,7 +756,7 @@ func game_over() -> void:
 	get_node("/root/Subs").cue("[game over sting]")
 	sheet_box = UI.sheet(self)
 	sheet_box.add_child(UI.label("GAME OVER", 40, UI.key("bad")))
-	var why := "THE WHOLE LINE WALKED OUT" if k.crew.all(func(c): return c.out) else "%d TABLES WALKED" % k.walked
+	var why := "THE WHOLE LINE WALKED OUT" if k.crew.all(func(c): return c.out) else "TOO MANY TABLES WALKED"
 	var reason := UI.label(why, 26, UI.key("bad"))
 	reason.name = "Reason"
 	sheet_box.add_child(reason)
