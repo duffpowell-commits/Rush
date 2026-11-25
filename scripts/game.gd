@@ -23,6 +23,10 @@ const Kitchen = preload("res://scripts/kitchen.gd")
 const ART_BG := preload("res://assets/art/bg_line.jpg")
 const ART_STATIONS := [preload("res://assets/art/station_grill.png"), preload("res://assets/art/station_fryer.png"),
 	preload("res://assets/art/station_saute.png"), preload("res://assets/art/station_pass.png")]
+const ART_COOKS := {"DEV": preload("res://assets/art/cook_dev.png"), "MO": preload("res://assets/art/cook_mo.png")}
+const ART_DISHES := {"BURGER": preload("res://assets/art/dish_burger.png"), "STEAK": preload("res://assets/art/dish_steak.png"),
+	"FRIES": preload("res://assets/art/dish_fries.png"), "WINGS": preload("res://assets/art/dish_wings.png"),
+	"PASTA": preload("res://assets/art/dish_pasta.png"), "SCAMPI": preload("res://assets/art/dish_scampi.png")}
 const LIVES := 3             # tables you can walk in one service
 
 ## Live sliders (DEV MENU -> TUNE). Applied when a service starts.
@@ -501,13 +505,14 @@ func _draw_field(f: Control) -> void:
 			var tone := ("bad" if burning else "warn") if up else "info"
 			if not low and up:
 				f.draw_circle(r.get_center() + Vector2(0, 20), 46.0, Color(UI.key(tone), 0.2))
-			f.draw_circle(r.get_center() + Vector2(0, 20), 34.0, UI.key(tone))
-			if burning:   # shape cue, not colour alone: a thick ring the turn before it burns
-				f.draw_arc(r.get_center() + Vector2(0, 20), 40.0, 0.0, TAU, 32, UI.key("bad"), 5.0)
-			_plate(f, Rect2(r.position.x + 4, r.end.y - 38, r.size.x - 8, 28))
-			f.draw_string(font, r.position + Vector2(0, r.size.y - 18), p.dish, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), ink)
-			f.draw_string(font, r.get_center() + Vector2(-30, 30), ("BURN!" if burning else "UP!") if up else "%d'" % p.left,
-				HORIZONTAL_ALIGNMENT_CENTER, 60, UI.font_size(22), Color.BLACK)
+			var pc := r.get_center() + Vector2(0, 8)
+			f.draw_circle(pc, 36.0, Color(0.08, 0.09, 0.12, 0.85))
+			f.draw_arc(pc, 36.0, 0.0, TAU, 40, UI.key(tone), 9.0 if burning else 5.0)   # thick ring the turn before it burns
+			_draw_fit(f, ART_DISHES[p.dish], Rect2(pc - Vector2(28, 28), Vector2(56, 56)))
+			# State in words, not colour alone: 2' cooking, UP! ready, BURN! about to burn.
+			_plate(f, Rect2(r.position.x + 4, r.end.y - 38, r.size.x - 8, 30))
+			f.draw_string(font, r.position + Vector2(0, r.size.y - 16), ("BURN!" if burning else "UP!") if up else "%s %d'" % [p.dish, p.left],
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(18), UI.key(tone))
 		elif i < k.pans.size():
 			var waiting := 0
 			for t in k.tickets:
@@ -530,14 +535,20 @@ func _draw_field(f: Control) -> void:
 		if c == sel:
 			f.draw_circle(pos, COOK_R + 7.0, UI.ACCENT)
 		f.draw_circle(pos, COOK_R, Color("2b3448"))
-		f.draw_string(font, pos + Vector2(-COOK_R, 7), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(18), ink)
+		if ART_COOKS.has(cr.name):
+			f.draw_texture_rect(ART_COOKS[cr.name], Rect2(pos - Vector2(COOK_R, COOK_R), Vector2(COOK_R, COOK_R) * 2.0), false)
+			_plate(f, Rect2(pos.x - 26, pos.y + COOK_R - 22, 52, 22))
+			f.draw_string(font, pos + Vector2(-COOK_R, COOK_R - 5), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(15), ink)
+		else:
+			f.draw_string(font, pos + Vector2(-COOK_R, 7), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(18), ink)
 		for a in cr.ap:   # action pips
 			f.draw_circle(pos + Vector2(-16 + a * 16, -COOK_R - 12), 6.0, UI.key("info"))
 		var sw := 64.0
 		var frac := float(cr.stress) / k.stress_cap
 		f.draw_rect(Rect2(pos.x - sw / 2, pos.y + COOK_R + 8, sw, 8), Color("2b3448"))
 		f.draw_rect(Rect2(pos.x - sw / 2, pos.y + COOK_R + 8, sw * frac, 8), UI.key("bad" if frac >= 0.6 else "warn"))
-		if not cr.hand.is_empty():
+		if not cr.hand.is_empty():   # the plate in hand, on the cook's shoulder, plus its name
+			_draw_fit(f, ART_DISHES[cr.hand.dish], Rect2(pos + Vector2(COOK_R - 18, -COOK_R - 6), Vector2(40, 40)))
 			f.draw_string(font, pos + Vector2(-60, COOK_R + 40), "> " + cr.hand.dish, HORIZONTAL_ALIGNMENT_CENTER, 120, UI.font_size(15), UI.key("good"))
 	var gone: Array = k.crew.filter(func(cr): return cr.out).map(func(cr): return cr.name)
 	if not gone.is_empty():
