@@ -10,12 +10,26 @@ const ALL := {
 	"meal": {"name": "FAMILY MEAL", "cost": 25, "says": "+1 STRESS BEFORE QUITTING"},
 	"iron": {"name": "CAST IRON", "cost": 35, "says": "RUSH COSTS NO STRESS"},
 	"comps": {"name": "COMP CARDS", "cost": 50, "says": "+1 TABLE CAN WALK"},
+	# Trays (Duff, Nov 25: "start out with the one dish ran rule and then upgrade it in the shop for a
+	# max of 4"). A RUN carries one plate; the server tray makes it 2, the entree tray (after the
+	# server tray) makes it 4.
+	"tray": {"name": "SERVER TRAY", "cost": 30, "says": "RUN 2 PLATES AT ONCE"},
+	"tray2": {"name": "ENTREE TRAY", "cost": 60, "says": "RUN 4 PLATES AT ONCE", "needs": "tray"},
 }
-const ORDER := ["meal", "lamps", "iron", "comps"]
+const ORDER := ["meal", "lamps", "tray", "tray2", "iron", "comps"]
+const MAX_TRAY := 4
 
 
 static func can_buy(id: String, cash: int, owned: Array) -> bool:
-	return ALL.has(id) and not owned.has(id) and cash >= int(ALL[id].cost)
+	if not ALL.has(id) or owned.has(id) or cash < int(ALL[id].cost):
+		return false
+	return not ALL[id].has("needs") or owned.has(ALL[id].needs)
+
+
+## What the shop lists: a tray step shows only when it's the next one (one row for the trays).
+static func shown(owned: Array) -> Array:
+	var tray_row := "tray2" if owned.has("tray") else "tray"
+	return ORDER.filter(func(id): return not id.begins_with("tray") or id == tray_row)
 
 
 ## Returns the cash left, or -1 if it can't be bought (owned array gains the id).
@@ -38,4 +52,5 @@ static func apply(base: Dictionary, owned: Array) -> Dictionary:
 		out.rush_stress = 0
 	if owned.has("comps"):
 		out.lives += 1
+	out["tray"] = 4 if owned.has("tray2") else (2 if owned.has("tray") else 1)
 	return out

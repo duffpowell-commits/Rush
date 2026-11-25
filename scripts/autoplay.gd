@@ -1,4 +1,6 @@
 extends Node
+const Upgrades = preload("res://scripts/upgrades.gd")
+const KitchenRules = preload("res://scripts/kitchen.gd")
 ## Autoload "Autoplay": a bot that plays the whole flow with real taps and saves screenshots.
 ## Off unless the game is started with `-- --autoplay`. Run it (needs a screen, so xvfb):
 ##   tools/autoplay.sh            -> docs/renders/flow_*.png, prints one PASS line per check
@@ -296,6 +298,7 @@ func _run() -> void:
 	await _frames(3)
 	var bought: bool = game.perks.has("meal") and game.cash == tips1 - 25 and _find("FAMILY MEAL") == null
 	await _click("DONE")
+	await _tray_checks(game, pst)
 	await _click("NEXT SERVICE")
 	await _frames(5)
 	var sv: Dictionary = get_node("/root/Save").read()
@@ -881,6 +884,68 @@ func _record_kitchen_clip() -> void:
 	f.close()
 	_check(frames >= 60 and secs >= CLIP_SECS and acted >= 10,
 		"CLIP PASS (Rush service 3: %d frames over %.1f s, %d bot actions, saved for the build video)" % [frames, secs, acted])
+
+## Trays (Duff, Nov 25): a RUN starts at one plate; the SHOP sells the server tray (2), then the
+## entree tray (4) in the same row. The shop fits at HUGE text, and a tray RUN sends 2 plates on one
+## tap of the real button. Cash, perks and the service are put back afterwards.
+func _tray_checks(game: Node, pst: Node) -> void:
+	var cash_was: int = game.cash
+	var perks_was: Array = game.perks.duplicate()
+	var ts_was = pst.get_value("text_size")
+	var one: bool = game.k.tray == 1
+	pst.set_value("text_size", 3)
+	game.cash = 999
+	game.perks = perks_was.filter(func(p): return not String(p).begins_with("tray"))
+	game.open_shop()
+	await _frames(4)
+	var row1: bool = _find("SERVER TRAY") != null and _find("ENTREE TRAY") == null
+	await _click("SERVER TRAY")
+	await _frames(4)
+	var row2: bool = _find("ENTREE TRAY") != null and _find("SERVER TRAY") == null
+	var sheet: Control = get_tree().get_nodes_in_group("sheet").back()
+	var pr: Rect2 = (sheet.get_child(1).get_child(0) as Control).get_global_rect()
+	var vh: float = get_viewport().get_visible_rect().size.y
+	await _shot("shop_huge")
+	await _click("ENTREE TRAY")
+	await _frames(4)
+	var four: bool = game.perks.has("tray2") and Upgrades.apply({"ticket_time": 9, "stress_cap": 6,
+		"rush_stress": 1, "lives": 3}, game.perks).tray == 4
+	await _click("DONE")
+	pst.set_value("text_size", ts_was)
+	await _frames(2)
+	# A tray RUN through the real button: two plates of one table go out on one action.
+	var kk = game.k
+	var keep: Dictionary = kk.to_dict()
+	game.between = false
+	kk.done = false
+	var covers: Array = get_tree().get_nodes_in_group("sheet").filter(func(n): return n.visible)
+	for n in covers:   # the grade sheet sits over the line: step it aside for one real tap
+		n.visible = false
+	kk.tray = 2
+	kk.tickets.append({"id": 990, "table": 30, "items": [{"dish": "BURGER", "state": "carried"},
+		{"dish": "FRIES", "state": "carried"}], "time": 5, "big": false})
+	kk.window = [{"tid": 990, "dish": "BURGER"}, {"tid": 990, "dish": "FRIES"}]
+	game.sel = 0
+	kk.crew[0].at = KitchenRules.PASS_IX
+	kk.crew[0].ap = kk.ap
+	kk.crew[0].out = false
+	game._refresh_hud()
+	await _frames(2)
+	var label: String = game.act_btn.text
+	var ap: int = kk.crew[0].ap
+	await _click("RUN 2 PLATES")
+	await _frames(3)
+	var ran: bool = kk.ticket(990).is_empty() and kk.window.is_empty() and kk.crew[0].ap == ap - 1
+	kk.from_dict(JSON.parse_string(JSON.stringify(keep)))
+	for n in covers:
+		n.visible = true
+	game.between = true
+	game.cash = cash_was
+	game.perks = perks_was
+	game._refresh_hud()
+	_check(one and row1 and row2 and four and pr.position.y >= 0.0 and pr.end.y <= vh and label == "RUN 2 PLATES" and ran,
+		"TRAY PASS (one plate a RUN to start; shop row SERVER TRAY -> ENTREE TRAY = 4, fits at HUGE %d px of %d; '%s' sent 2 plates for one action)" % [int(pr.size.y), int(vh), label])
+
 
 func _tune_checks(ct: Node) -> void:
 	var dm: Node = get_node("/root/DebugMenu")
