@@ -221,7 +221,7 @@ func _refresh_hud() -> void:
 			break
 	act_btn.text = a if a != "" else "TAP A STATION"   # nothing to do here: say how to move
 	if a == "" and not k.crew[sel].out and k.crew[sel].ap <= 0:   # say why: this cook is spent till END TURN
-		act_btn.text = "%s: NO MOVES LEFT" % k.crew[sel].name
+		act_btn.text = "%s: NO MOVES" % k.crew[sel].name   # short: HUGE text wraps it over the status line
 	if a == "FIRE":   # say which table it cooks for, picked or not
 		var fp := k.fire_pick(sel, pick_tid, pick_ix)
 		act_btn.text = "FIRE T%d" % fp.t.table
@@ -280,6 +280,9 @@ func _house_reads(g: String, lost: bool = false) -> String:
 
 func _new_service() -> void:
 	_pick_from = {}   # a station handoff only counts on the very next field tap
+	for ch in get_children():   # the new service's clock restarts at turn 0: so does a hint's wait
+		if ch.name.begins_with("Coach_"):
+			ch.set_meta("turn", 0)
 	k = Kitchen.new()
 	var u := Upgrades.apply({"ticket_time": int(ticket_time), "stress_cap": int(stress_cap),
 		"rush_stress": int(rush_stress), "lives": LIVES}, perks)

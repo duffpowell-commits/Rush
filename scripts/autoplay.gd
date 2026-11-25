@@ -451,7 +451,7 @@ func _run() -> void:
 		await _frames(1)
 		waited += 1
 	await _frames(10)
-	var guarded: bool = _find("TRY AGAIN") == null   # a beat before it takes taps (stray board taps restarted the night)
+	var guarded: bool = game.over and game.find_child("Reason", true, false) != null and _find("TRY AGAIN") == null   # a beat before it takes taps (stray board taps restarted the night)
 	await get_tree().create_timer(1.2).timeout
 	_shot("gameover")
 	var reason: Node = game.find_child("Reason", true, false)
@@ -996,7 +996,7 @@ func _polish_checks(game: Node) -> void:
 	game.between = true
 	game._refresh_hud()
 	await _frames(2)
-	_check(warn == "END TURN\nGRILL BURNS" and calm == "END TURN" and quit_warn == "END TURN\nMO QUITS" and spent == "DEV: NO MOVES LEFT" and nx.begins_with("NEXT: ") and nx.contains("1 dish in 2 min") and nx.contains("2 dishes in 3 min")
+	_check(warn == "END TURN\nGRILL BURNS" and calm == "END TURN" and quit_warn == "END TURN\nMO QUITS" and spent == "DEV: NO MOVES" and nx.begins_with("NEXT: ") and nx.contains("1 dish in 2 min") and nx.contains("2 dishes in 3 min")
 		and owned_ok,
 		"POLISH PASS (END TURN warns '%s' and '%s', spent cook '%s', NEXT bar '%s', shop says '%s')" % [warn.replace("\n", " / "), quit_warn.replace("\n", " / "), spent, nx, owned_txt])
 
