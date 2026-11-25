@@ -250,19 +250,20 @@ func act() -> void:
 			get_node("/root/Subs").cue("[sizzle: rushed]")
 		UI.buzz(15)
 		var c := station_rect(at).get_center()
+		var top := Vector2(c.x, station_rect(at).position.y - 6)   # words above the box, clear of its name
 		match what:
 			"FIRE":
 				_fx_burst(c + Vector2(0, 10), MenuArt.FLAME, 14)
-				_fx_text(c - Vector2(0, 60), "FIRED!", MenuArt.FLAME)
+				_fx_text(top, "FIRED!", MenuArt.FLAME)
 			"RUSH":
 				_fx_burst(c + Vector2(0, 10), MenuArt.EMBER, 22)
-				_fx_text(c - Vector2(0, 60), "RUSHED!", MenuArt.FLAME)
+				_fx_text(top, "RUSHED!", MenuArt.FLAME)
 			"PLATE":
 				_fx_ring(c, UI.key("good"))
-				_fx_text(c - Vector2(0, 60), "UP!", UI.key("good"))
+				_fx_text(top, "UP!", UI.key("good"))
 			"RUN":
 				score = k.served + _night_before
-				_fx_text(c - Vector2(0, 70), "+$%d" % (k.tips - tips_before) if k.tips > tips_before else "RAN", UI.key("good"))
+				_fx_text(top, "+$%d" % (k.tips - tips_before) if k.tips > tips_before else "RAN", UI.key("good"))
 				if k.served > served_before:   # a whole table out: the big moment
 					_fx_ring(c, UI.ACCENT, 90.0)
 					_fx_burst(c, UI.key("good"), 24)
@@ -303,6 +304,10 @@ func _shake(amt: float) -> void:
 
 
 func _tick_fx(dt: float) -> void:
+	if paused:
+		if field != null:
+			field.position = Vector2.ZERO   # no shake left offset under the sheet
+		return   # effects hold still under the pause sheet
 	if k != null and not (paused or over or between) and k.tickets.any(func(t): return t.time <= 2) and not _settings.get_value("low_graphics"):
 		field.queue_redraw()   # red tickets pulse (drawn in _draw_field)
 	if fx.is_empty() and shake_amt <= 0.0:
@@ -371,7 +376,7 @@ func end_turn() -> void:
 			var bs: int = Kitchen.STATIONS.find(e.trim_prefix("BURN ON ").get_slice(",", 0))
 			if bs >= 0:
 				_fx_burst(station_rect(bs).get_center(), Color("6b6b6b"), 18)
-				_fx_text(station_rect(bs).get_center() - Vector2(0, 40), "BURNED!", UI.key("bad"))
+				_fx_text(Vector2(station_rect(bs).get_center().x, station_rect(bs).position.y - 6), "BURNED!", UI.key("bad"))
 		elif e.ends_with("WALKED OUT"):
 			get_node("/root/Audio").sfx("bad", 0.6)
 			get_node("/root/Subs").cue("[door slams: cook walked out]")
@@ -897,6 +902,8 @@ func pause() -> void:
 	if paused or over:
 		return
 	paused = true
+	if field != null:
+		field.queue_redraw()   # drop the red-ticket throb ring under the pause sheet
 	checkpoint()
 	get_node("/root/Subs").clear()
 	sheet_box = UI.sheet(self)
