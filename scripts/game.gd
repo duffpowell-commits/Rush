@@ -736,9 +736,12 @@ func _coach_next() -> void:
 			continue
 		if st[2].call():
 			var c := Coach.teach(self, st[0], st[1], st[3])
-			if c != null:   # just under the rail, clear of the NEXT line and the line itself
-				c.anchor_top = 0.455
-				c.anchor_bottom = 0.455
+			if c != null:   # in the gap between the NEXT line and the stations, in pixels: a taller
+				# phone (web, 9:19.5) stretches the canvas, and a fraction of its height landed on the station names
+				c.anchor_top = 0.0
+				c.anchor_bottom = 0.0
+				c.offset_top = station_rect(0).position.y - 54.0   # the field sits at the origin
+				c.offset_bottom = c.offset_top + 48.0
 		return
 
 
