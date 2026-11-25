@@ -97,6 +97,7 @@ func _ready() -> void:
 	_build()
 	checkpoint()
 	get_node("/root/Audio").music_layers("music_loop", "music_busy")   # the kitchen gets louder as tickets go red
+	_music_heat()
 
 
 # ---------------------------------------------------------------- state + saving
@@ -414,6 +415,7 @@ func _service_done() -> void:
 	UI.buzz(40)
 	_after_move()
 	between = true
+	_music_heat()   # the busy layer settles behind the grade sheet
 	level += 1
 	checkpoint()
 	var g := k.grade()

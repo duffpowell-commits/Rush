@@ -78,7 +78,11 @@ func step(surface: String) -> void:
 
 func music(name: String) -> void:
 	var s := _stream(name)
-	if s == null or (_music.stream == s and _music.playing):
+	if s == null:
+		return
+	if _music.stream == s and _music.playing:   # same track: drop any layer on top of it (game -> title)
+		_combat.stop()
+		target_intensity = 0.0
 		return
 	# Looping is set in the track's .import (edit/loop_mode=2) or an .ogg's loop flag.
 	_music.stream = s
@@ -95,8 +99,10 @@ func music_layers(explore: String, combat: String) -> void:
 	if _music.stream == a and _combat.stream == b and _music.playing:
 		return
 	_combat.stream = b
-	if _music.stream == a and _music.playing:   # already on this track (from the title): join it in sync
-		_combat.play(_music.get_playback_position())
+	if _music.stream == a and _music.playing:   # already on this track (from the title): restart both in sync
+		var pos := _music.get_playback_position()
+		_music.play(pos)
+		_combat.play(pos)
 		return
 	_music.stream = a
 	_music.play()
