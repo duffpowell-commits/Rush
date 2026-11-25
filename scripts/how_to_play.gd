@@ -43,5 +43,13 @@ static func open(parent: Node) -> VBoxContainer:
 		col.add_child(row)
 	col.add_child(UI.label("TIPS", 22, UI.ACCENT))
 	col.add_child(UI.label(TIPS, 20, UI.DIM))
+	# Say that it scrolls: the steps run past the box, and a cut-off line read as the end (blind review).
+	var more := UI.label("SCROLL FOR MORE", 18, UI.ACCENT)
+	more.name = "ScrollMore"
+	box.add_child(more)
+	var bar := scroll.get_v_scroll_bar()
+	var at_end := func(_v = 0.0): more.modulate.a = 0.0 if bar.value >= bar.max_value - bar.page - 4.0 else 1.0
+	bar.value_changed.connect(at_end)
+	bar.changed.connect(at_end)
 	box.add_child(UI.button("GOT IT", func(): UI.close_sheet(box)))
 	return box
