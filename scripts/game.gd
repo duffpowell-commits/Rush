@@ -607,8 +607,9 @@ func _draw_field(f: Control) -> void:
 		if t.big:   # small, between the table number and the clock, so it never runs into either
 			f.draw_string(font, r.position + Vector2(46, 25), "BIG", HORIZONTAL_ALIGNMENT_LEFT, 28, UI.font_size(11), UI.key("warn"))
 		for tag in ["vip", "critic"]:   # tonight's twist: a word band on the bottom plus a doubled frame
-			if t.get(tag, false) and t.id != pick_tid:   # picked: the COOK FIRST tab wins the band
+			if t.get(tag, false):
 				f.draw_rect(r.grow(-6.0), MenuArt.FLAME, false, 2.0)
+			if t.get(tag, false) and t.id != pick_tid:   # picked: the COOK FIRST tab wins the band
 				f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), MenuArt.FLAME)
 				f.draw_string(font, Vector2(r.position.x, r.end.y - 7), tag.to_upper(), HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
 					UI.font_size(13), MenuArt.PAPER_INK)
@@ -779,7 +780,13 @@ func _go_back() -> void:
 	# Only this screen's sheets: autoload sheets (DEV MENU) come first in tree order and handle
 	# their own back. A sheet on top of the pause / grade / game over sheet closes first.
 	var sheets: Array = get_tree().get_nodes_in_group("sheet").filter(func(n): return n.get_parent() == self and not n.is_queued_for_deletion())
-	if sheets.size() > 1:
+	var top: Node = sheets[-1] if sheets.size() > 0 else null
+	if paused and top != null and is_instance_valid(sheet_box) and top == sheet_box.get_meta("sheet"):
+		resume()   # back on the pause sheet = RESUME, even with the TONIGHT card under it
+	elif not paused and top != null and is_instance_valid(twist_box) and top == twist_box.get_meta("sheet"):
+		UI.close_sheet(twist_box)   # back on the TONIGHT card = HEARD!
+		twist_box = null
+	elif sheets.size() > 1:
 		sheets[-1].queue_free()
 	elif between:
 		next_service()
