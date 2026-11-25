@@ -642,6 +642,21 @@ func test_upgrades_carry() -> void:
 	sv.free()
 
 
+## A pan remembers the cook who fired it, through a save (the screen picks that cook on a station tap).
+func test_pan_owner() -> void:
+	var k := Kitchen.new()
+	k.start(1, 3)
+	k.crew[1].at = 0
+	check(k.act_here(1) and int(k.pans[0].by) == 1, "MO fired the grill pan")
+	var k2 := Kitchen.new()
+	k2.from_dict(JSON.parse_string(JSON.stringify(k.to_dict())))
+	check(int(k2.pans[0].by) == 1, "who fired it survives a save")
+	var old: Dictionary = k.to_dict()
+	(old.pans[0] as Dictionary).erase("by")
+	k2.from_dict(JSON.parse_string(JSON.stringify(old)))
+	check(int(k2.pans[0].by) == -1, "an old save's pan has no owner")
+
+
 ## Trays (Duff, Nov 25): one RUN carries one plate, the server tray 2, the entree tray 4 (after the
 ## server tray). The most urgent table goes first and its other plates ride with it.
 func test_tray_runs() -> void:

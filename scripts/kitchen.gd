@@ -229,7 +229,8 @@ func fire(c: int, tid: int = 0) -> bool:
 	if pick.is_empty():
 		return false
 	pick.item.state = "cooking"
-	pans[s] = {"tid": pick.t.id, "dish": pick.item.dish, "left": cook_time(pick.item.dish), "sat": 0, "rushed": false}
+	pans[s] = {"tid": pick.t.id, "dish": pick.item.dish, "left": cook_time(pick.item.dish), "sat": 0, "rushed": false,
+		"by": c}   # who fired it: tapping the station picks that cook (Duff, Nov 25)
 	crew[c].ap -= 1
 	crew[c].acted = true
 	return true
@@ -546,7 +547,7 @@ func from_dict(d: Dictionary) -> bool:
 	pans = []
 	for p in d.pans:
 		pans.append({} if p.is_empty() else {"tid": int(p.tid), "dish": str(p.dish), "left": int(p.left), "sat": int(p.sat),
-			"rushed": bool(p.get("rushed", false))})
+			"rushed": bool(p.get("rushed", false)), "by": int(p.get("by", -1))})
 	tickets = []
 	for t in d.tickets:
 		tickets.append(_ticket_from(t))

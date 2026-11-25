@@ -142,6 +142,21 @@ func _run() -> void:
 	fired_by_tap = k.pans[0].get("dish", "") == "BURGER"
 	var fire_fx: bool = game.fx.any(func(e): return e.kind == "spark")
 	_check(coach_up and moved and fired_by_tap, "TAP PASS (hint shown, closed SAUTE refused, MO walked FRY->PASS past closed stations for 1 action, DEV fired the burger)")
+	# Tap a station, get its cook (Duff, Nov 25): with MO picked, a tap on the GRILL (DEV stands
+	# there) picks DEV and sends nobody anywhere. With DEV stepped off, the GRILL still picks DEV,
+	# because his burger is on it: the pan wears his initial.
+	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
+	var mo_ap: int = k.crew[1].ap
+	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
+	var picked_here: bool = game.sel == 0 and k.crew[1].at == Kitchen.PASS_IX and k.crew[1].ap == mo_ap
+	game.sel = 1
+	k.crew[0].at = 1
+	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
+	var picked_pan: bool = game.sel == 0 and k.crew[0].at == 1 and k.crew[1].at == Kitchen.PASS_IX and k.crew[1].ap == mo_ap
+	k.crew[0].at = 0
+	game._after_move()
+	await _shot("station_pick")
+	_check(picked_here and picked_pan, "STATION PICK PASS (MO picked, GRILL tap picked DEV who stands there; with DEV away it picked him again by his burger; MO never moved)")
 	# The next hint follows by itself: after FIRE, END TURN is taught.
 	var next_hint := false
 	for i in 60:

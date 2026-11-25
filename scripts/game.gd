@@ -817,10 +817,31 @@ func tap(p: Vector2) -> void:
 				return
 			if k.crew[sel].at == i:
 				act()
+				return
+			# Tap a station, get its cook (Duff, Nov 25: "tap the station and get the employee that
+			# dropped it"): a cook standing there first, else the cook who fired its pan. Only an
+			# empty station with nobody's pan on it sends the selected cook over.
+			var owner := station_cook(i)
+			if owner >= 0 and owner != sel:
+				sel = owner
+				get_node("/root/Audio").sfx("click")
+				_after_move()
 			elif k.move(sel, i):
 				get_node("/root/Audio").sfx("click")
 				_after_move()
 			return
+
+
+## The cook a tap on station i should pick: one standing there, else the one who fired its pan; -1 if none.
+func station_cook(i: int) -> int:
+	for c in k.crew.size():
+		if not k.crew[c].out and k.crew[c].at == i:
+			return c
+	if i < k.pans.size() and not k.pans[i].is_empty():
+		var by: int = k.pans[i].get("by", -1)
+		if by >= 0 and by < k.crew.size() and not k.crew[by].out:
+			return by
+	return -1
 
 
 ## Draw a texture inside a box, whole, keeping its shape (letterboxed, centred).
@@ -940,6 +961,13 @@ func _draw_field(f: Control) -> void:
 			f.draw_circle(pc, 36.0, Color(0.08, 0.09, 0.12, 0.85))
 			f.draw_arc(pc, 36.0, 0.0, TAU, 40, UI.key(tone), 9.0 if burning else 5.0)   # thick ring the turn before it burns
 			_draw_fit(f, ART_DISHES[p.dish], Rect2(pc - Vector2(28, 28), Vector2(56, 56)))
+			var by: int = p.get("by", -1)
+			if by >= 0 and by < k.crew.size():   # whose pan: the cook's initial, ringed when they're selected
+				var bc := pc + Vector2(-30, -30)
+				f.draw_circle(bc, 13.0, Color(0.08, 0.09, 0.12, 0.95))
+				f.draw_arc(bc, 13.0, 0.0, TAU, 24, UI.ACCENT if by == sel else ink, 3.0 if by == sel else 1.5)
+				f.draw_string(font, bc + Vector2(-13, 6), String(k.crew[by].name).left(1), HORIZONTAL_ALIGNMENT_CENTER, 26,
+					UI.font_size(14), UI.ACCENT if by == sel else ink)
 			# State in words, not colour alone: 2' cooking, UP! ready, BURN! about to burn.
 			_plate(f, Rect2(r.position.x + 4, r.end.y - 38, r.size.x - 8, 30))
 			var st := ("BURN!" if burning else "UP!") if up else "%d'" % p.left
