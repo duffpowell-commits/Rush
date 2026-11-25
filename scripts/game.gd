@@ -731,13 +731,16 @@ var _coached := {}
 
 func _coach_steps() -> Array:
 	return [
-		["fire", "TAP GRILL TO FIRE", func(): return true,
+		["fire", "TAP FIRE TO COOK", func(): return true,
 			func(): return k.turn > 0 or k.pans.any(func(p): return not p.is_empty())],
 		["end_turn", "TAP END TURN: COOK", func(): return k.pans.any(func(p): return not p.is_empty()),
 			func(): return k.turn > 0],
+		# Fresh-player review: the action dots over each cook were never noticed. After the first END TURN.
+		["dots", "DOTS ARE MOVES LEFT", func(): return k.turn >= 1,
+			func(): return k.turn >= 2 or k.crew.any(func(c): return not c.out and c.ap <= 0)],
 		["plate", "UP! TAP PLATE", func(): return k.pans.any(func(p): return not p.is_empty() and p.left <= 0),
 			func(): return not k.window.is_empty() or k.served > 0],
-		["run", "TAP PASS, THEN RUN", func(): return not k.window.is_empty(),
+		["run", "PASS: RUN SERVES IT", func(): return not k.window.is_empty(),
 			func(): return k.served > 0],
 		["switch", "TAP MO TO SWITCH", func(): return k.served > 0 and not k.crew[1].out,
 			func(): return sel != 0 or k.crew[1].out],
@@ -766,7 +769,7 @@ func _coach_next() -> void:
 				# phone (web, 9:19.5) stretches the canvas, and a fraction of its height landed on the station names
 				c.anchor_top = 0.0
 				c.anchor_bottom = 0.0
-				c.offset_top = station_rect(0).position.y - 54.0   # the field sits at the origin
+				c.offset_top = station_rect(0).position.y - 58.0   # the field sits at the origin; the band adds a few px
 				c.offset_bottom = c.offset_top + 48.0
 		return
 

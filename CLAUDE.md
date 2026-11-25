@@ -77,6 +77,8 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   a pan about to burn says PLATE NOW and END TURN reads "END TURN / GRILL BURNS"; the idle button says
   TAP A STATION; coach hints sit on a dark band; sound captions sit above the status line
   (`Subs.lift`) in a softer style; the shop lists OWNED. POLISH PASS.
+- Nov 25 hints from that review (Duff: "Yes"): TAP FIRE TO COOK (was "tap grill"), DOTS ARE MOVES LEFT
+  after the first END TURN, PASS: RUN SERVES IT. test_coach_hints_short checks the last two.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
