@@ -31,7 +31,6 @@ static func teach(parent: Node, hint_id: String, text: String, check: Callable) 
 	c.done_when = check
 	c.name = "Coach_" + hint_id
 	c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	c.anchor_right = 1.0
 	c.anchor_top = 0.42
 	c.anchor_bottom = 0.42
 	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -39,12 +38,20 @@ static func teach(parent: Node, hint_id: String, text: String, check: Callable) 
 	c.add_theme_color_override("font_color", Color("e8a33d"))
 	c.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	c.add_theme_constant_override("outline_size", 10)
+	var sb := StyleBoxFlat.new()   # a dark band behind it: readable on busy art, not just outlined
+	sb.bg_color = Color(0, 0, 0, 0.72)
+	sb.set_corner_radius_all(12)
+	sb.content_margin_top = 4
+	sb.content_margin_bottom = 4
+	c.add_theme_stylebox_override("normal", sb)
+	c.anchor_left = 0.04
+	c.anchor_right = 0.96
 	parent.add_child(c)
 	return c
 
 
 func _process(_dt: float) -> void:
-	modulate.a = 0.65 + 0.35 * sin(Time.get_ticks_msec() * 0.006)
+	modulate.a = 0.85 + 0.15 * sin(Time.get_ticks_msec() * 0.006)   # a gentle pulse: the band stays readable
 	if not learned and done_when.is_valid() and done_when.call():
 		learned = true
 		var cfg := ConfigFile.new()

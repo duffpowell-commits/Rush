@@ -172,6 +172,7 @@ func _build() -> void:
 	note.offset_bottom = -40 - 96 - 8
 	note.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(note)
+	get_node("/root/Subs").lift = 40 + 96 + 70 + 6   # sound captions sit above the status line, never on it
 	for sh in get_tree().get_nodes_in_group("sheet"):   # open sheets stay on top of the rebuilt HUD
 		if sh.get_parent() == self:
 			move_child(sh, -1)
@@ -207,7 +208,13 @@ func _refresh_hud() -> void:
 	if pick_tid == 0 or (pick_ix >= 0 and k.ticket(pick_tid).items[pick_ix].state != "wait"):
 		pick_ix = -1   # the picked dish went on: the table stays picked
 	var a := k.action_here(sel)
-	act_btn.text = a if a != "" else "NOTHING HERE"
+	end_btn.text = "END TURN"
+	for i in k.pans.size():   # warn on the button that does it: ending the turn now burns this pan
+		var p: Dictionary = k.pans[i]
+		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after:
+			end_btn.text = "END TURN\n%s BURNS" % Kitchen.STATIONS[i]
+			break
+	act_btn.text = a if a != "" else "TAP A STATION"   # nothing to do here: say how to move
 	if a == "FIRE":   # say which table it cooks for, picked or not
 		var fp := k.fire_pick(sel, pick_tid, pick_ix)
 		act_btn.text = "FIRE T%d" % fp.t.table
@@ -528,6 +535,15 @@ func open_shop() -> void:
 	var box := UI.sheet(self, 500)
 	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
 	box.add_child(UI.label("Bank: $%d. Upgrades last all night." % cash, 20, UI.DIM))
+	var owned: Array[String] = []
+	for id in Upgrades.ORDER:
+		if perks.has(id):
+			owned.append(String(Upgrades.ALL[id].name))
+	if not owned.is_empty():   # bought rows can leave the list (a tray upgrades in place): say what's yours
+		var ol := UI.label("OWNED: " + ", ".join(owned), 18, UI.key("good"))
+		ol.name = "Owned"
+		ol.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(ol)
 	for id in Upgrades.shown(perks):
 		var u: Dictionary = Upgrades.ALL[id]
 		var b: Button
@@ -908,6 +924,23 @@ func _draw_cover(f: Control, tex: Texture2D, box: Rect2) -> void:
 	f.draw_texture_rect_region(tex, box, src)
 
 
+## The NEXT bar in plain words ("NEXT: 2 dishes in 3 min"), as many as fit the width.
+func next_line(font: Font, width: float) -> String:
+	var pv: Array = k.preview(3)
+	if pv.is_empty():
+		return "NEXT: no more tickets"
+	var parts: Array[String] = []
+	for v in pv:
+		var n: int = v.ticket.items.size()
+		var what := "BIG table" if v.ticket.big else ("1 dish" if n == 1 else "%d dishes" % n)
+		parts.append("%s in %d min" % [what, v["in"]])
+	for cnt in range(parts.size(), 0, -1):
+		var line := "NEXT: " + ", ".join(parts.slice(0, cnt))
+		if cnt == 1 or font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(18)).x <= width:
+			return line
+	return ""
+
+
 ## A dark plate behind text that sits on art.
 ## The long label if it fits the width at this text size, else the short one.
 func _fit(font: Font, long: String, short: String, width: float, size: int) -> String:
@@ -965,25 +998,31 @@ func _draw_field(f: Control) -> void:
 			if t.id == pick_tid and n == pick_ix:   # the tapped dish: an accent bar and a pointer, not colour alone
 				f.draw_rect(Rect2(r.position.x + 3, iy - 20, r.size.x - 6, DISH_ROW - 2), Color(UI.ACCENT, 0.25))
 				f.draw_rect(Rect2(r.position.x + 3, iy - 20, 4, DISH_ROW - 2), UI.ACCENT)
-			var mark: String = {"wait": "  ", "cooking": "~ ", "carried": "> ", "served": "V "}[it.state]
 			var col: Color = UI.DIM if it.state == "served" else ink
-			f.draw_string(font, Vector2(r.position.x + 8, iy), mark + it.dish, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(16), col)
-			if it.state == "wait":   # where it cooks, on its own small line: routing is on the ticket
-				f.draw_string(font, Vector2(r.position.x + 8, iy + 14), "  at " + Kitchen.station_of(it.dish),
-					HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(11), UI.DIM)
+			f.draw_string(font, Vector2(r.position.x + 8, iy), it.dish, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(16), col)
+			if it.state == "served":   # struck through: done, in shape as well as colour
+				var dw := minf(font.get_string_size(it.dish, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(16)).x, r.size.x - 12)
+				f.draw_line(Vector2(r.position.x + 8, iy - 6), Vector2(r.position.x + 8 + dw, iy - 6), UI.DIM, 2.0)
+			# Its state in words on a small line under it (no symbol to learn): where it cooks while it waits.
+			var sub: String = {"wait": "at " + Kitchen.station_of(it.dish), "cooking": "cooking", "carried": "on the pass", "served": "served"}[it.state]
+			var sc: Color = UI.key("warn") if it.state == "wait" else (UI.key("info") if it.state != "served" else UI.DIM)
+			f.draw_string(font, Vector2(r.position.x + 8, iy + 14), sub,
+				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(13), sc)
 			iy += DISH_ROW
 	_plate(f, Rect2(pad - 6, y0 + 218, f.size.x - 2 * pad + 12, 30))
-	if shown.size() > 4:
-		f.draw_string(font, Vector2(f.size.x - 70, y0 + 222), "+%d" % (shown.size() - 4), HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(20), UI.key("warn"))
+	var more_w := 0.0
+	if shown.size() > 4:   # tickets past the fourth card: a badge on the NEXT bar, red when one of them is red
+		var hid: Array = shown.slice(4)
+		var hot := hid.any(func(t): return t.time <= 2)
+		var mt := "+%d MORE" % hid.size()
+		more_w = font.get_string_size(mt, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(16)).x + 16
+		var mr := Rect2(f.size.x - pad - more_w, y0 + 220, more_w, 26)
+		f.draw_rect(mr, UI.key("bad") if hot else UI.key("warn"))
+		f.draw_string(font, mr.position + Vector2(0, 19), mt, HORIZONTAL_ALIGNMENT_CENTER, more_w, UI.font_size(16), UI.BG)
 	_plate(f, Rect2(pad - 6, y0 - 36, f.size.x - 2 * pad + 12, 30))   # busy kitchen wall behind: text sits on plates
 	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [score, k.walked, lives_max, k.tips],
 		HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20, UI.font_size(18), UI.key("bad") if k.walked >= lives_max - 1 else ink)
-	var nx := "NEXT: "
-	for pv in k.preview(3):
-		nx += "%d' %s   " % [pv["in"], ("BIG" if pv.ticket.big else "%d dish" % pv.ticket.items.size())]
-	if k.preview(1).is_empty():
-		nx += "last tickets"
-	f.draw_string(font, Vector2(pad, y0 + 240), nx, HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20, UI.font_size(18), ink)
+	f.draw_string(font, Vector2(pad, y0 + 240), next_line(font, f.size.x - 20 - more_w), HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20 - more_w, UI.font_size(18), ink)
 	# --- the line
 	for i in Kitchen.STATIONS.size():
 		var r := station_rect(i)
@@ -1020,9 +1059,9 @@ func _draw_field(f: Control) -> void:
 				f.draw_arc(bc, 13.0, 0.0, TAU, 24, UI.ACCENT if by == sel else ink, 3.0 if by == sel else 1.5)
 				f.draw_string(font, bc + Vector2(-13, 6), String(k.crew[by].name).left(1), HORIZONTAL_ALIGNMENT_CENTER, 26,
 					UI.font_size(14), UI.ACCENT if by == sel else ink)
-			# State in words, not colour alone: 2' cooking, UP! ready, BURN! about to burn.
+			# State in words, not colour alone: 2' cooking, UP! ready, PLATE NOW: burns at the next END TURN.
 			_plate(f, Rect2(r.position.x + 4, r.end.y - 38, r.size.x - 8, 30))
-			var st := ("BURN!" if burning else "UP!") if up else "%d'" % p.left
+			var st := ("PLATE NOW" if burning else "UP!") if up else "%d'" % p.left
 			var lbl := "%s %s" % [p.dish, st]
 			if font.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(15)).x > r.size.x - 14:
 				lbl = st   # big text sizes: the state wins, the dish art still says which dish
@@ -1162,3 +1201,9 @@ func _go_back() -> void:
 		resume()
 	else:
 		pause()
+
+
+func _exit_tree() -> void:
+	var subs := get_node_or_null("/root/Subs")
+	if subs != null:
+		subs.lift = 0.0   # other screens keep the default caption spot
