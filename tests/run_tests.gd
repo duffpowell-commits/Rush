@@ -8,6 +8,7 @@ const UI = preload("res://scripts/ui.gd")
 const Updater = preload("res://scripts/updater.gd")
 const BugReport = preload("res://scripts/bug_report.gd")
 const Kitchen = preload("res://scripts/kitchen.gd")
+const Upgrades = preload("res://scripts/upgrades.gd")
 
 var n := 0
 var bad := 0
@@ -493,7 +494,7 @@ func test_rush_save_no_double_count() -> void:
 func test_save_migrates_v1() -> void:
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 1, "level": 3, "score": 9, "lives": 2})
-	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 3, "v1 -> v3")
+	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 4, "v1 -> v4")
 	sv.free()
 
 
@@ -575,7 +576,7 @@ func test_save_migrates_v2() -> void:
 	kd.erase("window")
 	kd.crew[0].hand = {"tid": 1, "dish": "BURGER"}
 	var d: Dictionary = sv._migrate({"_version": 2, "level": 1, "score": 0, "kitchen": kd})
-	check(int(d._version) == 3 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
+	check(int(d._version) == 4 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
 	var b := Kitchen.new()
 	check(b.from_dict(d.kitchen) and b.window.size() == 1, "and it loads")
 	sv.free()
@@ -592,3 +593,21 @@ func test_kitchen_grade() -> void:
 	k.served = 0
 	k.walked = 0
 	check(k.grade() == "F", "nothing out = F")
+
+
+## Tips carry between services: upgrades cost cash, are bought once, and change the next service.
+func test_upgrades_carry() -> void:
+	var owned: Array = []
+	check(Upgrades.buy("comps", 40, owned) == -1 and owned.is_empty(), "can't afford")
+	check(Upgrades.buy("lamps", 70, owned) == 40 and owned == ["lamps"], "bought")
+	check(Upgrades.buy("lamps", 70, owned) == -1, "only once")
+	check(Upgrades.buy("nope", 999, owned) == -1, "unknown id")
+	owned.append_array(["meal", "iron", "comps"])
+	var u := Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, owned)
+	check(u.ticket_time == 10 and u.stress_cap == 7 and u.rush_stress == 0 and u.lives == 4, "all four apply")
+	for id in Upgrades.ALL:
+		check(String(Upgrades.ALL[id].says).length() <= 26, id + " fits the button")
+	var sv = load("res://scripts/save_game.gd").new()
+	var d: Dictionary = sv._migrate({"_version": 3, "level": 2, "score": 8})
+	check(int(d._version) == 4 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v4")
+	sv.free()

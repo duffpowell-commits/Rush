@@ -7,8 +7,9 @@ extends Node
 ## Writes go to a temp file first, then replace the real one, so a kill mid-write can't leave
 ## a half-written save.
 
-const VERSION := 3   # 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
+const VERSION := 4   # 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
 # 3 (Rush, Nov 25 playtest): the kitchen gains a pass "window"; plates in a cook's hand move onto it
+# 4 (Rush, Nov 25): "cash" (banked tips) and "perks" (upgrades bought tonight) carry between services
 var path := "user://run.json"
 
 
@@ -67,4 +68,8 @@ func _migrate(d: Dictionary) -> Dictionary:
 					c.hand = {}
 			kd["window"] = win
 		d["_version"] = 3
+	if int(d.get("_version", 1)) < 4:
+		d["cash"] = 0
+		d["perks"] = []
+		d["_version"] = 4
 	return d
