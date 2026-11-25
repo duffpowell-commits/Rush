@@ -625,6 +625,34 @@ func debug_skip_level() -> void:
 
 
 ## The autoplay bot's turn: the greedy line cook from kitchen.gd, then END TURN.
+## One bot action through the real screen code, so the juice and sounds fire (the build clip uses it).
+## Returns false when it ended the turn instead.
+func bot_step() -> bool:
+	if paused or over or between:
+		return false
+	for c in k.crew.size():
+		if not k.can_act(c) or (k.crew[c].stress >= k.stress_cap - 2 and k.crew[c].hand.is_empty()):
+			continue
+		sel = c
+		pick_tid = 0
+		var what := k.action_here(c, false)
+		if what != "":
+			act()
+			return true
+		var goal: int = k._bot_goal(c)
+		if goal < 0 or goal == k.crew[c].at:
+			continue
+		var step: int = k.crew[c].at + signi(goal - k.crew[c].at)
+		while not k.is_open(step):
+			step += signi(goal - k.crew[c].at)
+		if k.move(c, step):
+			get_node("/root/Audio").sfx("click", 0.9)
+			_after_move()
+			return true
+	end_turn()
+	return false
+
+
 func bot_play_turn() -> void:
 	k.bot_turn()
 	score = _night_before + k.served

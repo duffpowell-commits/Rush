@@ -429,7 +429,7 @@ func _run() -> void:
 	await _standards_checks(get_tree().current_scene, coach_was)
 	await _tune_checks(get_tree().current_scene)
 	if clip != "":
-		await _record_clip(get_tree().current_scene)
+		await _record_kitchen_clip()
 
 	if not failed:
 		print("AUTOPLAY PASS")
@@ -833,6 +833,52 @@ func _standards_checks(ct: Node, coach_was: bool) -> void:
 
 
 # ---------------------------------------------------------------- 15 s gameplay clip (vertical)
+
+## The build clip is Rush itself (Nov 25, ad kit): service 3, all four stations open, the bot cooking
+## through the real screen so sparks, words and sounds all fire. 15 s of every drawn frame.
+func _record_kitchen_clip() -> void:
+	DirAccess.make_dir_recursive_absolute(clip)
+	get_node("/root/Settings").set_value("text_size", 1)
+	get_tree().change_scene_to_file("res://scenes/game.tscn")
+	await _wait_scene("Game")
+	await _frames(10)
+	var game: Node = get_tree().current_scene
+	for st in game._coach_steps():   # the clip is an ad: no teaching bubbles over the play
+		game._coached[st[0]] = true
+	var subs_was = get_node("/root/Settings").get_value("subtitles")
+	get_node("/root/Settings").set_value("subtitles", false)   # sound captions stay on for players, off for the clip
+	for sh in get_tree().get_nodes_in_group("sheet"):
+		sh.queue_free()
+	game.paused = false
+	game.level = 3
+	game._new_service()
+	game._after_move()
+	for i in 3:   # a few minutes in, so the rail is busy from the first frame
+		game.bot_play_turn()
+	await _frames(5)
+	var frames := 0
+	var t0 := Time.get_ticks_msec()
+	var next_step := 0.4
+	var acted := 0
+	while true:
+		var t := (Time.get_ticks_msec() - t0) / 1000.0
+		if t >= CLIP_SECS or game.over or game.between:
+			break
+		if t >= next_step:
+			acted += 1 if game.bot_step() else 0
+			next_step = t + 0.45
+		await RenderingServer.frame_post_draw
+		var img := get_viewport().get_texture().get_image()
+		img.resize(img.get_width() / 2 * 2, img.get_height() / 2 * 2)   # even size for video
+		img.save_jpg(clip.path_join("f%04d.jpg" % frames), 0.85)
+		frames += 1
+	var secs := (Time.get_ticks_msec() - t0) / 1000.0
+	get_node("/root/Settings").set_value("subtitles", subs_was)
+	var f := FileAccess.open(clip.path_join("fps.txt"), FileAccess.WRITE)
+	f.store_string("%.3f" % (frames / secs))
+	f.close()
+	_check(frames >= 60 and secs >= CLIP_SECS and acted >= 10,
+		"CLIP PASS (Rush service 3: %d frames over %.1f s, %d bot actions, saved for the build video)" % [frames, secs, acted])
 
 ## Plays a 15 s scripted fight (run, jump, punch combo, dodge, knockback) and saves every drawn
 ## frame as JPG in `clip` + fps.txt (frames / real seconds). tools/autoplay.sh turns it into
