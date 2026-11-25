@@ -6,6 +6,9 @@ const UI = preload("res://scripts/ui.gd")
 const Config = preload("res://scripts/config.gd")
 const SettingsSheet = preload("res://scripts/settings_sheet.gd")
 const BugReport = preload("res://scripts/bug_report.gd")
+const HowToPlay = preload("res://scripts/how_to_play.gd")
+const Art = preload("res://scripts/menu_art.gd")
+const KEY_ART := "res://assets/art/title_key.jpg"
 
 var _ver_taps := 0
 
@@ -31,20 +34,42 @@ func _build() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 	move_child(bg, 0)
+	var tex: Texture2D = load(KEY_ART) if ResourceLoader.exists(KEY_ART) else load("res://assets/art/bg_line.jpg")
+	Art.backdrop(self, tex)
+	var logo := Art.Logo.new()
+	logo.tagline = "DINNER SERVICE, TURN BY TURN"
+	logo.anchor_right = 1.0
+	logo.offset_top = 70
+	logo.offset_bottom = 330
+	add_child(logo)
 	var col := VBoxContainer.new()
-	col.set_anchors_preset(Control.PRESET_CENTER)
-	col.custom_minimum_size = Vector2(380, 0)
+	col.anchor_left = 0.5
+	col.anchor_right = 0.5
+	col.anchor_top = 1.0
+	col.anchor_bottom = 1.0
+	col.offset_left = -200
+	col.offset_right = 200
+	col.offset_bottom = -70
 	col.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	col.grow_vertical = Control.GROW_DIRECTION_BOTH
+	col.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	col.add_theme_constant_override("separation", UI.GAP)
 	add_child(col)
-	col.add_child(UI.label(Config.game_title(), 44, UI.ACCENT))
-	col.add_child(Control.new())
+	var st: Node = get_node("/root/Settings")
+	if int(st.get_value("best_service")) > 0:
+		var best := UI.label("BEST NIGHT: %d SERVICE%s, %d TICKETS" % [int(st.get_value("best_service")),
+			"" if int(st.get_value("best_service")) == 1 else "S", int(st.get_value("best_tickets"))], 20, Art.FLAME)
+		best.name = "Best"
+		best.add_theme_constant_override("outline_size", 8)
+		best.add_theme_color_override("font_outline_color", Art.PAPER_INK)
+		col.add_child(best)
 	var save: Node = get_node("/root/Save")
 	if save.exists():
 		var d: Dictionary = save.read()
-		col.add_child(UI.button("CONTINUE  (SERVICE %d)" % int(d.get("level", 1)), func(): _play(true), 88))
-	col.add_child(UI.button("NEW GAME", func(): _play(false), 88 if not save.exists() else UI.MIN_TOUCH))
+		col.add_child(Art.primary(UI.button("CONTINUE: SERVICE %d" % int(d.get("level", 1)), func(): _play(true), 96)))
+		col.add_child(UI.button("NEW GAME", func(): _play(false)))
+	else:
+		col.add_child(Art.primary(UI.button("NEW GAME", func(): _play(false), 96)))
+	col.add_child(UI.button("HOW TO PLAY", func(): HowToPlay.open(self)))
 	col.add_child(UI.button("SETTINGS", func(): SettingsSheet.open(self)))
 	col.add_child(UI.button("REPORT A BUG", func(): BugReport.open(self)))
 	var ver := UI.label(Config.version_label(), 18, UI.DIM)

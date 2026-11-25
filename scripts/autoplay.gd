@@ -67,6 +67,22 @@ func _run() -> void:
 	await _frames(10)
 	_shot("title")
 	_check(_find("CONTINUE") == null, "TITLE PASS (no save yet)")
+	# Menu polish (Nov 25): painted backdrop + drawn logo, HOW TO PLAY opens and closes, and a caption
+	# moves to the top while a sheet is up so it never covers a button.
+	var title := get_tree().current_scene
+	var dressed: bool = title.get_node_or_null("Backdrop") != null and title.get_node_or_null("Logo") != null
+	await _click("HOW TO PLAY")
+	var how_open := _find("GOT IT") != null
+	var subs: Node = get_node("/root/Subs")
+	subs.cue("[test caption]")
+	await _frames(3)
+	var subs_top: bool = subs._bg.anchor_top < 0.2
+	_shot("how_to_play")
+	await _click("GOT IT")
+	await _frames(3)
+	subs.clear()
+	_check(dressed and how_open and subs_top and _find("GOT IT") == null,
+		"MENU PASS (title art + logo, HOW TO PLAY opens and closes, captions clear the sheet)")
 	await _click("SETTINGS")
 	await _click("CREDITS")
 	_check(_has_label("Published by 3 Eyed Fox Studios"), "PUBLISHER CREDITS PASS")
@@ -213,8 +229,22 @@ func _run() -> void:
 	var grade_node: Node = game.find_child("Grade", true, false)
 	var letter: String = grade_node.text if grade_node != null else "?"
 	var graded: bool = game.between and grade_node != null and _find("NEXT SERVICE") != null
+	# Tips carry over: they're banked, the SHOP spends them, the upgrade shapes service 2 and is saved.
+	var tips1: int = game.k.tips
+	var banked: bool = game.cash == tips1 and tips1 >= 25
+	await _click("SHOP")
+	await _frames(3)
+	await _shot("shop")
+	await _click("FAMILY MEAL")
+	await _frames(3)
+	var bought: bool = game.perks.has("meal") and game.cash == tips1 - 25 and _find("FAMILY MEAL") == null
+	await _click("DONE")
 	await _click("NEXT SERVICE")
 	await _frames(5)
+	var sv: Dictionary = get_node("/root/Save").read()
+	_check(banked and bought and game.k.stress_cap == int(game.stress_cap) + 1 and (sv.get("perks", []) as Array).has("meal")
+		and int(get_node("/root/Settings").get_value("best_service")) >= 1,
+		"SHOP PASS (banked $%d, bought FAMILY MEAL, stress cap %d in service 2, saved, best night kept)" % [tips1, game.k.stress_cap])
 	_check(graded and game.level == 2 and not game.between,
 		"GRADE PASS (service 1 graded %s, NEXT SERVICE -> service %d)" % [letter, game.level])
 	var saved: Dictionary = get_node("/root/Save").read()

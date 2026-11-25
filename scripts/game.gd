@@ -20,6 +20,9 @@ const Coach = preload("res://scripts/coach.gd")
 const Kitchen = preload("res://scripts/kitchen.gd")
 ## Real art (Forge, style A "flat ink", Nov 25; docs/ART_LOG.md). Code-drawn shapes stay on top
 ## for every state a player must read (pans, clocks, rings), so art never carries meaning alone.
+const MenuArt = preload("res://scripts/menu_art.gd")
+const Upgrades = preload("res://scripts/upgrades.gd")
+const HowToPlay = preload("res://scripts/how_to_play.gd")
 const ART_BG := preload("res://assets/art/bg_line.jpg")
 const ART_STATIONS := [preload("res://assets/art/station_grill.png"), preload("res://assets/art/station_fryer.png"),
 	preload("res://assets/art/station_saute.png"), preload("res://assets/art/station_pass.png")]
@@ -44,6 +47,9 @@ var rush_stress := 1.0
 var level := 1               # service number
 var score := 0               # tickets out, whole night
 var lives := LIVES
+var lives_max := LIVES     # LIVES, +1 with COMP CARDS
+var cash := 0                # tips banked tonight, spent in the SHOP between services
+var perks: Array = []        # upgrades owned tonight (upgrades.gd)
 var k: Kitchen
 var sel := 0                 # selected cook
 var pick_tid := 0            # ticket the player tapped: FIRE cooks for it first (0 = most urgent)
@@ -73,6 +79,8 @@ func _ready() -> void:
 		level = int(d.get("level", 1))
 		score = int(d.get("score", 0))
 		_night_before = score
+		cash = int(d.get("cash", 0))
+		perks = (d.get("perks", []) as Array).filter(func(p): return Upgrades.ALL.has(p))
 	add_to_group("tunable")
 	get_node("/root/DebugMenu").apply_tune(self)
 	_new_service()
@@ -82,7 +90,7 @@ func _ready() -> void:
 		var back := Kitchen.new()
 		if back.from_dict(mid):
 			k = back
-			lives = LIVES - k.walked
+			lives = lives_max - k.walked
 			score = _night_before + k.served
 	_build()
 	checkpoint()
@@ -94,7 +102,7 @@ func _ready() -> void:
 ## score = finished services only; the service in progress rides along in "kitchen" (its own
 ## served count), so a reload can't count tickets twice.
 func state() -> Dictionary:
-	var d := {"level": level, "score": _night_before}
+	var d := {"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate()}
 	if k != null and not between and not over and not k.done:
 		d["kitchen"] = k.to_dict()
 	return d
@@ -209,15 +217,18 @@ func _refresh_hud() -> void:
 
 func _new_service() -> void:
 	k = Kitchen.new()
-	k.ticket_time = int(ticket_time)
+	var u := Upgrades.apply({"ticket_time": int(ticket_time), "stress_cap": int(stress_cap),
+		"rush_stress": int(rush_stress), "lives": LIVES}, perks)
+	k.ticket_time = u.ticket_time
 	k.ap = int(crew_ap)
-	k.stress_cap = int(stress_cap)
+	k.stress_cap = u.stress_cap
 	k.turns = int(service_turns)
 	k.first_tickets = int(first_tickets)
 	k.more_tickets = int(more_tickets)
-	k.rush_stress = int(rush_stress)
+	k.rush_stress = u.rush_stress
 	k.start(level, rng.randi() if level > 1 else 0)
-	lives = LIVES
+	lives_max = u.lives
+	lives = lives_max
 	sel = 0
 	pick_tid = 0
 
@@ -244,7 +255,7 @@ func end_turn() -> void:
 	var walked_before := k.walked
 	k.end_turn()
 	if k.walked > walked_before and not get_node("/root/DebugMenu").god_mode:
-		lives = LIVES - k.walked
+		lives = lives_max - k.walked
 		get_node("/root/Audio").sfx("bad")
 		get_node("/root/Subs").cue("[buzz: table walked]")
 		UI.buzz(80)
@@ -278,6 +289,8 @@ var _night_before := 0       # tickets out in earlier services tonight
 func _service_done() -> void:
 	_night_before += k.served
 	score = _night_before
+	cash += k.tips
+	_record_best(level)
 	get_node("/root/Audio").sfx("level")
 	get_node("/root/Subs").cue("[chime: service %d done]" % level)
 	UI.buzz(40)
@@ -293,8 +306,63 @@ func _service_done() -> void:
 	sheet_box.add_child(grade)
 	sheet_box.add_child(UI.label("%d of %d tickets out\n%d table%s walked\nTips $%d" % [k.served, k.total, k.walked, "" if k.walked == 1 else "s", k.tips], 24))
 	sheet_box.add_child(UI.label("Next: %d tickets." % maxi(1, int(first_tickets) + int(more_tickets) * (level - 1)), 20, UI.DIM))
-	sheet_box.add_child(UI.button("NEXT SERVICE", next_service, 96))
+	var shop := UI.button("", func(): open_shop())
+	shop.name = "ShopButton"
+	sheet_box.add_child(shop)
+	_shop_label()
+	sheet_box.add_child(MenuArt.primary(UI.button("NEXT SERVICE", next_service, 96)))
 	sheet_box.add_child(UI.button("TITLE", quit_to_title))   # saved: CONTINUE starts the next service
+
+
+func _shop_label() -> void:
+	var b: Button = sheet_box.get_node_or_null("ShopButton") if sheet_box != null else null
+	if b != null:
+		var can := Upgrades.ORDER.any(func(id): return Upgrades.can_buy(id, cash, perks))
+		b.text = "SHOP ($%d)%s" % [cash, " NEW!" if can else ""]
+
+
+## Spend banked tips on upgrades for the rest of tonight. Each one is bought once.
+func open_shop() -> void:
+	var box := UI.sheet(self, 500)
+	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
+	box.add_child(UI.label("Bank: $%d. Upgrades last all night." % cash, 20, UI.DIM))
+	for id in Upgrades.ORDER:
+		var u: Dictionary = Upgrades.ALL[id]
+		var b: Button
+		if perks.has(id):
+			b = UI.button("%s: OWNED\n%s" % [u.name, u.says], Callable(), 88)
+			b.disabled = true
+		else:
+			var short := cash < int(u.cost)   # say it in words, not just the disabled colour
+			b = UI.button("%s  %s\n%s" % [u.name, ("NEED $%d" if short else "$%d") % u.cost, u.says], func(): buy(id, box), 88)
+			b.disabled = not Upgrades.can_buy(id, cash, perks)
+		b.name = "Buy_" + id
+		b.add_theme_font_size_override("font_size", UI.font_size(20))
+		box.add_child(b)
+	box.add_child(UI.button("DONE", func(): UI.close_sheet(box)))
+
+
+func buy(id: String, box: VBoxContainer) -> void:
+	var left := Upgrades.buy(id, cash, perks)
+	if left < 0:
+		return
+	cash = left
+	get_node("/root/Audio").sfx("level", 1.3)
+	get_node("/root/Subs").cue("[register: %s bought]" % Upgrades.ALL[id].name.to_lower())
+	UI.buzz(25)
+	checkpoint()
+	_shop_label()
+	UI.close_sheet(box)
+	open_shop()
+
+
+## Best night on this phone (shown on the title): survives GAME OVER and NEW GAME.
+func _record_best(services_cleared: int) -> void:
+	if get_node("/root/DebugMenu").god_mode:
+		return
+	if services_cleared > int(_settings.get_value("best_service")) or (services_cleared == int(_settings.get_value("best_service")) and score > int(_settings.get_value("best_tickets"))):
+		_settings.set_value("best_service", services_cleared)
+		_settings.set_value("best_tickets", score)
 
 
 func next_service() -> void:
@@ -531,8 +599,8 @@ func _draw_field(f: Control) -> void:
 	if shown.size() > 4:
 		f.draw_string(font, Vector2(f.size.x - 70, y0 + 222), "+%d" % (shown.size() - 4), HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(20), UI.key("warn"))
 	_plate(f, Rect2(pad - 6, y0 - 36, f.size.x - 2 * pad + 12, 30))   # busy kitchen wall behind: text sits on plates
-	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [score, k.walked, LIVES, k.tips],
-		HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20, UI.font_size(18), UI.key("bad") if k.walked >= LIVES - 1 else ink)
+	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [score, k.walked, lives_max, k.tips],
+		HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20, UI.font_size(18), UI.key("bad") if k.walked >= lives_max - 1 else ink)
 	var nx := "NEXT: "
 	for pv in k.preview(3):
 		nx += "%d' %s   " % [pv["in"], ("BIG" if pv.ticket.big else "%d dish" % pv.ticket.items.size())]
@@ -627,7 +695,8 @@ func pause() -> void:
 	get_node("/root/Subs").clear()
 	sheet_box = UI.sheet(self)
 	sheet_box.add_child(UI.label("PAUSED", 30, UI.ACCENT))
-	sheet_box.add_child(UI.button("RESUME", resume, 88))
+	sheet_box.add_child(MenuArt.primary(UI.button("RESUME", resume, 88)))
+	sheet_box.add_child(UI.button("HOW TO PLAY", func(): HowToPlay.open(self)))
 	sheet_box.add_child(UI.button("SETTINGS", func(): SettingsSheet.open(self)))
 	sheet_box.add_child(UI.button("REPORT A BUG", func(): BugReport.open(self)))
 	sheet_box.add_child(UI.button("QUIT TO TITLE", quit_to_title))
@@ -648,6 +717,7 @@ func quit_to_title() -> void:
 func game_over() -> void:
 	over = true
 	_save.clear()
+	_record_best(level - 1)
 	_after_move()   # the board behind the sheet shows the turn that lost it
 	get_node("/root/Audio").sfx("gameover")
 	get_node("/root/Subs").cue("[game over sting]")
@@ -658,7 +728,7 @@ func game_over() -> void:
 	reason.name = "Reason"
 	sheet_box.add_child(reason)
 	sheet_box.add_child(UI.label("Service %d, %d tickets out tonight" % [level, score], 22))
-	sheet_box.add_child(UI.button("TRY AGAIN", func(): get_node("/root/Loader").go("res://scenes/game.tscn"), 88))
+	sheet_box.add_child(MenuArt.primary(UI.button("TRY AGAIN", func(): get_node("/root/Loader").go("res://scenes/game.tscn"), 88)))
 	sheet_box.add_child(UI.button("TITLE", quit_to_title))
 
 

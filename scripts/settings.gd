@@ -27,6 +27,8 @@ const DEFAULTS := {
 	"colorblind": false,   # Okabe-Ito key colours (see ui.gd KEYS)
 	"show_legend": true,   # controls legend on screen once a key or pad is used
 	"share_stats": false,  # anonymous stats/crash reports leave the phone only if ON (and a URL is set)
+	"best_service": 0,     # Rush: most services cleared in one night on this phone (title shows it)
+	"best_tickets": 0,     # tickets out that night
 	"intro_seen": false,   # the intro plays once; after that it never forces itself
 }
 
