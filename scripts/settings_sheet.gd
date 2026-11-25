@@ -25,6 +25,14 @@ static func open(parent: Node) -> VBoxContainer:
 	_slider(col, s, "SOUND EFFECTS", "sfx", 0.0, 1.0)
 	_slider(col, s, "BRIGHTNESS", "gamma", 0.6, 1.6)
 	_toggle(col, s, "VIBRATION", "vibration")
+	if s.DEFAULTS.has("pace"):   # Rush: how hard the kitchen pushes (the house still reads you on top)
+		var paces := ["RELAXED", "NORMAL", "SLAMMED"]
+		var pace_b := UI.button("PACE: " + paces[clampi(int(s.get_value("pace")), 0, 2)])
+		pace_b.name = "pace"
+		pace_b.pressed.connect(func():
+			s.set_value("pace", (clampi(int(s.get_value("pace")), 0, 2) + 1) % 3)
+			pace_b.text = "PACE: " + paces[int(s.get_value("pace"))])
+		col.add_child(pace_b)
 	var text_b := UI.button("TEXT SIZE: " + s.text_name())
 	text_b.name = "text_size"
 	text_b.pressed.connect(func():

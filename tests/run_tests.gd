@@ -583,17 +583,45 @@ func test_save_migrates_v2() -> void:
 	sv.free()
 
 
-## Grades: a clean service is an A; walked tables cost a letter each.
+## Grades (Nov 25): a score out of 100 (out 60, speed 25, clean pans 15, -10 a walk, critic +-8)
+## lands every letter, not just A/C/F.
 func test_kitchen_grade() -> void:
 	var k := _kitchen()
 	k.total = 6
 	k.served = 6
-	check(k.grade() == "A", "6/6 clean = A")
+	k.speed = 6 * 0.8
+	check(k.grade() == "A+" and k.score_parts().total == 100, "6/6 fast and clean = A+ (%s)" % k.score_parts())
+	k.speed = 6 * 0.55
+	check(k.grade() == "A", "6/6 clean, middling speed = A (%d)" % k.score_parts().total)
+	k.burns = 2
+	check(k.grade() == "B", "two burns drop it to B (%d)" % k.score_parts().total)
+	k.burns = 0
+	k.served = 5
+	k.walked = 1
+	k.speed = 5 * 0.55
+	check(k.grade() == "C", "one walked = C (%d)" % k.score_parts().total)
+	k.total = 7
+	k.served = 5
 	k.walked = 2
-	check(k.grade() == "C", "two walked = C (%s)" % k.grade())
+	k.speed = 5 * 0.55
+	check(k.grade() == "D", "two of seven walked = D (%d)" % k.score_parts().total)
 	k.served = 0
 	k.walked = 0
+	k.speed = 0.0
 	check(k.grade() == "F", "nothing out = F")
+	var seen := {}
+	for n in [1, 2, 3]:
+		for sd in 60:
+			var b := Kitchen.new()
+			b.start(n, sd + 7)
+			var guard := 0
+			while not b.done and guard < 80 and b.walked < 3 and not b.crew.all(func(c): return c.out):
+				b.bot_turn()
+				b.end_turn()
+				guard += 1
+			if b.walked < 3:
+				seen[b.grade()] = true
+	check(seen.size() >= 5, "the bot's services land at least 5 different letters (%s)" % str(seen.keys()))
 
 
 ## Tips carry between services: upgrades cost cash, are bought once, and change the next service.
@@ -644,12 +672,12 @@ func test_kitchen_events() -> void:
 	check(k.walked == 2, "a walked VIP counts as two")
 	k = _event_kitchen("critic")
 	k.served = k.total
-	check(k.grade() == "A", "clean service")
-	k.walked = 1
+	k.speed = k.total * 0.55
+	var plain: int = k.score_parts().total
 	k.critic = "served"
-	check(k.grade() == "A", "serving the critic lifts a B to an A")
+	check(k.score_parts().total == mini(plain + 8, 100), "serving the critic is worth 8 points")
 	k.critic = "walked"
-	check(k.grade() == "C", "walking the critic drops a B to a C")
+	check(k.score_parts().total == plain - 8, "walking the critic costs 8")
 	var back := Kitchen.new()
 	var vk := _event_kitchen("vip")
 	check(back.from_dict(JSON.parse_string(JSON.stringify(vk.to_dict()))) and back.event == "vip"

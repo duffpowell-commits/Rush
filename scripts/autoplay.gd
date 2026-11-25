@@ -246,6 +246,25 @@ func _run() -> void:
 	await _shot("grade")
 	var grade_node: Node = game.find_child("Grade", true, false)
 	var letter: String = grade_node.text if grade_node != null else "?"
+	# Grades + pace (Nov 25): the sheet shows the points behind the letter; PACE and the house's read move the load.
+	var pst: Node = get_node("/root/Settings")
+	var points_ok: bool = game.find_child("Points", true, false) != null and str(game.find_child("Points", true, false).text).contains("POINTS")
+	var ease_was = pst.get_value("house_ease")
+	pst.set_value("house_ease", 0)
+	pst.set_value("pace", 0)
+	var relaxed: Dictionary = game.pace_adjust()
+	var t_relaxed: int = game.tickets_for(1)
+	pst.set_value("pace", 2)
+	var t_slammed: int = game.tickets_for(1)
+	pst.set_value("pace", 1)
+	var t_normal: int = game.tickets_for(1)
+	game._house_reads("F")
+	var eased: bool = int(pst.get_value("house_ease")) == 1 and game.tickets_for(1) == t_normal - 1
+	game._house_reads("A+")
+	var back: bool = int(pst.get_value("house_ease")) == 0
+	pst.set_value("house_ease", ease_was)
+	_check(points_ok and relaxed.time == 2 and t_relaxed < t_normal and t_slammed > t_normal and eased and back,
+		"PACE PASS (grade %s with its points; tickets relaxed %d / normal %d / slammed %d; an F eases a ticket, an A+ takes it back)" % [letter, t_relaxed, t_normal, t_slammed])
 	var graded: bool = game.between and grade_node != null and _find("NEXT SERVICE") != null
 	# Tips carry over: they're banked, the SHOP spends them, the upgrade shapes service 2 and is saved.
 	var tips1: int = game.k.tips

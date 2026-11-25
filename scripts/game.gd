@@ -219,15 +219,50 @@ func _refresh_hud() -> void:
 
 # ---------------------------------------------------------------- PLAY
 
+## Difficulty that fits the player (Nov 25): the PACE setting plus the house's read of you.
+## RELAXED: a ticket fewer, two more minutes a ticket. SLAMMED: two more tickets, a minute less.
+## house_ease (-2..2): each point is a ticket fewer (or more); at +-2 a ticket's clock moves a minute too.
+const PACES := ["RELAXED", "NORMAL", "SLAMMED"]
+
+
+func pace_adjust() -> Dictionary:
+	var pace := clampi(int(_settings.get_value("pace")), 0, 2)
+	var ease := clampi(int(_settings.get_value("house_ease")), -2, 2)
+	var t: int = [-1, 0, 2][pace] - ease
+	var m: int = [2, 0, -1][pace] + (1 if ease >= 2 else (-1 if ease <= -2 else 0))
+	return {"tickets": t, "time": m}
+
+
+## Tickets the given service brings, after pace and the house's read.
+func tickets_for(n: int) -> int:
+	return maxi(1, maxi(3, int(first_tickets) + pace_adjust().tickets) + int(more_tickets) * (n - 1))
+
+
+## After a service (or a lost night), the house reads you: a rough one eases the next, an aced one pushes it.
+## Returns a line for the grade sheet ("" when nothing moved).
+func _house_reads(g: String, lost: bool = false) -> String:
+	var ease := clampi(int(_settings.get_value("house_ease")), -2, 2)
+	var was := ease
+	if lost or g in ["D", "F"]:
+		ease = mini(ease + 1, 2)
+	elif g in ["A+", "A"]:
+		ease = maxi(ease - 1, -2)
+	if ease == was:
+		return ""
+	_settings.set_value("house_ease", ease)
+	return "The floor eases off a ticket." if ease > was else "The house noticed: one more ticket."
+
+
 func _new_service() -> void:
 	k = Kitchen.new()
 	var u := Upgrades.apply({"ticket_time": int(ticket_time), "stress_cap": int(stress_cap),
 		"rush_stress": int(rush_stress), "lives": LIVES}, perks)
-	k.ticket_time = u.ticket_time
+	var adj := pace_adjust()
+	k.ticket_time = maxi(5, u.ticket_time + adj.time)
 	k.ap = int(crew_ap)
 	k.stress_cap = u.stress_cap
 	k.turns = int(service_turns)
-	k.first_tickets = int(first_tickets)
+	k.first_tickets = maxi(3, int(first_tickets) + adj.tickets)
 	k.more_tickets = int(more_tickets)
 	k.rush_stress = u.rush_stress
 	k.start(level, rng.randi() if level > 1 else 0)
@@ -419,14 +454,20 @@ func _service_done() -> void:
 	level += 1
 	checkpoint()
 	var g := k.grade()
+	var parts := k.score_parts()
+	var read := _house_reads(g)
 	sheet_box = UI.sheet(self)
 	sheet_box.add_child(UI.label("SERVICE %d DONE" % k.service, 34, UI.ACCENT))
-	var grade := UI.label(g, 96, UI.key("good" if g in ["A", "B"] else ("warn" if g == "C" else "bad")))
+	var grade := UI.label(g, 96, UI.key("good" if g in ["A+", "A", "B"] else ("warn" if g == "C" else "bad")))
 	grade.name = "Grade"
 	sheet_box.add_child(grade)
 	_stamp(grade)
 	sheet_box.add_child(UI.label("%d of %d tickets out\n%d walk%s against you\nTips $%d" % [k.served, k.total, k.walked, "" if k.walked == 1 else "s", k.tips], 24))
-	sheet_box.add_child(UI.label("Next: %d tickets." % maxi(1, int(first_tickets) + int(more_tickets) * (level - 1)), 20, UI.DIM))
+	var why := UI.label("%d POINTS: out %d, speed %d, pans %d%s%s" % [parts.total, parts.out, parts.speed, parts.pans,
+		", walks %d" % parts.walks if parts.walks != 0 else "", ", critic %+d" % parts.critic if parts.critic != 0 else ""], 18, UI.DIM)
+	why.name = "Points"
+	sheet_box.add_child(why)
+	sheet_box.add_child(UI.label(("%s " % read if read != "" else "") + "Next: %d tickets." % tickets_for(level), 20, UI.DIM))
 	var shop := UI.button("", func(): open_shop())
 	shop.name = "ShopButton"
 	sheet_box.add_child(shop)
@@ -952,6 +993,7 @@ func game_over() -> void:
 	over = true
 	_save.clear()
 	_record_best(level - 1)
+	_house_reads("F", true)   # a lost night eases the next one a little
 	_after_move()   # the board behind the sheet shows the turn that lost it
 	get_node("/root/Audio").sfx("gameover")
 	get_node("/root/Subs").cue("[game over sting]")
