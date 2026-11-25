@@ -50,6 +50,7 @@ func _build() -> void:
 	col.offset_left = -200
 	col.offset_right = 200
 	col.offset_bottom = -70
+	col.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	col.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	col.add_theme_constant_override("separation", UI.GAP)
 	add_child(col)
@@ -64,7 +65,7 @@ func _build() -> void:
 	var save: Node = get_node("/root/Save")
 	if save.exists():
 		var d: Dictionary = save.read()
-		col.add_child(Art.primary(UI.button("CONTINUE  (SERVICE %d)" % int(d.get("level", 1)), func(): _play(true), 96)))
+		col.add_child(Art.primary(UI.button("CONTINUE: SERVICE %d" % int(d.get("level", 1)), func(): _play(true), 96)))
 		col.add_child(UI.button("NEW GAME", func(): _play(false)))
 	else:
 		col.add_child(Art.primary(UI.button("NEW GAME", func(): _play(false), 96)))

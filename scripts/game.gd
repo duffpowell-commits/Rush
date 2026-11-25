@@ -318,7 +318,7 @@ func _shop_label() -> void:
 	var b: Button = sheet_box.get_node_or_null("ShopButton") if sheet_box != null else null
 	if b != null:
 		var can := Upgrades.ORDER.any(func(id): return Upgrades.can_buy(id, cash, perks))
-		b.text = "SHOP: $%d IN THE BANK%s" % [cash, " (NEW!)" if can else ""]
+		b.text = "SHOP ($%d)%s" % [cash, " NEW!" if can else ""]
 
 
 ## Spend banked tips on upgrades for the rest of tonight. Each one is bought once.
@@ -333,7 +333,8 @@ func open_shop() -> void:
 			b = UI.button("%s: OWNED\n%s" % [u.name, u.says], Callable(), 88)
 			b.disabled = true
 		else:
-			b = UI.button("%s  $%d\n%s" % [u.name, u.cost, u.says], func(): buy(id, box), 88)
+			var short := cash < int(u.cost)   # say it in words, not just the disabled colour
+			b = UI.button("%s  %s\n%s" % [u.name, ("NEED $%d" if short else "$%d") % u.cost, u.says], func(): buy(id, box), 88)
 			b.disabled = not Upgrades.can_buy(id, cash, perks)
 		b.name = "Buy_" + id
 		b.add_theme_font_size_override("font_size", UI.font_size(20))
