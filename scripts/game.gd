@@ -25,11 +25,12 @@ const Upgrades = preload("res://scripts/upgrades.gd")
 const HowToPlay = preload("res://scripts/how_to_play.gd")
 const ART_BG := preload("res://assets/art/bg_line.jpg")
 const ART_STATIONS := [preload("res://assets/art/station_grill.png"), preload("res://assets/art/station_fryer.png"),
-	preload("res://assets/art/station_saute.png"), preload("res://assets/art/station_pass.png")]
+	preload("res://assets/art/station_saute.png"), preload("res://assets/art/station_cold.png"), preload("res://assets/art/station_pass.png")]
 const ART_COOKS := {"DEV": preload("res://assets/art/cook_dev.png"), "MO": preload("res://assets/art/cook_mo.png")}
 const ART_DISHES := {"BURGER": preload("res://assets/art/dish_burger.png"), "STEAK": preload("res://assets/art/dish_steak.png"),
 	"FRIES": preload("res://assets/art/dish_fries.png"), "WINGS": preload("res://assets/art/dish_wings.png"),
-	"PASTA": preload("res://assets/art/dish_pasta.png"), "SCAMPI": preload("res://assets/art/dish_scampi.png")}
+	"PASTA": preload("res://assets/art/dish_pasta.png"), "SCAMPI": preload("res://assets/art/dish_scampi.png"),
+	"SALAD": preload("res://assets/art/dish_salad.png"), "CAKE": preload("res://assets/art/dish_cake.png")}
 const LIVES := 3             # tables you can walk in one service
 
 ## Live sliders (DEV MENU -> TUNE). Applied when a service starts.
@@ -40,7 +41,7 @@ var ticket_time := 9.0
 var crew_ap := 3.0
 var stress_cap := 6.0
 var service_turns := 20.0
-var first_tickets := 8.0
+var first_tickets := 7.0
 var more_tickets := 1.0
 var rush_stress := 1.0
 
@@ -378,24 +379,52 @@ func next_service() -> void:
 	_new_service()
 	checkpoint()
 	_after_move()
-	if k.event != "":
+	if k.event != "" or new_station() >= 0:
 		tonight()
+
+
+## The station that opens this service (-1 if none): the line grows by service.
+func new_station() -> int:
+	for i in Kitchen.OPENS.size():
+		if Kitchen.OPENS[i] == k.service and Kitchen.OPENS[i] > 1 and not k.all_open:
+			return i
+	return -1
 
 
 ## The twist card at the top of a service: what's different tonight, one line.
 func tonight() -> void:
-	var ev: Array = Kitchen.EVENTS[k.event]
+	var ns := new_station()
 	get_node("/root/Subs").clear()   # the twist's own cue, not the last turn's sizzle
-	get_node("/root/Subs").cue("[bell: %s]" % ev[0].to_lower())
+	if k.event != "":
+		get_node("/root/Subs").cue("[bell: %s]" % Kitchen.EVENTS[k.event][0].to_lower())
 	# Its own box, not sheet_box: a pause (back, focus-out) on top swaps sheet_box, and HEARD! must
 	# still close this card afterwards.
 	var box := UI.sheet(self)
 	twist_box = box
-	box.add_child(UI.label("TONIGHT", 22, UI.DIM))
-	var head := UI.label(ev[0], 36, MenuArt.FLAME)
-	head.name = "Twist"
-	box.add_child(head)
-	box.add_child(UI.label(ev[1], 24))
+	if ns >= 0:   # the line grows: a station opens tonight, with its dishes
+		var dishes: Array = Kitchen.DISHES.keys().filter(func(d): return Kitchen.DISHES[d].st == ns)
+		var opened := UI.label("NEW STATION: " + Kitchen.STATIONS[ns], 30, UI.ACCENT)
+		opened.name = "NewStation"
+		box.add_child(opened)
+		var row := HBoxContainer.new()
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_theme_constant_override("separation", 12)
+		for tex in [ART_STATIONS[ns]] + dishes.map(func(d): return ART_DISHES[d]):
+			var pic := TextureRect.new()
+			pic.texture = tex
+			pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			pic.custom_minimum_size = Vector2(80, 80)
+			row.add_child(pic)
+		box.add_child(row)
+		box.add_child(UI.label("Now on the menu: " + " and ".join(dishes.map(func(d): return d.to_lower())) + ".", 22))
+	if k.event != "":
+		var ev: Array = Kitchen.EVENTS[k.event]
+		box.add_child(UI.label("TONIGHT", 22, UI.DIM))
+		var head := UI.label(ev[0], 36, MenuArt.FLAME)
+		head.name = "Twist"
+		box.add_child(head)
+		box.add_child(UI.label(ev[1], 24))
 	box.add_child(MenuArt.primary(UI.button("HEARD!", func():
 		UI.close_sheet(box)
 		twist_box = null, 88)))
@@ -500,8 +529,9 @@ func _rail_y() -> float:
 
 func station_rect(i: int) -> Rect2:
 	var w := field.size.x
-	var pad := 14.0
-	var bw := (w - pad * 5.0) / 4.0
+	var n := float(Kitchen.STATIONS.size())
+	var pad := 8.0
+	var bw := (w - pad * (n + 1.0)) / n
 	var y := _rail_y() + 300.0
 	return Rect2(pad + i * (bw + pad), y, bw, 170.0)
 
@@ -550,7 +580,11 @@ func tap(p: Vector2) -> void:
 			_after_move()
 			return
 	for i in Kitchen.STATIONS.size():
-		if station_rect(i).grow(6.0).has_point(p):
+		if station_rect(i).grow(4.0).has_point(p):
+			if not k.is_open(i):
+				if note != null:
+					note.text = "%s OPENS IN SERVICE %d" % [Kitchen.STATIONS[i], Kitchen.OPENS[i]]
+				return
 			if k.crew[sel].at == i:
 				act()
 			elif k.move(sel, i):
@@ -576,6 +610,11 @@ func _draw_cover(f: Control, tex: Texture2D, box: Rect2) -> void:
 
 
 ## A dark plate behind text that sits on art.
+## The long label if it fits the width at this text size, else the short one.
+func _fit(font: Font, long: String, short: String, width: float, size: int) -> String:
+	return long if font.get_string_size(long, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(size)).x <= width else short
+
+
 func _plate(f: Control, box: Rect2) -> void:
 	f.draw_rect(box, Color(0, 0, 0, 0.62))
 
@@ -643,10 +682,20 @@ func _draw_field(f: Control) -> void:
 	for i in Kitchen.STATIONS.size():
 		var r := station_rect(i)
 		var here: bool = k.crew[sel].at == i
+		if not k.is_open(i):   # not open yet tonight: dimmed, with when it opens (word, not colour alone)
+			f.draw_rect(r, Color(UI.panel_color(), 0.6))
+			f.draw_rect(r, Color("4a5878"), false, 2.0)
+			_draw_fit(f, ART_STATIONS[i], Rect2(r.position + Vector2(6, 40), r.size - Vector2(12, 46)))
+			f.draw_rect(r.grow(-2.0), Color(UI.BG, 0.72))
+			f.draw_string(font, r.position + Vector2(0, 30), Kitchen.STATIONS[i], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), UI.DIM)
+			_plate(f, Rect2(r.position.x + 2, r.get_center().y - 24, r.size.x - 4, 52))
+			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, -4), "CLOSED", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(14), ink)
+			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 18), "SERVICE %d" % Kitchen.OPENS[i], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(12), UI.DIM)
+			continue
 		f.draw_rect(r, UI.panel_color())
 		f.draw_rect(r, UI.ACCENT if here else Color("4a5878"), false, 3.0 if here else 2.0)
 		_draw_fit(f, ART_STATIONS[i], Rect2(r.position + Vector2(6, 40), r.size - Vector2(12, 46)))
-		f.draw_string(font, r.position + Vector2(0, 30), Kitchen.STATIONS[i], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(18), ink)
+		f.draw_string(font, r.position + Vector2(0, 30), Kitchen.STATIONS[i], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), ink)
 		if i < k.pans.size() and not k.pans[i].is_empty():
 			var p: Dictionary = k.pans[i]
 			var up: bool = p.left <= 0
@@ -674,15 +723,15 @@ func _draw_field(f: Control) -> void:
 						waiting += 1
 			if waiting > 0:   # work waiting here: what to FIRE, and how much
 				_plate(f, Rect2(r.position.x + 4, r.get_center().y - 14, r.size.x - 8, 32))
-				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), "%d TO FIRE" % waiting,
-					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), UI.key("warn"))
+				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), _fit(font, "%d TO FIRE" % waiting, "FIRE %d" % waiting, r.size.x - 8, 15),
+					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(15), UI.key("warn"))
 		elif i == Kitchen.PASS_IX:
 			for w in mini(k.window.size(), 3):   # plates up on the window, waiting for a runner
-				_draw_fit(f, ART_DISHES[k.window[w].dish], Rect2(r.position.x + 6 + w * 36, r.position.y + 34, 40, 40))
+				_draw_fit(f, ART_DISHES[k.window[w].dish], Rect2(r.position.x + 4 + w * 28, r.position.y + 34, 34, 34))
 			_plate(f, Rect2(r.position.x + 4, r.get_center().y - 14, r.size.x - 8, 32))
-			var up := "%d TO RUN" % k.window.size() if not k.window.is_empty() else "RUN HERE"
+			var up := _fit(font, "%d TO RUN" % k.window.size(), "RUN %d" % k.window.size(), r.size.x - 8, 15) if not k.window.is_empty() else _fit(font, "RUN HERE", "RUN", r.size.x - 8, 15)
 			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), up, HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
-				UI.font_size(16), UI.key("good") if not k.window.is_empty() else ink)
+				UI.font_size(15), UI.key("good") if not k.window.is_empty() else ink)
 	# --- crew
 	for c in k.crew.size():
 		var cr: Dictionary = k.crew[c]

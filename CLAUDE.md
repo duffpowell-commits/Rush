@@ -36,6 +36,9 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   jump to the top under a sheet) and tips that carry between services (grade sheet SHOP,
   `upgrades.gd`, Save v4, best night in Settings). Next PR: a twist per service from 2 on
   (`Kitchen.EVENTS`: bus tour, grill on the fritz, VIP, critic; bot s2 ~43-52% per twist).
+  Then stations by service (Duff's pick, Nov 25): service 1 is grill + fry, saute opens in 2, a new
+  COLD station (salad, cake) in 3 (`Kitchen.OPENS`, PASS is now index 4, closed stations are walked
+  past free, Save v5). Curve is now 7 + 1 per service (bot s1 ~8%, s2 ~32%, s3 ~48%, s4 ~71%).
   Still to come in order: juice, real sound, grades/difficulty that fit the player, then the ad kit.
 - Latest build: Releases -> `dev` -> `rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and

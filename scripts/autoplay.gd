@@ -127,15 +127,18 @@ func _run() -> void:
 	var fired_by_tap := false
 	var coach_up: bool = game.has_node("Coach_fire")
 	await _shot("first_minute")
-	# Walk MO one station left with a tap, then back: moves cost actions.
+	# Walk MO from FRY to the PASS with a tap: one action, because the closed saute and cold
+	# stations in service 1 are walked past for free. A tap on a closed station goes nowhere.
 	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
-	await _tap_at(game.field.get_global_transform() * game.station_rect(1).get_center())
-	var moved: bool = k.crew[1].at == 1 and k.crew[1].ap == k.ap - 1
+	await _tap_at(game.field.get_global_transform() * game.station_rect(2).get_center())
+	var closed_ok: bool = k.crew[1].at == 1 and "OPENS IN SERVICE 2" in game.note.text
+	await _tap_at(game.field.get_global_transform() * game.station_rect(Kitchen.PASS_IX).get_center())
+	var moved: bool = closed_ok and k.crew[1].at == Kitchen.PASS_IX and k.crew[1].ap == k.ap - 1
 	await _tap_at(game.field.get_global_transform() * game.cook_pos(0))
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
 	await _frames(2)
 	fired_by_tap = k.pans[0].get("dish", "") == "BURGER"
-	_check(coach_up and moved and fired_by_tap, "TAP PASS (hint shown, MO walked to FRY for 1 action, DEV fired the burger)")
+	_check(coach_up and moved and fired_by_tap, "TAP PASS (hint shown, closed SAUTE refused, MO walked FRY->PASS past closed stations for 1 action, DEV fired the burger)")
 	# The next hint follows by itself: after FIRE, END TURN is taught.
 	var next_hint := false
 	for i in 60:
@@ -248,6 +251,10 @@ func _run() -> void:
 	_check(graded and game.level == 2 and not game.between,
 		"GRADE PASS (service 1 graded %s, NEXT SERVICE -> service %d)" % [letter, game.level])
 	# Service 2 opens on its twist card (bus tour, fritz, VIP or critic); HEARD! closes it.
+	# The line grows by service: saute opens in service 2 and the card says so (cold opens in service 3).
+	var ns: Node = game.find_child("NewStation", true, false)
+	_check(ns != null and "SAUTE" in ns.text and game.k.is_open(2) and not game.k.is_open(3),
+		"STATIONS PASS (service 2 opens %s; cold still closed)" % (ns.text if ns != null else "nothing"))
 	var twist: Node = game.find_child("Twist", true, false)
 	var twist_name: String = twist.text if twist != null else "?"
 	await _shot("tonight")

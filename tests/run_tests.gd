@@ -354,6 +354,7 @@ func test_tune_saves_applies_and_reports() -> void:
 
 func _kitchen() -> Kitchen:
 	var k := Kitchen.new()
+	k.all_open = true   # rule tests use the whole line; test_kitchen_stations_open covers the unlocks
 	k.start(1)
 	return k
 
@@ -369,10 +370,10 @@ func test_kitchen_fire_to_table() -> void:
 	k.end_turn()
 	check(k.pans[0].left == 0 and k.action_here(0) == "PLATE", "burger is up after 2 minutes")
 	check(k.plate(0) and k.window.size() == 1 and k.window[0].dish == "BURGER", "plated up onto the pass window")
-	check(not k.move(0, 3), "can't cross 3 stations on 2 actions")
+	check(not k.move(0, Kitchen.PASS_IX), "can't cross 4 stations on 2 actions")
 	check(k.move(0, 2) and k.crew[0].ap == 0, "2 stations = 2 actions")
 	k.end_turn()
-	check(k.move(0, 3) and k.action_here(0) == "RUN" and k.run(0), "walk to the pass and run it")
+	check(k.move(0, Kitchen.PASS_IX) and k.action_here(0) == "RUN" and k.run(0), "walk to the pass and run it")
 	check(k.served == 1 and k.tips > 0 and k.ticket(1).is_empty(), "ticket out, tips paid")
 
 
@@ -494,7 +495,7 @@ func test_rush_save_no_double_count() -> void:
 func test_save_migrates_v1() -> void:
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 1, "level": 3, "score": 9, "lives": 2})
-	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 4, "v1 -> v4")
+	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 5, "v1 -> v5")
 	sv.free()
 
 
@@ -559,7 +560,7 @@ func test_kitchen_window() -> void:
 	check(k.pans[2].is_empty(), "its pan was cleared")
 	check(k.plate(0) and k.window.size() == 1, "fries up on the window")
 	check(k.crew[0].hand.is_empty(), "DEV's hands stay free")
-	k.crew[1].at = 3
+	k.crew[1].at = Kitchen.PASS_IX
 	check(k.action_here(1) == "RUN" and k.run(1) and k.served == 1, "MO runs it from the pass")
 	k.window = [{"tid": 999, "dish": "PASTA"}]
 	k.tickets = [{"id": 999, "table": 3, "items": [{"dish": "PASTA", "state": "carried"}], "time": 1, "big": false}]
@@ -576,7 +577,7 @@ func test_save_migrates_v2() -> void:
 	kd.erase("window")
 	kd.crew[0].hand = {"tid": 1, "dish": "BURGER"}
 	var d: Dictionary = sv._migrate({"_version": 2, "level": 1, "score": 0, "kitchen": kd})
-	check(int(d._version) == 4 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
+	check(int(d._version) == 5 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
 	var b := Kitchen.new()
 	check(b.from_dict(d.kitchen) and b.window.size() == 1, "and it loads")
 	sv.free()
@@ -609,7 +610,7 @@ func test_upgrades_carry() -> void:
 		check(String(Upgrades.ALL[id].says).length() <= 26, id + " fits the button")
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 3, "level": 2, "score": 8})
-	check(int(d._version) == 4 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v4")
+	check(int(d._version) == 5 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v4")
 	sv.free()
 
 
@@ -662,3 +663,43 @@ func _event_kitchen(ev: String) -> Kitchen:
 	k.event = ev
 	k._set_up_event()
 	return k
+
+
+## The line grows by service: grill + fry, then saute (service 2), then cold (service 3). Closed
+## stations take no tickets, can't be stood at, and are walked past for free.
+func test_kitchen_stations_open() -> void:
+	for n in [1, 2, 3]:
+		var k := Kitchen.new()
+		k.with_events = false
+		k.start(n, 77)
+		var sts := {}
+		for inc in k.incoming:
+			for it in inc.ticket.items:
+				sts[Kitchen.DISHES[it.dish].st] = true
+		for t in k.tickets:
+			for it in t.items:
+				sts[Kitchen.DISHES[it.dish].st] = true
+		var want: Array = [[0, 1], [0, 1, 2], [0, 1, 2, 3]][n - 1]
+		check(sts.keys().all(func(x): return want.has(x)), "service %d only orders from open stations (%s)" % [n, sts.keys()])
+		check(k.crew.all(func(c): return k.is_open(c.at)), "service %d cooks start at open stations" % n)
+	var one := Kitchen.new()
+	one.start(1, 5)
+	check(not one.move(0, 2) and not one.move(0, 3), "can't stand at a closed station")
+	check(one.walk_cost(1, Kitchen.PASS_IX) == 1, "fry to pass skips the closed saute and cold (1 action)")
+	check(one.move(1, Kitchen.PASS_IX) and one.crew[1].ap == one.ap - 1, "and it really costs 1")
+	var three := Kitchen.new()
+	three.start(3, 5)
+	check(three.walk_cost(0, Kitchen.PASS_IX) == 4, "service 3: grill to pass is 4 stops")
+	var sv = load("res://scripts/save_game.gd").new()
+	var old := Kitchen.new()
+	old.all_open = true
+	old.start(1, 3)
+	var kd: Dictionary = old.to_dict()
+	kd.pans = [{}, {}, {"tid": 1, "dish": "PASTA", "left": 1, "sat": 0, "rushed": false}]
+	kd.crew[1].at = 3
+	kd.erase("all_open")
+	var d: Dictionary = sv._migrate({"_version": 4, "level": 1, "score": 0, "cash": 0, "perks": [], "kitchen": kd})
+	var back := Kitchen.new()
+	check(back.from_dict(d.kitchen) and back.crew[1].at == Kitchen.PASS_IX and back.pans[2].dish == "PASTA"
+		and back.pans[3].is_empty() and back.is_open(2), "a v4 mid-service save loads onto the longer line")
+	sv.free()

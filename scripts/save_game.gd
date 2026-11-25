@@ -7,8 +7,10 @@ extends Node
 ## Writes go to a temp file first, then replace the real one, so a kill mid-write can't leave
 ## a half-written save.
 
-const VERSION := 4   # 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
+const VERSION := 5   # 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
 # 3 (Rush, Nov 25 playtest): the kitchen gains a pass "window"; plates in a cook's hand move onto it
+# 5 (Rush, Nov 25): a COLD station before the pass (PASS 3 -> 4, a 4th pan); a service saved before it
+#   keeps every station open (its tickets may need saute in service 1)
 # 4 (Rush, Nov 25): "cash" (banked tips) and "perks" (upgrades bought tonight) carry between services
 var path := "user://run.json"
 
@@ -72,4 +74,13 @@ func _migrate(d: Dictionary) -> Dictionary:
 		d["cash"] = 0
 		d["perks"] = []
 		d["_version"] = 4
+	if int(d.get("_version", 1)) < 5:
+		var kd5: Variant = d.get("kitchen", null)
+		if kd5 is Dictionary and kd5.get("pans", []) is Array and (kd5.pans as Array).size() == 3:
+			kd5.pans.append({})   # the new COLD pan sits at index 3, before the pass
+			for c in kd5.get("crew", []):
+				if c is Dictionary and int(c.get("at", 0)) == 3:
+					c.at = 4   # was at the pass
+			kd5["all_open"] = true
+		d["_version"] = 5
 	return d

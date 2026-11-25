@@ -21,3 +21,6 @@ with crisp edges." Props/icons keyed on magenta (#FF00FF).
 | `assets/art/cook_mo.png` | rush-cook-mo-20261125 / 0 | 31337 | key to navy, round crop 144 px | waiting on Duff |
 | `assets/art/dish_*.png` (all but fries) | rush-dish-<dish>-20261125 / 0 | 31337 | cut --height 128; floor shadow removed | waiting on Duff |
 | `assets/art/dish_fries.png` | rush-dish-fries2-20261125 / 1 | 4242 | first job came out broken, rerolled; cut --height 128; floor shadow removed | waiting on Duff |
+| `assets/art/station_cold.png` | rush-st-cold-20261125 / 1 | 24813 | cut --height 256; magenta seen through the glass recoloured pale glass. Opens in service 3 | waiting on Duff |
+| `assets/art/dish_salad.png` | rush-dish-salad-20261125 / 0 | 31338 | cut --height 128 | waiting on Duff |
+| `assets/art/dish_cake.png` | rush-dish-cake-20261125 / 0 | 31339 | cut --height 128; key shadow under the plate removed | waiting on Duff |
