@@ -326,6 +326,9 @@ func test_coach_hints_short() -> void:
 	var g = load("res://scripts/game.gd").new()
 	var steps: Array = g._coach_steps()
 	check(steps.size() >= 5, "Rush has its five hints")
+	var ids: Array = steps.map(func(st): return st[0])
+	check(ids.has("dots") and ids.find("dots") > ids.find("end_turn"), "the action dots are taught after the first END TURN")
+	check(str(steps[ids.find("run")][1]).contains("SERVES"), "the RUN hint says RUN is what serves the table")
 	for st in steps:
 		check(str(st[1]).split(" ", false).size() <= 4, "hint '%s' is 4 words or fewer" % st[1])
 	g.free()

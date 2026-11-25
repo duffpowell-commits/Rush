@@ -41,8 +41,8 @@ static func teach(parent: Node, hint_id: String, text: String, check: Callable) 
 	var sb := StyleBoxFlat.new()   # a dark band behind it: readable on busy art, not just outlined
 	sb.bg_color = Color(0, 0, 0, 0.72)
 	sb.set_corner_radius_all(12)
-	sb.content_margin_top = 4
-	sb.content_margin_bottom = 4
+	sb.content_margin_top = 1
+	sb.content_margin_bottom = 1
 	c.add_theme_stylebox_override("normal", sb)
 	c.anchor_left = 0.04
 	c.anchor_right = 0.96
