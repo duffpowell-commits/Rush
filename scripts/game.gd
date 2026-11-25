@@ -235,7 +235,8 @@ func pace_adjust() -> Dictionary:
 
 ## Tickets the given service brings, after pace and the house's read.
 func tickets_for(n: int) -> int:
-	return maxi(1, maxi(3, int(first_tickets) + pace_adjust().tickets) + int(more_tickets) * (n - 1))
+	var base := int(first_tickets)
+	return maxi(1, maxi(mini(3, base), base + pace_adjust().tickets) + int(more_tickets) * (n - 1))
 
 
 ## After a service (or a lost night), the house reads you: a rough one eases the next, an aced one pushes it.
@@ -258,11 +259,11 @@ func _new_service() -> void:
 	var u := Upgrades.apply({"ticket_time": int(ticket_time), "stress_cap": int(stress_cap),
 		"rush_stress": int(rush_stress), "lives": LIVES}, perks)
 	var adj := pace_adjust()
-	k.ticket_time = maxi(5, u.ticket_time + adj.time)
+	k.ticket_time = maxi(mini(5, u.ticket_time), u.ticket_time + adj.time)   # pace never pushes below 5 (TUNE can)
 	k.ap = int(crew_ap)
 	k.stress_cap = u.stress_cap
 	k.turns = int(service_turns)
-	k.first_tickets = maxi(3, int(first_tickets) + adj.tickets)
+	k.first_tickets = maxi(mini(3, int(first_tickets)), int(first_tickets) + adj.tickets)
 	k.more_tickets = int(more_tickets)
 	k.rush_stress = u.rush_stress
 	k.start(level, rng.randi() if level > 1 else 0)
@@ -456,24 +457,31 @@ func _service_done() -> void:
 	var g := k.grade()
 	var parts := k.score_parts()
 	var read := _house_reads(g)
-	sheet_box = UI.sheet(self)
-	sheet_box.add_child(UI.label("SERVICE %d DONE" % k.service, 34, UI.ACCENT))
-	var grade := UI.label(g, 96, UI.key("good" if g in ["A+", "A", "B"] else ("warn" if g == "C" else "bad")))
-	grade.name = "Grade"
-	sheet_box.add_child(grade)
-	_stamp(grade)
-	sheet_box.add_child(UI.label("%d of %d tickets out\n%d walk%s against you\nTips $%d" % [k.served, k.total, k.walked, "" if k.walked == 1 else "s", k.tips], 24))
-	var why := UI.label("%d POINTS: out %d, speed %d, pans %d%s%s" % [parts.total, parts.out, parts.speed, parts.pans,
-		", walks %d" % parts.walks if parts.walks != 0 else "", ", critic %+d" % parts.critic if parts.critic != 0 else ""], 18, UI.DIM)
-	why.name = "Points"
-	sheet_box.add_child(why)
-	sheet_box.add_child(UI.label(("%s " % read if read != "" else "") + "Next: %d tickets." % tickets_for(level), 20, UI.DIM))
+	_grade_sheet(g, parts, read, {"service": k.service, "served": k.served, "total": k.total, "walked": k.walked, "tips": k.tips})
 	var shop := UI.button("", func(): open_shop())
 	shop.name = "ShopButton"
 	sheet_box.add_child(shop)
 	_shop_label()
 	sheet_box.add_child(MenuArt.primary(UI.button("NEXT SERVICE", next_service, 96)))
 	sheet_box.add_child(UI.button("TITLE", quit_to_title))   # saved: CONTINUE starts the next service
+
+
+## The grade sheet's top half: the letter, the night's numbers, the points behind the letter, what's next.
+## Kept tight so it fits at HUGE text with walks, the critic and the house's read all showing.
+func _grade_sheet(g: String, parts: Dictionary, read: String, st: Dictionary) -> void:
+	sheet_box = UI.sheet(self)
+	sheet_box.add_child(UI.label("SERVICE %d DONE" % st.service, 34, UI.ACCENT))
+	var big := 72 if float(_settings.text_scale()) > 1.2 else 96
+	var grade := UI.label(g, big, UI.key("good" if g in ["A+", "A", "B"] else ("warn" if g == "C" else "bad")))
+	grade.name = "Grade"
+	sheet_box.add_child(grade)
+	_stamp(grade)
+	sheet_box.add_child(UI.label("%d of %d out, %d walk%s\nTips $%d" % [st.served, st.total, st.walked, "" if st.walked == 1 else "s", st.tips], 24))
+	var why := UI.label("%d POINTS: out %d, speed %d, pans %d%s%s" % [parts.total, parts.out, parts.speed, parts.pans,
+		", walks %d" % parts.walks if parts.walks != 0 else "", ", critic %+d" % parts.critic if parts.critic != 0 else ""] + 
+		("\n%s Next: %d tickets." % [read, tickets_for(level)] if read != "" else "  Next: %d tickets." % tickets_for(level)), 18, UI.DIM)
+	why.name = "Points"
+	sheet_box.add_child(why)
 
 
 ## The grade lands like a stamp: big, then slammed down with a thud and a buzz.

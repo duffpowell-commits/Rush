@@ -265,6 +265,26 @@ func _run() -> void:
 	pst.set_value("house_ease", ease_was)
 	_check(points_ok and relaxed.time == 2 and t_relaxed < t_normal and t_slammed > t_normal and eased and back,
 		"PACE PASS (grade %s with its points; tickets relaxed %d / normal %d / slammed %d; an F eases a ticket, an A+ takes it back)" % [letter, t_relaxed, t_normal, t_slammed])
+	# The grade sheet fits at HUGE text with its longest content (walks, critic, the house's read).
+	var real_box: Node = game.sheet_box
+	var ts_was = pst.get_value("text_size")
+	pst.set_value("text_size", 3)
+	await _frames(2)
+	game._grade_sheet("D", {"total": 47, "out": 43, "speed": 9, "pans": 10, "walks": -20, "critic": -8},
+		"The floor eases off a ticket.", {"service": 3, "served": 7, "total": 9, "walked": 2, "tips": 148})
+	var tb: VBoxContainer = game.sheet_box
+	tb.add_child(UI.button("SHOP ($148) NEW!", func(): pass))
+	tb.add_child(preload("res://scripts/menu_art.gd").primary(UI.button("NEXT SERVICE", func(): pass, 96)))
+	tb.add_child(UI.button("TITLE", func(): pass))
+	await _frames(4)
+	var pr: Rect2 = (tb.get_parent() as Control).get_global_rect()
+	var vh: float = get_viewport().get_visible_rect().size.y
+	await _shot("grade_huge")
+	UI.close_sheet(tb)
+	game.sheet_box = real_box
+	pst.set_value("text_size", ts_was)
+	await _frames(2)
+	_check(pr.position.y >= 0.0 and pr.end.y <= vh, "GRADE FIT PASS (worst-case sheet at HUGE text: %d px of %d)" % [int(pr.size.y), int(vh)])
 	var graded: bool = game.between and grade_node != null and _find("NEXT SERVICE") != null
 	# Tips carry over: they're banked, the SHOP spends them, the upgrade shapes service 2 and is saved.
 	var tips1: int = game.k.tips

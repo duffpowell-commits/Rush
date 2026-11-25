@@ -123,6 +123,7 @@ func _set_up_event() -> void:
 			for inc in incoming:
 				if inc.ticket.items.any(func(it): return DISHES[it.dish].st == 0):
 					inc.ticket.time += 1
+					inc.ticket.t0 = inc.ticket.time
 		"vip":
 			_mark(1 if count > 1 else 0, "vip")
 		"critic":
