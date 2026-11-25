@@ -205,7 +205,11 @@ func _run() -> void:
 	var heard: bool = ["fire", "rush", "plate", "bell"].all(func(n): return au.played.has(n))
 	var real_clips: bool = ["fire", "rush", "plate", "bell", "burn", "walk", "door", "ticket", "gameover", "level", "click",
 		"music_loop", "music_busy"].all(func(n): return au._stream(n) is AudioStreamOggVorbis)
-	_check(heard and real_clips and au._combat.playing, "SOUND PASS (FIRE sizzle, RUSH, plate, pass bell played; 13 real clips; busy layer on)")
+	var on_first: bool = au._combat.playing
+	au.music("music_loop")   # back to the title: the busy layer stops...
+	var off_on_title: bool = not au._combat.playing
+	au.music_layers("music_loop", "music_busy")   # ...and comes back on the next service
+	_check(heard and real_clips and on_first and off_on_title and au._combat.playing, "SOUND PASS (FIRE sizzle, RUSH, plate, pass bell played; 13 real clips; busy layer on, off on the title, back on re-entry)")
 	game.k = Kitchen.new()
 	game.k.from_dict(real)
 	game.pick_tid = 0

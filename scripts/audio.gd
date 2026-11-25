@@ -96,7 +96,7 @@ func music_layers(explore: String, combat: String) -> void:
 	var b := _stream(combat)
 	if a == null or b == null:
 		return
-	if _music.stream == a and _combat.stream == b and _music.playing:
+	if _music.stream == a and _combat.stream == b and _music.playing and _combat.playing:
 		return
 	_combat.stream = b
 	if _music.stream == a and _music.playing:   # already on this track (from the title): restart both in sync
