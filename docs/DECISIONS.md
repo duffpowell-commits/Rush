@@ -5,6 +5,8 @@ Approved by Duff on Nov 24 ("go ahead and do them both", Rush and Lethemoor; Let
 other session). Same tool as starter PRs #22/#23: godot-mcp-runtime 4.0.1 (pinned) under xvfb. Rush's
 smoke plays NEW GAME -> FIRE -> END TURN. First run found two first-minute problems, logged in
 tasks/todo.md. Outside QUEUE NOW (tooling, not the slice).
+Synced Nov 24 with starter #23/#24: warnings no longer fail a run; printerr, crashes and a quit
+right after the last step do; steps carrying allowErrors still run.
 
 ## 2026-11-24 — Rush made from the starter
 Duff picked Rush (kitchen tactics) from the Nov 24 games scan and chose a one-week side test next to
