@@ -159,6 +159,8 @@ func _build() -> void:
 	pause_btn = UI.button("PAUSE", pause)
 	_corner(pause_btn, left, true, 150)
 	end_btn = UI.button("END TURN", end_turn, 96)
+	end_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # the two-line burn warning at big text sizes
+	end_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_corner(end_btn, not left, false, 230)
 	act_btn = UI.button("FIRE", act, 96)
 	act_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # big text sizes wrap onto two lines, not past the edge
@@ -536,11 +538,12 @@ func open_shop() -> void:
 	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
 	box.add_child(UI.label("Bank: $%d. Upgrades last all night." % cash, 20, UI.DIM))
 	var owned: Array[String] = []
+	var listed: Array = Upgrades.shown(perks)
 	for id in Upgrades.ORDER:
-		if perks.has(id):
+		if perks.has(id) and not listed.has(id):   # owned rows already say OWNED: name only the ones that left the list
 			owned.append(String(Upgrades.ALL[id].name))
-	if not owned.is_empty():   # bought rows can leave the list (a tray upgrades in place): say what's yours
-		var ol := UI.label("OWNED: " + ", ".join(owned), 18, UI.key("good"))
+	if not owned.is_empty():   # a tray upgrades in place, so the one it replaced leaves the list
+		var ol := UI.label("ALSO OWNED: " + ", ".join(owned), 18, UI.key("good"))
 		ol.name = "Owned"
 		ol.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(ol)
@@ -1014,7 +1017,7 @@ func _draw_field(f: Control) -> void:
 	if shown.size() > 4:   # tickets past the fourth card: a badge on the NEXT bar, red when one of them is red
 		var hid: Array = shown.slice(4)
 		var hot := hid.any(func(t): return t.time <= 2)
-		var mt := "+%d MORE" % hid.size()
+		var mt := ("+%d MORE!" if hot else "+%d MORE") % hid.size()   # hot: a "!" as well as red
 		more_w = font.get_string_size(mt, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(16)).x + 16
 		var mr := Rect2(f.size.x - pad - more_w, y0 + 220, more_w, 26)
 		f.draw_rect(mr, UI.key("bad") if hot else UI.key("warn"))
@@ -1062,6 +1065,8 @@ func _draw_field(f: Control) -> void:
 			# State in words, not colour alone: 2' cooking, UP! ready, PLATE NOW: burns at the next END TURN.
 			_plate(f, Rect2(r.position.x + 4, r.end.y - 38, r.size.x - 8, 30))
 			var st := ("PLATE NOW" if burning else "UP!") if up else "%d'" % p.left
+			if burning:
+				st = _fit(font, st, "PLATE!", r.size.x - 14, 15)
 			var lbl := "%s %s" % [p.dish, st]
 			if font.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(15)).x > r.size.x - 14:
 				lbl = st   # big text sizes: the state wins, the dish art still says which dish
