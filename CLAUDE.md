@@ -12,7 +12,7 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   Tests: `test_kitchen_*` in tests/run_tests.gd. Autoplay: TAP PASS + PLAY PASS drive a real service.
 - Tuning lives in game.gd TUNE (ticket_time, crew_ap, stress_cap, service_turns, first_tickets,
   more_tickets): DEV MENU -> TUNE. Defaults: 9-minute tickets, 3 actions, stress cap 6, 20-minute
-  service, 8 tickets in service 1 and +1 each service after.
+  service, 7 tickets in service 1 (since the stations change) and +1 each service after.
 - Nov 25 (audit, this is what changed): the curve was 5+2n, which the greedy bot lost 81% of the
   time in service 2 and 99% in service 3; it is now 6+1(n-1) (~40% / ~65%, `test_kitchen_service_curve`
   holds service 2 at or under 55%). A service now ends on a grade sheet (`Kitchen.grade()`, A-F:

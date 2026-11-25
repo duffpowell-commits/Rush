@@ -138,6 +138,7 @@ func _run() -> void:
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
 	await _frames(2)
 	fired_by_tap = k.pans[0].get("dish", "") == "BURGER"
+	var fire_fx: bool = game.fx.any(func(e): return e.kind == "spark")
 	_check(coach_up and moved and fired_by_tap, "TAP PASS (hint shown, closed SAUTE refused, MO walked FRY->PASS past closed stations for 1 action, DEV fired the burger)")
 	# The next hint follows by itself: after FIRE, END TURN is taught.
 	var next_hint := false
@@ -161,7 +162,7 @@ func _run() -> void:
 	kk.tickets = [
 		{"id": 901, "table": 21, "items": [{"dish": "STEAK", "state": "wait"}], "time": 3, "big": false},
 		{"id": 902, "table": 22, "items": [{"dish": "BURGER", "state": "wait"}, {"dish": "FRIES", "state": "cooking"}], "time": 8, "big": false}]
-	kk.pans = [{}, {"tid": 902, "dish": "FRIES", "left": 0, "sat": 0, "rushed": false}, {}]
+	kk.pans = [{}, {"tid": 902, "dish": "FRIES", "left": 0, "sat": 0, "rushed": false}, {}, {}]
 	kk.window = []
 	kk.crew[0].at = 0
 	kk.crew[1].at = 1
@@ -189,12 +190,16 @@ func _run() -> void:
 	var up: bool = kk.window.size() == 1 and kk.crew[1].hand.is_empty()
 	game.field.queue_redraw()
 	await _shot("pick_rush_window")
-	game.end_turn()   # MO spent an action plating: a fresh turn to walk 2 stations and run
+	game.end_turn()   # MO spent an action plating: a fresh turn to walk to the pass and run
 	await _tap_at(game.field.get_global_transform() * game.station_rect(Kitchen.PASS_IX).get_center())
 	var on_pass: bool = kk.crew[1].at == Kitchen.PASS_IX and game.act_btn.text == "RUN"
 	game.act()
 	var ran: bool = kk.window.is_empty() and kk.ticket(902).items[1].state == "served"
 	_check(up and on_pass and ran, "WINDOW PASS (fries plated up on the window, MO walked to the pass and ran them)")
+	# Juice: FIRE threw sparks, the run floated its tips, and a red ticket throbs (words ride along).
+	var run_fx: bool = game.fx.any(func(e): return e.kind == "text")
+	await _shot("juice")
+	_check(fire_fx and run_fx, "JUICE PASS (sparks on FIRE, floating words on RUN, %d effects live)" % game.fx.size())
 	game.k = Kitchen.new()
 	game.k.from_dict(real)
 	game.pick_tid = 0
