@@ -149,6 +149,7 @@ func _build() -> void:
 	_corner(end_btn, not left, false, 230)
 	act_btn = UI.button("FIRE", act, 96)
 	act_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # big text sizes wrap onto two lines, not past the edge
+	act_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN   # a taller wrapped button grows up, never off the bottom
 	_corner(act_btn, left, false, 230)
 	note = UI.label("", 20, UI.ACCENT)
 	note.anchor_right = 1.0
@@ -196,7 +197,9 @@ func _refresh_hud() -> void:
 		act_btn.text = "FIRE T%d" % fp.t.table
 	elif a == "RUSH":   # warn when this rush would send the cook over the edge
 		var cr: Dictionary = k.crew[sel]
-		act_btn.text = "RUSH: WALKS OUT!" if cr.stress + k.rush_stress >= k.stress_cap else "RUSH +STRESS"
+		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
+		var red := 1 if k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2) else 0
+		act_btn.text = "RUSH: QUITS!" if cr.stress + k.rush_stress + red >= k.stress_cap else "RUSH +STRESS"
 	act_btn.disabled = a == ""
 	if note != null:
 		note.text = "  ".join(k.events)
