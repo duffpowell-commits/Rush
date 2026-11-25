@@ -30,6 +30,8 @@ var ticket_time := 9     # minutes a ticket has before it's walked
 var ap := 3              # actions per cook per turn
 var stress_cap := 6
 var burn_after := 1      # a finished pan burns at the end of the turn its wait passes this (2 turns to plate at 1)
+var first_tickets := 6   # tickets in service 1
+var more_tickets := 1    # extra tickets each later service (greedy bot, 200 seeds: s2 ~40% game over, s3 ~65%)
 
 var service := 1
 var turn := 0
@@ -42,6 +44,7 @@ var walked := 0             # tickets comped this service
 var tips := 0
 var events: Array = []       # short lines for the HUD ("BURN on GRILL")
 var done := false
+var total := 0           # tickets this service, for the grade
 
 var _next_id := 1
 var rng := RandomNumberGenerator.new()
@@ -63,7 +66,8 @@ func start(n: int, seed_value: int = 0) -> void:
 	pans = [{}, {}, {}]
 	tickets.clear()
 	incoming.clear()
-	var count := 5 + 2 * n
+	var count := maxi(1, first_tickets + more_tickets * (n - 1))
+	total = count
 	var last_arrival := maxi(turns - ticket_time - 2, 4)
 	for i in count:
 		var arrive := int(round(float(i) * last_arrival / maxf(count - 1, 1)))
@@ -273,6 +277,9 @@ func end_turn() -> void:
 			for s in pans.size():
 				if not pans[s].is_empty() and pans[s].tid == t.id:
 					pans[s] = {}
+			for cr in crew:   # a plate for a walked table is binned, so the cook's hands are free
+				if not cr.hand.is_empty() and cr.hand.tid == t.id:
+					cr.hand = {}
 		elif t.time <= 2:
 			red += 1
 	# Stress: red tickets wear everyone working; a cook who did nothing rests.
@@ -305,6 +312,74 @@ func _drop_hand(cr: Dictionary) -> void:
 			it.state = "wait"
 			break
 	cr.hand = {}
+
+
+## The letter for a finished service: share of tickets out, minus a step per table walked.
+func grade() -> String:
+	var share := float(served) / maxf(total, 1)
+	var g := 4 if share >= 0.95 else (3 if share >= 0.8 else (2 if share >= 0.6 else (1 if share >= 0.4 else 0)))
+	g = maxi(0, g - walked)
+	return ["F", "D", "C", "B", "A"][g]
+
+
+## Station name for a dish ("GRILL"), so the screen can show where each dish cooks.
+static func station_of(dish: String) -> String:
+	return STATIONS[DISHES[dish].st]
+
+
+# ---------------------------------------------------------------- save mid-service
+
+## Everything needed to pick the service back up exactly where it was (JSON-safe).
+func to_dict() -> Dictionary:
+	return {"service": service, "turn": turn, "crew": crew.duplicate(true), "pans": pans.duplicate(true),
+		"tickets": tickets.duplicate(true), "incoming": incoming.duplicate(true), "served": served,
+		"walked": walked, "tips": tips, "done": done, "total": total, "next_id": _next_id,
+		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
+		"stress_cap": stress_cap, "burn_after": burn_after}
+
+
+## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
+func from_dict(d: Dictionary) -> bool:
+	if not d.has("crew") or not d.has("tickets") or not d.has("pans") or not d.has("incoming"):
+		return false
+	service = int(d.service)
+	turn = int(d.turn)
+	served = int(d.served)
+	walked = int(d.walked)
+	tips = int(d.tips)
+	done = bool(d.done)
+	total = int(d.get("total", 0))
+	_next_id = int(d.next_id)
+	rng.state = int(str(d.rng))
+	turns = int(d.turns)
+	ticket_time = int(d.ticket_time)
+	ap = int(d.ap)
+	stress_cap = int(d.stress_cap)
+	burn_after = int(d.burn_after)
+	crew = []
+	for c in d.crew:
+		var h: Dictionary = c.hand
+		crew.append({"name": str(c.name), "at": int(c.at), "ap": int(c.ap), "stress": int(c.stress),
+			"out": bool(c.out), "acted": bool(c.acted),
+			"hand": {} if h.is_empty() else {"tid": int(h.tid), "dish": str(h.dish)}})
+	pans = []
+	for p in d.pans:
+		pans.append({} if p.is_empty() else {"tid": int(p.tid), "dish": str(p.dish), "left": int(p.left), "sat": int(p.sat)})
+	tickets = []
+	for t in d.tickets:
+		tickets.append(_ticket_from(t))
+	incoming = []
+	for inc in d.incoming:
+		incoming.append({"arrive": int(inc.arrive), "ticket": _ticket_from(inc.ticket)})
+	events.clear()
+	return crew.size() > 0 and pans.size() == PASS_IX
+
+
+func _ticket_from(t: Dictionary) -> Dictionary:
+	var items: Array = []
+	for it in t.items:
+		items.append({"dish": str(it.dish), "state": str(it.state)})
+	return {"id": int(t.id), "table": int(t.table), "items": items, "time": int(t.time), "big": bool(t.big)}
 
 
 func _say(s: String) -> void:

@@ -417,13 +417,6 @@ func test_kitchen_walkout_drops_plate() -> void:
 	check(t.items[0].state == "wait", "the dropped plate goes back to refire (%s)" % t.items[0].state)
 
 
-## Saving mid-service keeps only finished services' tickets, so a reload can't count them twice.
-func test_rush_save_no_double_count() -> void:
-	var g = load("res://scripts/game.gd").new()
-	g._night_before = 3
-	g.score = 7
-	check(int(g.state().score) == 3, "mid-service save stores finished services only (%s)" % g.state().score)
-	g.free()
 
 
 ## The greedy bot gets most of service 1 out: the slice is playable, not a wall.
@@ -438,3 +431,92 @@ func test_kitchen_service1_beatable() -> void:
 	check(k.done, "service ends")
 	check(k.served * 10 >= total * 7, "bot served %d of %d (needs 70%%)" % [k.served, total])
 	check(k.walked < 3, "bot walked %d, under the game over line" % k.walked)
+
+
+## A table walks while a cook holds its plate: the plate is binned and the cook's hands are free.
+func test_kitchen_walked_plate_binned() -> void:
+	var k := _kitchen()
+	var t: Dictionary = k.tickets[0]
+	t.items[0].state = "carried"
+	k.crew[0].hand = {"tid": t.id, "dish": t.items[0].dish}
+	t.time = 1
+	k.end_turn()
+	check(k.ticket(t.id).is_empty() and k.walked == 1, "the table walked")
+	check(k.crew[0].hand.is_empty(), "the dead plate left DEV's hand (%s)" % k.crew[0].hand)
+
+
+## Mid-service save: to_dict -> JSON -> from_dict plays on exactly like the original.
+func test_kitchen_save_resumes_same_service() -> void:
+	var a := Kitchen.new()
+	a.start(2, 4242)
+	for i in 5:
+		a.bot_turn()
+		a.end_turn()
+	var b := Kitchen.new()
+	var j := JSON.new()
+	j.parse(JSON.stringify(a.to_dict()))
+	check(b.from_dict(j.data), "loads back")
+	check(b.turn == a.turn and b.walked == a.walked and b.served == a.served and b.tickets.size() == a.tickets.size(),
+		"same minute, tables and tickets (turn %d/%d)" % [b.turn, a.turn])
+	var guard := 0
+	while not a.done and guard < 60:
+		a.bot_turn(); a.end_turn()
+		b.bot_turn(); b.end_turn()
+		guard += 1
+	check(a.served == b.served and a.walked == b.walked and a.tips == b.tips and b.done,
+		"plays out identically (served %d/%d, walked %d/%d)" % [a.served, b.served, a.walked, b.walked])
+
+
+## The game screen's save carries the service in progress, and score only counts finished services.
+func test_rush_save_no_double_count() -> void:
+	var g = load("res://scripts/game.gd").new()
+	g.k = Kitchen.new()
+	g.k.start(2, 7)
+	g._night_before = 3
+	g.score = 7
+	var st: Dictionary = g.state()
+	check(int(st.score) == 3, "mid-service save stores finished services only (%s)" % st.score)
+	check(st.has("kitchen") and int(st.kitchen.service) == 2, "service in progress is saved")
+	g.between = true
+	check(not g.state().has("kitchen"), "between services the next service starts fresh")
+	g.free()
+
+
+## A v1 save (no mid-service state, had lives) still loads.
+func test_save_migrates_v1() -> void:
+	var sv = load("res://scripts/save_game.gd").new()
+	var d: Dictionary = sv._migrate({"_version": 1, "level": 3, "score": 9, "lives": 2})
+	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 2, "v1 -> v2")
+	sv.free()
+
+
+## Difficulty curve (greedy bot, 100 seeds): service 2 is beatable, service 3 is harder still.
+func test_kitchen_service_curve() -> void:
+	var over := {2: 0, 3: 0}
+	for n in [2, 3]:
+		for sd in 100:
+			var k := Kitchen.new()
+			k.start(n, sd + 7)
+			var guard := 0
+			while not k.done and guard < 80:
+				k.bot_turn()
+				k.end_turn()
+				guard += 1
+				if k.walked >= 3 or k.crew.all(func(c): return c.out):
+					over[n] += 1
+					break
+	check(over[2] <= 55, "service 2: bot game over in %d%% (want <= 55)" % over[2])
+	check(over[3] > over[2], "service 3 is harder (%d%% vs %d%%)" % [over[3], over[2]])
+
+
+## Grades: a clean service is an A; walked tables cost a letter each.
+func test_kitchen_grade() -> void:
+	var k := _kitchen()
+	k.total = 6
+	k.served = 6
+	check(k.grade() == "A", "6/6 clean = A")
+	k.walked = 2
+	check(k.grade() == "C", "two walked = C (%s)" % k.grade())
+	k.served = 0
+	k.walked = 0
+	check(k.grade() == "F", "nothing out = F")

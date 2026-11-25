@@ -1,13 +1,13 @@
 extends Control
 ## Intro: a few caption cards. Tap to go to the next one, SKIP to jump to the title.
 ## Plays once; after that boot goes straight to the title, so a second play never forces it.
-## Replace CARDS with the game's own opening (art via Foxboard; see docs/ART.md).
+## Rush's opening: three cards, then the title.
 
 const UI = preload("res://scripts/ui.gd")
 const CARDS := [
-	"Every game starts here.",
-	"This intro plays once. Tap to go on, or SKIP.",
-	"Replace these cards with your own opening.",
+	"Friday. 7 PM.\nThe rail is filling up.",
+	"Every ticket has a clock.\nGet the food out before it hits zero.",
+	"Walk three tables and the night is over.\n\nHeard?",
 ]
 
 var i := 0
@@ -56,7 +56,7 @@ func next() -> void:
 
 func done() -> void:
 	get_node("/root/Settings").set_value("intro_seen", true)
-	get_tree().change_scene_to_file("res://scenes/title.tscn")
+	get_node("/root/Loader").go("res://scenes/title.tscn")
 
 
 func _notification(what: int) -> void:
