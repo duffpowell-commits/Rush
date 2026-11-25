@@ -43,8 +43,13 @@ func _ready() -> void:
 
 func _stream(name: String) -> AudioStream:
 	if not _cache.has(name):
-		var path := DIR + name + ".wav"
-		_cache[name] = load(path) if ResourceLoader.exists(path) else null
+		_cache[name] = null
+		for ext in [".ogg", ".wav"]:   # a real recording (.ogg) wins over the template's placeholder .wav
+			if ResourceLoader.exists(DIR + name + ext):
+				_cache[name] = load(DIR + name + ext)
+				break
+		if _cache[name] is AudioStreamOggVorbis and name.begins_with("music"):
+			_cache[name].loop = true
 	return _cache[name]
 
 
@@ -89,8 +94,11 @@ func music_layers(explore: String, combat: String) -> void:
 		return
 	if _music.stream == a and _combat.stream == b and _music.playing:
 		return
-	_music.stream = a
 	_combat.stream = b
+	if _music.stream == a and _music.playing:   # already on this track (from the title): join it in sync
+		_combat.play(_music.get_playback_position())
+		return
+	_music.stream = a
 	_music.play()
 	_combat.play()
 

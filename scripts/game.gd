@@ -96,7 +96,7 @@ func _ready() -> void:
 			score = _night_before + k.served
 	_build()
 	checkpoint()
-	get_node("/root/Audio").music("music_loop")
+	get_node("/root/Audio").music_layers("music_loop", "music_busy")   # the kitchen gets louder as tickets go red
 
 
 # ---------------------------------------------------------------- state + saving
@@ -245,7 +245,8 @@ func act() -> void:
 	var tips_before := k.tips
 	var served_before := k.served
 	if k.act_here(sel, pick_tid):
-		get_node("/root/Audio").sfx("good", {"FIRE": 0.9, "PLATE": 1.0, "RUN": 1.15}.get(what, 1.0))
+		var snd: String = {"FIRE": "fire", "RUSH": "rush", "PLATE": "plate", "RUN": "bell"}.get(what, "good")
+		get_node("/root/Audio").sfx(snd, 1.12 if what == "RUN" and k.served > served_before else randf_range(0.95, 1.05))
 		if what == "RUSH":
 			get_node("/root/Subs").cue("[sizzle: rushed]")
 		UI.buzz(15)
@@ -358,11 +359,16 @@ func end_turn() -> void:
 		return
 	var walked_before := k.walked
 	var critic_before := k.critic
+	var tickets_before: Array = k.tickets.map(func(t): return t.id)
 	k.end_turn()
+	if k.tickets.any(func(t): return not tickets_before.has(t.id)):
+		get_node("/root/Audio").sfx("ticket", randf_range(0.95, 1.05))
+		get_node("/root/Subs").cue("[printer: new ticket]")
 	if k.walked > walked_before and not get_node("/root/DebugMenu").god_mode:
 		lives = lives_max - k.walked
-		get_node("/root/Audio").sfx("bad")
-		get_node("/root/Subs").cue("[buzz: table walked]")
+		get_node("/root/Audio").sfx("walk")
+		get_node("/root/Audio").duck()
+		get_node("/root/Subs").cue("[chair scrapes: table walked]")
 		UI.buzz(80)
 		_shake(12.0)
 		_fx_text(Vector2(field.size.x / 2, _rail_y() + 120), "TABLE WALKED!", UI.key("bad"), 40)
@@ -371,14 +377,14 @@ func end_turn() -> void:
 		k.critic = critic_before
 	for e in k.events:
 		if e.begins_with("BURN"):
-			get_node("/root/Audio").sfx("bad", 0.8)
+			get_node("/root/Audio").sfx("burn")
 			get_node("/root/Subs").cue("[sizzle: burn]")
 			var bs: int = Kitchen.STATIONS.find(e.trim_prefix("BURN ON ").get_slice(",", 0))
 			if bs >= 0:
 				_fx_burst(station_rect(bs).get_center(), Color("6b6b6b"), 18)
 				_fx_text(Vector2(station_rect(bs).get_center().x, station_rect(bs).position.y - 6), "BURNED!", UI.key("bad"))
 		elif e.ends_with("WALKED OUT"):
-			get_node("/root/Audio").sfx("bad", 0.6)
+			get_node("/root/Audio").sfx("door")
 			get_node("/root/Subs").cue("[door slams: cook walked out]")
 	if lives <= 0 or k.crew.all(func(c): return c.out):
 		game_over()
@@ -577,6 +583,17 @@ func bot_play_turn() -> void:
 func _after_move() -> void:
 	_refresh_hud()
 	field.queue_redraw()
+	_music_heat()
+
+
+## The busy layer (sizzles, plates, the hood fan) rises under the jazz as tickets run low.
+func _music_heat() -> void:
+	var heat := 0.0
+	if k != null and not (over or between):
+		for t in k.tickets:
+			heat = maxf(heat, clampf((5.0 - t.time) / 4.0, 0.0, 1.0))
+		heat = maxf(heat, 0.35 * clampf(k.tickets.size() / 4.0, 0.0, 1.0))
+	get_node("/root/Audio").set_intensity(heat)
 
 
 var _coach_t := 0.0

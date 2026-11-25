@@ -40,6 +40,13 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   COLD station (salad, cake) in 3 (`Kitchen.OPENS`, PASS is now index 4, closed stations are walked
   past free, Save v5). Curve is now 7 + 1 per service (bot s1 ~8%, s2 ~32%, s3 ~48%, s4 ~71%).
   Still to come in order: juice, real sound, grades/difficulty that fit the player, then the ad kit.
+- Nov 25 juice (PR #13): sparks, rings, floating words, shake and a stamped grade in game.gd (`fx`,
+  `_fx_*`, `_stamp`). The shake and sparks follow Feel's shake_scale/spark_scale TUNE sliders; low graphics keeps the words.
+- Nov 25 real sound: CC0 kitchen recordings from OpenGameArt (stove click + sizzle on FIRE, rush burst,
+  plate clink, pass bell, burn, chair scrape for a walked table, door for a cook, dish crash game
+  over, ticket printer) and cafe jazz (CC0) as `music_loop` with a synced `music_busy` layer
+  (kitchen noise under the jazz) that rises as tickets go red (`_music_heat`). Built by
+  `tools/make_sounds.py`; credits in assets/audio/SOURCES.md. Audio plays `.ogg` before `.wav`.
 - Latest build: Releases -> `dev` -> `rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
