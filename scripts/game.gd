@@ -18,6 +18,11 @@ const ControlsLegend = preload("res://scripts/controls_legend.gd")
 const Coach = preload("res://scripts/coach.gd")
 
 const Kitchen = preload("res://scripts/kitchen.gd")
+## Real art (Forge, style A "flat ink", Nov 25; docs/ART_LOG.md). Code-drawn shapes stay on top
+## for every state a player must read (pans, clocks, rings), so art never carries meaning alone.
+const ART_BG := preload("res://assets/art/bg_line.jpg")
+const ART_STATIONS := [preload("res://assets/art/station_grill.png"), preload("res://assets/art/station_fryer.png"),
+	preload("res://assets/art/station_saute.png"), preload("res://assets/art/station_pass.png")]
 const LIVES := 3             # tables you can walk in one service
 
 ## Live sliders (DEV MENU -> TUNE). Applied when a service starts.
@@ -413,8 +418,31 @@ func tap(p: Vector2) -> void:
 			return
 
 
+## Draw a texture inside a box, whole, keeping its shape (letterboxed, centred).
+func _draw_fit(f: Control, tex: Texture2D, box: Rect2) -> void:
+	var sz := tex.get_size()
+	var sc := minf(box.size.x / sz.x, box.size.y / sz.y)
+	var d := sz * sc
+	f.draw_texture_rect(tex, Rect2(box.position + (box.size - d) / 2.0, d), false)
+
+
+## Draw a texture filling a box, cropped to keep its shape.
+func _draw_cover(f: Control, tex: Texture2D, box: Rect2) -> void:
+	var sz := tex.get_size()
+	var sc := maxf(box.size.x / sz.x, box.size.y / sz.y)
+	var src := Rect2((sz - box.size / sc) / 2.0, box.size / sc)
+	f.draw_texture_rect_region(tex, box, src)
+
+
+## A dark plate behind text that sits on art.
+func _plate(f: Control, box: Rect2) -> void:
+	f.draw_rect(box, Color(0, 0, 0, 0.62))
+
+
 func _draw_field(f: Control) -> void:
 	f.draw_rect(Rect2(Vector2.ZERO, f.size), UI.BG)
+	_draw_cover(f, ART_BG, Rect2(Vector2.ZERO, f.size))
+	f.draw_rect(Rect2(Vector2.ZERO, f.size), Color(UI.BG, 0.55))   # keeps text and pieces on top readable
 	var font := ThemeDB.fallback_font
 	var low: bool = _settings.get_value("low_graphics")
 	var ink := UI.ink()
@@ -464,6 +492,7 @@ func _draw_field(f: Control) -> void:
 		var here: bool = k.crew[sel].at == i
 		f.draw_rect(r, UI.panel_color())
 		f.draw_rect(r, UI.ACCENT if here else Color("4a5878"), false, 3.0 if here else 2.0)
+		_draw_fit(f, ART_STATIONS[i], Rect2(r.position + Vector2(6, 40), r.size - Vector2(12, 46)))
 		f.draw_string(font, r.position + Vector2(0, 30), Kitchen.STATIONS[i], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(18), ink)
 		if i < k.pans.size() and not k.pans[i].is_empty():
 			var p: Dictionary = k.pans[i]
@@ -475,6 +504,7 @@ func _draw_field(f: Control) -> void:
 			f.draw_circle(r.get_center() + Vector2(0, 20), 34.0, UI.key(tone))
 			if burning:   # shape cue, not colour alone: a thick ring the turn before it burns
 				f.draw_arc(r.get_center() + Vector2(0, 20), 40.0, 0.0, TAU, 32, UI.key("bad"), 5.0)
+			_plate(f, Rect2(r.position.x + 4, r.end.y - 38, r.size.x - 8, 28))
 			f.draw_string(font, r.position + Vector2(0, r.size.y - 18), p.dish, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), ink)
 			f.draw_string(font, r.get_center() + Vector2(-30, 30), ("BURN!" if burning else "UP!") if up else "%d'" % p.left,
 				HORIZONTAL_ALIGNMENT_CENTER, 60, UI.font_size(22), Color.BLACK)
@@ -485,10 +515,12 @@ func _draw_field(f: Control) -> void:
 					if it.state == "wait" and Kitchen.DISHES[it.dish].st == i:
 						waiting += 1
 			if waiting > 0:   # work waiting here: what to FIRE, and how much
+				_plate(f, Rect2(r.position.x + 4, r.get_center().y - 14, r.size.x - 8, 32))
 				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), "%d TO FIRE" % waiting,
 					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), UI.key("warn"))
 		elif i == Kitchen.PASS_IX:
-			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), "RUN HERE", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), UI.DIM)
+			_plate(f, Rect2(r.position.x + 4, r.get_center().y - 14, r.size.x - 8, 32))
+			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), "RUN HERE", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), ink)
 	# --- crew
 	for c in k.crew.size():
 		var cr: Dictionary = k.crew[c]
