@@ -59,6 +59,10 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   of 4"): a RUN carries `Kitchen.tray` plates for one action (1 to start). SHOP row SERVER TRAY ($30,
   2 plates) then ENTREE TRAY ($60, 4; needs the server tray), `Upgrades.shown()`. The most urgent table
   goes first and its other plates ride along. The bot's curve is unchanged (tray 1). TRAY PASS.
+- Nov 25 station pick (Duff: "tap the station and get the employee that dropped it"): a station tap
+  picks the cook standing there, else the cook who fired its pan (`pans[s].by`, wears their initial),
+  and only an empty station sends the selected cook over (`station_cook`). A 2nd tap on the same
+  station sends the cook you had picked (`_pick_from`: MO plates DEV's burger). STATION PICK PASS.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

@@ -54,6 +54,7 @@ var twist_box: VBoxContainer   # the TONIGHT card while it's up
 var perks: Array = []        # upgrades owned tonight (upgrades.gd)
 var k: Kitchen
 var sel := 0                 # selected cook
+var _pick_from := {}         # last station tap that switched cooks: {st, prev}; a 2nd tap there sends prev
 var pick_tid := 0            # ticket the player tapped: FIRE cooks for it first (0 = most urgent)
 var paused := false
 var over := false
@@ -259,6 +260,7 @@ func _house_reads(g: String, lost: bool = false) -> String:
 
 
 func _new_service() -> void:
+	_pick_from = {}   # a station handoff only counts on the very next field tap
 	k = Kitchen.new()
 	var u := Upgrades.apply({"ticket_time": int(ticket_time), "stress_cap": int(stress_cap),
 		"rush_stress": int(rush_stress), "lives": LIVES}, perks)
@@ -280,6 +282,7 @@ func _new_service() -> void:
 
 ## Selected cook acts where they stand (the big button, or tapping their own station).
 func act() -> void:
+	_pick_from = {}   # a station handoff only counts on the very next field tap
 	if paused or over or between:
 		return
 	var what := k.action_here(sel)
@@ -397,6 +400,7 @@ func _draw_fx(f: Control) -> void:
 
 ## One minute of service passes.
 func end_turn() -> void:
+	_pick_from = {}   # a station handoff only counts on the very next field tap
 	if paused or over or between:
 		return
 	var walked_before := k.walked
@@ -796,6 +800,8 @@ func _field_input(e: InputEvent) -> void:
 
 ## A tap at a point on the field (also used by the autoplay bot).
 func tap(p: Vector2) -> void:
+	var pf := _pick_from   # only the very next tap can use it
+	_pick_from = {}
 	var rail := rail_tickets()
 	for i in mini(rail.size(), 4):
 		if ticket_rect(i).has_point(p):   # pick this table to cook first; tap again to unpick
@@ -815,12 +821,41 @@ func tap(p: Vector2) -> void:
 				if note != null:
 					note.text = "%s OPENS IN SERVICE %d" % [Kitchen.STATIONS[i], Kitchen.OPENS[i]]
 				return
+			if pf.get("st", -1) == i and int(pf.prev) != sel and not k.crew[int(pf.prev)].out:
+				sel = int(pf.prev)   # tapped the same station again: the cook you had picked goes there after all
+				if k.move(sel, i):
+					get_node("/root/Audio").sfx("click")
+				_after_move()
+				return
 			if k.crew[sel].at == i:
 				act()
+				return
+			# Tap a station, get its cook (Duff, Nov 25: "tap the station and get the employee that
+			# dropped it"): a cook standing there first, else the cook who fired its pan. Only an
+			# empty station with nobody's pan on it sends the selected cook over. Tapping the same station
+			# again sends the cook you had picked instead (a handoff: MO plates DEV's burger).
+			var owner := station_cook(i)
+			if owner >= 0 and owner != sel:
+				_pick_from = {"st": i, "prev": sel}
+				sel = owner
+				get_node("/root/Audio").sfx("click")
+				_after_move()
 			elif k.move(sel, i):
 				get_node("/root/Audio").sfx("click")
 				_after_move()
 			return
+
+
+## The cook a tap on station i should pick: one standing there, else the one who fired its pan; -1 if none.
+func station_cook(i: int) -> int:
+	for c in k.crew.size():
+		if not k.crew[c].out and k.crew[c].at == i:
+			return c
+	if i < k.pans.size() and not k.pans[i].is_empty():
+		var by: int = k.pans[i].get("by", -1)
+		if by >= 0 and by < k.crew.size() and not k.crew[by].out:
+			return by
+	return -1
 
 
 ## Draw a texture inside a box, whole, keeping its shape (letterboxed, centred).
@@ -940,6 +975,13 @@ func _draw_field(f: Control) -> void:
 			f.draw_circle(pc, 36.0, Color(0.08, 0.09, 0.12, 0.85))
 			f.draw_arc(pc, 36.0, 0.0, TAU, 40, UI.key(tone), 9.0 if burning else 5.0)   # thick ring the turn before it burns
 			_draw_fit(f, ART_DISHES[p.dish], Rect2(pc - Vector2(28, 28), Vector2(56, 56)))
+			var by: int = p.get("by", -1)
+			if by >= 0 and by < k.crew.size() and not k.crew[by].out:   # whose pan: the cook's initial, ringed when they're selected
+				var bc := pc + Vector2(-30, -30)
+				f.draw_circle(bc, 13.0, Color(0.08, 0.09, 0.12, 0.95))
+				f.draw_arc(bc, 13.0, 0.0, TAU, 24, UI.ACCENT if by == sel else ink, 3.0 if by == sel else 1.5)
+				f.draw_string(font, bc + Vector2(-13, 6), String(k.crew[by].name).left(1), HORIZONTAL_ALIGNMENT_CENTER, 26,
+					UI.font_size(14), UI.ACCENT if by == sel else ink)
 			# State in words, not colour alone: 2' cooking, UP! ready, BURN! about to burn.
 			_plate(f, Rect2(r.position.x + 4, r.end.y - 38, r.size.x - 8, 30))
 			var st := ("BURN!" if burning else "UP!") if up else "%d'" % p.left
