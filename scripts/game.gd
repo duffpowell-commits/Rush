@@ -55,6 +55,7 @@ var perks: Array = []        # upgrades owned tonight (upgrades.gd)
 var k: Kitchen
 var sel := 0                 # selected cook
 var _pick_from := {}         # last station tap that switched cooks: {st, prev}; a 2nd tap there sends prev
+var pick_ix := -1            # dish on that ticket the player tapped: FIRE cooks exactly it (-1 = any)
 var pick_tid := 0            # ticket the player tapped: FIRE cooks for it first (0 = most urgent)
 var paused := false
 var over := false
@@ -203,11 +204,15 @@ func _refresh_hud() -> void:
 
 	if pick_tid != 0 and k.ticket(pick_tid).is_empty():
 		pick_tid = 0   # served or walked: back to most urgent
+	if pick_tid == 0 or (pick_ix >= 0 and k.ticket(pick_tid).items[pick_ix].state != "wait"):
+		pick_ix = -1   # the picked dish went on: the table stays picked
 	var a := k.action_here(sel)
 	act_btn.text = a if a != "" else "NOTHING HERE"
 	if a == "FIRE":   # say which table it cooks for, picked or not
-		var fp := k.fire_pick(sel, pick_tid)
+		var fp := k.fire_pick(sel, pick_tid, pick_ix)
 		act_btn.text = "FIRE T%d" % fp.t.table
+		if pick_ix >= 0 and fp.t.id == pick_tid and fp.item == k.ticket(pick_tid).items[pick_ix]:
+			act_btn.text = "FIRE %s" % fp.item.dish   # the tapped dish, by name
 	elif a == "RUSH":   # warn when this rush would send the cook over the edge
 		var cr: Dictionary = k.crew[sel]
 		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
@@ -278,6 +283,7 @@ func _new_service() -> void:
 	lives = lives_max
 	sel = 0
 	pick_tid = 0
+	pick_ix = -1
 
 
 ## Selected cook acts where they stand (the big button, or tapping their own station).
@@ -289,7 +295,7 @@ func act() -> void:
 	var at: int = k.crew[sel].at
 	var tips_before := k.tips
 	var served_before := k.served
-	if k.act_here(sel, pick_tid):
+	if k.act_here(sel, pick_tid, true, pick_ix):
 		var snd: String = {"FIRE": "fire", "RUSH": "rush", "PLATE": "plate", "RUN": "bell"}.get(what, "good")
 		get_node("/root/Audio").sfx(snd, 1.12 if what == "RUN" and k.served > served_before else randf_range(0.95, 1.05))
 		if what == "RUSH":
@@ -643,6 +649,7 @@ func bot_step() -> bool:
 			continue
 		sel = c
 		pick_tid = 0
+		pick_ix = -1
 		var what := k.action_here(c, false)
 		if what != "":
 			var ap_was: int = k.crew[c].ap
@@ -760,6 +767,22 @@ func ticket_rect(i: int) -> Rect2:
 
 
 
+## The row of ticket card i under point p (the dish list drawn in _draw_field), or -1.
+func dish_at(i: int, p: Vector2) -> int:
+	var rail := rail_tickets()
+	if i >= rail.size():
+		return -1
+	var r := ticket_rect(i)
+	for ix in rail[i].items.size():
+		if Rect2(r.position.x, r.position.y + DISH_ROW0 + ix * DISH_ROW, r.size.x, DISH_ROW).has_point(p):
+			return ix
+	return -1
+
+
+const DISH_ROW0 := 46.0   # first dish row's top inside a ticket card (its text baseline is 20 lower)
+const DISH_ROW := 33.0
+
+
 func _rail_y() -> float:
 	return 30.0 + UI.MIN_TOUCH + 70.0
 
@@ -808,7 +831,15 @@ func tap(p: Vector2) -> void:
 	var rail := rail_tickets()
 	for i in mini(rail.size(), 4):
 		if ticket_rect(i).has_point(p):   # pick this table to cook first; tap again to unpick
-			pick_tid = 0 if pick_tid == rail[i].id else rail[i].id
+			# A tap on a waiting dish's row picks that exact dish (Duff, Nov 25: "tap a dish").
+			var ix := dish_at(i, p)
+			if ix >= 0 and rail[i].items[ix].state == "wait":
+				var same: bool = pick_tid == rail[i].id and pick_ix == ix
+				pick_tid = 0 if same else rail[i].id
+				pick_ix = -1 if same else ix
+			else:
+				pick_tid = 0 if pick_tid == rail[i].id else rail[i].id
+				pick_ix = -1
 			get_node("/root/Audio").sfx("click")
 			_after_move()
 			return
@@ -928,15 +959,19 @@ func _draw_field(f: Control) -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(24), UI.key(tone))
 		for b in mini(t.time, 10):
 			f.draw_rect(Rect2(r.position.x + 8 + b * ((r.size.x - 16) / 10.0), r.position.y + 36, (r.size.x - 16) / 10.0 - 2, 6), UI.key(tone))
-		var iy := r.position.y + 66
-		for it in t.items:
+		var iy := r.position.y + DISH_ROW0 + 20.0
+		for n in t.items.size():
+			var it: Dictionary = t.items[n]
+			if t.id == pick_tid and n == pick_ix:   # the tapped dish: an accent bar and a pointer, not colour alone
+				f.draw_rect(Rect2(r.position.x + 3, iy - 20, r.size.x - 6, DISH_ROW - 2), Color(UI.ACCENT, 0.25))
+				f.draw_rect(Rect2(r.position.x + 3, iy - 20, 4, DISH_ROW - 2), UI.ACCENT)
 			var mark: String = {"wait": "  ", "cooking": "~ ", "carried": "> ", "served": "V "}[it.state]
 			var col: Color = UI.DIM if it.state == "served" else ink
 			f.draw_string(font, Vector2(r.position.x + 8, iy), mark + it.dish, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(16), col)
 			if it.state == "wait":   # where it cooks, on its own small line: routing is on the ticket
 				f.draw_string(font, Vector2(r.position.x + 8, iy + 14), "  at " + Kitchen.station_of(it.dish),
 					HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(11), UI.DIM)
-			iy += 33
+			iy += DISH_ROW
 	_plate(f, Rect2(pad - 6, y0 + 218, f.size.x - 2 * pad + 12, 30))
 	if shown.size() > 4:
 		f.draw_string(font, Vector2(f.size.x - 70, y0 + 222), "+%d" % (shown.size() - 4), HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(20), UI.key("warn"))

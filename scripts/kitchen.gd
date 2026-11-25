@@ -219,13 +219,13 @@ func move(c: int, s: int) -> bool:
 
 ## Fire a waiting dish at this cook's station: the picked ticket (tid) if it has one here, else the
 ## most urgent ticket.
-func fire(c: int, tid: int = 0) -> bool:
+func fire(c: int, tid: int = 0, ix: int = -1) -> bool:
 	if not can_act(c):
 		return false
 	var s: int = crew[c].at
 	if s == PASS_IX or not pans[s].is_empty():
 		return false
-	var pick := fire_pick(c, tid)
+	var pick := fire_pick(c, tid, ix)
 	if pick.is_empty():
 		return false
 	pick.item.state = "cooking"
@@ -237,12 +237,20 @@ func fire(c: int, tid: int = 0) -> bool:
 
 
 ## What FIRE would cook for cook c ({t, item}, or {} for nothing), so the screen can say which table.
-func fire_pick(c: int, tid: int = 0) -> Dictionary:
+## ix (Duff, Nov 25 "tap a dish"): that dish of ticket tid, when it's waiting and cooks here.
+## Otherwise ticket tid's first dish for this station, otherwise the most urgent one.
+func fire_pick(c: int, tid: int = 0, ix: int = -1) -> Dictionary:
 	if c < 0 or c >= crew.size():
 		return {}
 	var s: int = crew[c].at
 	if s == PASS_IX:
 		return {}
+	if tid != 0 and ix >= 0:
+		var t := ticket(tid)
+		if not t.is_empty() and ix < t.items.size():
+			var it: Dictionary = t.items[ix]
+			if it.state == "wait" and DISHES[it.dish].st == s:
+				return {"t": t, "item": it}
 	var pick := _waiting_for(s, tid)
 	if pick.is_empty() and tid != 0:
 		pick = _waiting_for(s, 0)
@@ -368,14 +376,14 @@ func action_here(c: int, allow_rush: bool = true) -> String:
 	return ""
 
 
-func act_here(c: int, tid: int = 0, allow_rush: bool = true) -> bool:
+func act_here(c: int, tid: int = 0, allow_rush: bool = true, ix: int = -1) -> bool:
 	match action_here(c, allow_rush):
 		"RUN":
 			return run(c)
 		"PLATE":
 			return plate(c)
 		"FIRE":
-			return fire(c, tid)
+			return fire(c, tid, ix)
 		"RUSH":
 			return rush(c)
 	return false

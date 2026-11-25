@@ -67,6 +67,10 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   speed points full at 70% of the clock left, none under 30% (was 75%/35%), so a clean service served
   with half the clock left grades A; coach hints placed in pixels just above the stations (COACH PASS
   checks it), since a fraction of the height hit the station names on a tall phone's browser.
+- Nov 25 tap a dish (Duff's pick): a tap on a waiting dish's row of a ticket card picks that dish
+  (`pick_ix`, `dish_at`, rows DISH_ROW0/DISH_ROW); FIRE cooks it when the cook is at its station and the
+  button names it ("FIRE STEAK"), else falls back to the table's first dish there (`fire_pick(c, tid, ix)`).
+  DISH PICK PASS.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
