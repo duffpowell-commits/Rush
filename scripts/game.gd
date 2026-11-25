@@ -212,6 +212,10 @@ func _refresh_hud() -> void:
 		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
 		var red := 1 if k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2) else 0
 		act_btn.text = "RUSH: QUITS!" if cr.stress + k.rush_stress + red >= k.stress_cap else "RUSH +STRESS"
+	elif a == "RUN" and k.tray > 1:   # a tray: say how many plates go out on this one action
+		var n := mini(k.tray, k.window.size() + (0 if k.crew[sel].hand.is_empty() else 1))
+		if n > 1:
+			act_btn.text = "RUN %d PLATES" % n
 	act_btn.disabled = a == ""
 	if note != null:
 		note.text = "  ".join(k.events)
@@ -266,6 +270,7 @@ func _new_service() -> void:
 	k.first_tickets = maxi(mini(3, int(first_tickets)), int(first_tickets) + adj.tickets)
 	k.more_tickets = int(more_tickets)
 	k.rush_stress = u.rush_stress
+	k.tray = u.tray
 	k.start(level, rng.randi() if level > 1 else 0)
 	lives_max = u.lives
 	lives = lives_max
@@ -513,7 +518,7 @@ func open_shop() -> void:
 	var box := UI.sheet(self, 500)
 	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
 	box.add_child(UI.label("Bank: $%d. Upgrades last all night." % cash, 20, UI.DIM))
-	for id in Upgrades.ORDER:
+	for id in Upgrades.shown(perks):
 		var u: Dictionary = Upgrades.ALL[id]
 		var b: Button
 		if perks.has(id):

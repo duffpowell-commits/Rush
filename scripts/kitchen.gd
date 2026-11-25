@@ -49,6 +49,7 @@ var ap := 3              # actions per cook per turn
 var stress_cap := 6
 var burn_after := 1      # a finished pan burns at the end of the turn its wait passes this (2 turns to plate at 1)
 var rush_stress := 1     # stress a RUSH costs the cook
+var tray := 1            # plates one RUN carries (shop trays: 2, then 4)
 var first_tickets := 7   # tickets in service 1 (Nov 25 stations: bot s1 ~8%, s2 ~32%, s3 ~48%, s4 ~71% game over, twists on)
 var more_tickets := 1    # extra tickets each later service (greedy bot with the pass window, 200 seeds: s2 ~41% game over, s3 ~69%; was 6+1 before the window)
 
@@ -298,28 +299,42 @@ func rush(c: int) -> bool:
 	return true
 
 
-## Run a plate at the pass: the one in hand (saves from before the window), else the window plate
-## whose table is closest to walking. A ticket with every dish run is out: tips by time left.
+## Run plates at the pass for one action: the one in hand (saves from before the window), then
+## window plates up to `tray` in all. The most urgent table goes first and its other plates ride
+## along before the next table's. A ticket with every dish run is out: tips by time left.
 func run(c: int) -> bool:
 	if not can_act(c) or crew[c].at != PASS_IX:
 		return false
-	var h: Dictionary = crew[c].hand
-	if not h.is_empty():
+	var plates: Array = []
+	if not crew[c].hand.is_empty():
+		plates.append(crew[c].hand)
 		crew[c].hand = {}
-	elif window.is_empty():
-		return false
-	else:
+	while plates.size() < maxi(tray, 1) and not window.is_empty():
 		var best := 0
+		var lead: int = plates[0].tid if not plates.is_empty() else -1
 		for i in window.size():
-			if ticket(window[i].tid).get("time", 99) < ticket(window[best].tid).get("time", 99):
+			var w = window[i]
+			var b = window[best]
+			if (w.tid == lead) != (b.tid == lead):
+				if w.tid == lead:
+					best = i
+			elif ticket(w.tid).get("time", 99) < ticket(b.tid).get("time", 99):
 				best = i
-		h = window[best]
+		plates.append(window[best])
 		window.remove_at(best)
+	if plates.is_empty():
+		return false
 	crew[c].ap -= 1
 	crew[c].acted = true
+	for h in plates:
+		_serve(h)
+	return true
+
+
+func _serve(h: Dictionary) -> void:
 	var t := ticket(h.tid)
 	if t.is_empty():
-		return true
+		return
 	for it in t.items:
 		if it.state == "carried" and it.dish == h.dish:
 			it.state = "served"
@@ -332,7 +347,6 @@ func run(c: int) -> bool:
 		if t.get("critic", false):
 			critic = "served"
 		_say("TABLE %d OUT" % t.table)
-	return true
 
 
 ## The one sensible action for cook c where they stand, or "" (game.gd's big button).
@@ -490,7 +504,7 @@ func to_dict() -> Dictionary:
 		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
 		"stress_cap": stress_cap, "burn_after": burn_after,
 		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic, "all_open": all_open,
-		"burns": burns, "speed": speed}
+		"burns": burns, "speed": speed, "tray": tray}
 
 
 ## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
@@ -518,6 +532,7 @@ func from_dict(d: Dictionary) -> bool:
 	all_open = bool(d.get("all_open", false))
 	burns = int(d.get("burns", 0))
 	speed = float(d.get("speed", 0.0))
+	tray = clampi(int(d.get("tray", 1)), 1, 4)
 	critic = str(d.get("critic", ""))
 	window = []
 	for w in d.window:

@@ -55,6 +55,10 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   pushes it to gh-pages on main: https://duffpowell-commits.github.io/Rush/. The build clip is Rush
   itself now (`_record_kitchen_clip`: service 3 via `game.bot_step()`, no coach, no captions), not the
   template's 3D scene. Copy + links: docs/AD_KIT.md. Nothing posts without Duff's yes.
+- Nov 25 trays (Duff: "start out with the one dish ran rule and then upgrade it in the shop for a max
+  of 4"): a RUN carries `Kitchen.tray` plates for one action (1 to start). SHOP row SERVER TRAY ($30,
+  2 plates) then ENTREE TRAY ($60, 4; needs the server tray), `Upgrades.shown()`. The most urgent table
+  goes first and its other plates ride along. The bot's curve is unchanged (tray 1). TRAY PASS.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

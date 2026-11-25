@@ -642,6 +642,41 @@ func test_upgrades_carry() -> void:
 	sv.free()
 
 
+## Trays (Duff, Nov 25): one RUN carries one plate, the server tray 2, the entree tray 4 (after the
+## server tray). The most urgent table goes first and its other plates ride with it.
+func test_tray_runs() -> void:
+	var owned: Array = []
+	check(Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, owned).tray == 1, "one plate to start")
+	check(Upgrades.buy("tray2", 999, owned) == -1, "entree tray needs the server tray")
+	check(Upgrades.shown(owned).has("tray") and not Upgrades.shown(owned).has("tray2"), "shop lists the server tray first")
+	check(Upgrades.buy("tray", 100, owned) == 70, "server tray bought")
+	check(Upgrades.shown(owned).has("tray2") and not Upgrades.shown(owned).has("tray"), "then the entree tray")
+	check(Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, owned).tray == 2, "server tray = 2")
+	check(Upgrades.buy("tray2", 70, owned) == 10, "entree tray bought")
+	check(Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, owned).tray == Upgrades.MAX_TRAY, "entree tray = 4")
+	for tray in [1, 2, 4]:
+		var k := Kitchen.new()
+		k.start(1, 7)
+		k.tray = tray
+		var b := {"id": 91, "table": 9, "items": [{"dish": "BURGER", "state": "carried"}], "time": 8, "big": false}
+		var a := {"id": 92, "table": 4, "items": [{"dish": "FRIES", "state": "carried"},
+			{"dish": "BURGER", "state": "carried"}], "time": 2, "big": false}
+		k.tickets = [b, a]
+		k.window = [{"tid": 91, "dish": "BURGER"}, {"tid": 92, "dish": "FRIES"}, {"tid": 92, "dish": "BURGER"}]
+		var before := k.window.size()
+		k.crew[0].at = Kitchen.PASS_IX
+		var ap: int = k.crew[0].ap
+		check(k.run(0) and k.crew[0].ap == ap - 1, "tray %d: one action" % tray)
+		check(before - k.window.size() == mini(tray, before), "tray %d: carried %d" % [tray, mini(tray, before)])
+		if tray >= 2:
+			check(k.ticket(92).is_empty() and (tray > 2) == k.ticket(91).is_empty(), "tray %d: the urgent table went out whole first" % tray)
+		else:
+			check(not k.ticket(92).is_empty() and k.window.filter(func(w): return w.tid == 92).size() == 1, "tray 1: one plate, the urgent table's")
+		var k2 := Kitchen.new()
+		k2.from_dict(JSON.parse_string(JSON.stringify(k.to_dict())))
+		check(k2.tray == tray, "tray %d survives a save" % tray)
+
+
 ## Services 2+ roll a twist; each one does what its card says, and it survives a save.
 func test_kitchen_events() -> void:
 	var seen := {}
