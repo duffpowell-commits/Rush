@@ -33,6 +33,7 @@ jobs:
         run: |
           curl -sSL -o godot.zip https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip
           unzip -q godot.zip && sudo mv Godot_v${GODOT_VERSION}_linux.x86_64 /usr/local/bin/godot
+          sudo apt-get update -qq >/dev/null   # the runner image's package list goes stale (404s, Nov 25)
           sudo apt-get install -y -qq xvfb ffmpeg >/dev/null
       - name: Import
         run: timeout 300 godot --headless --path . --import || true
