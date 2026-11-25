@@ -51,7 +51,11 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   clock left at serve, clean pans 15, -10 a walk, critic +-8) and `grade()` maps it A+/A/B/C/D/F (bot
   s1 lands all six). Settings PACE (RELAXED/NORMAL/SLAMMED) and `house_ease` (-2..2: D/F or a lost
   night eases a ticket, A/A+ adds one) move ticket count and clock (`pace_adjust`, `tickets_for`).
-- Latest build: Releases -> `dev` -> `rush.apk`.
+- Nov 25 ad kit: CI exports a Web build (preset "Web", threads off, audio unlock in head_include) and
+  pushes it to gh-pages on main: https://duffpowell-commits.github.io/Rush/. The build clip is Rush
+  itself now (`_record_kitchen_clip`: service 3 via `game.bot_step()`, no coach, no captions), not the
+  template's 3D scene. Copy + links: docs/AD_KIT.md. Nothing posts without Duff's yes.
+- Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
 - Next: Duff plays the APK; then real art and sound for the one service (QUEUE.md NOW).
