@@ -461,14 +461,15 @@ func _drop_hand(cr: Dictionary) -> void:
 
 
 ## The service's score out of 100 and where it came from (Nov 25: the old letter only landed A/C/F).
-## Tickets out 60, speed 25 (how much clock was left when each table went out), clean pans 15,
+## Tickets out 60, speed 25 (how much clock was left when each table went out; full at 70%, none
+## under 30%: a clean service served with half the clock left is an A), clean pans 15,
 ## minus 10 per table walked (on top of the ticket it lost), critic +-8.
 func score_parts() -> Dictionary:
 	var share := float(served) / maxf(total, 1)
 	var avg := speed / maxf(served, 1)
 	var parts := {
 		"out": int(round(60.0 * share)),
-		"speed": int(round(25.0 * clampf((avg - 0.35) / 0.4, 0.0, 1.0) * share)),
+		"speed": int(round(25.0 * clampf((avg - 0.3) / 0.4, 0.0, 1.0) * share)),
 		"pans": maxi(0, 15 - 5 * burns),
 		"walks": -10 * walked,
 		"critic": {"served": 8, "walked": -8}.get(critic, 0),

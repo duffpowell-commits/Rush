@@ -667,7 +667,7 @@ func test_tray_runs() -> void:
 	check(Upgrades.buy("tray", 100, owned) == 70, "server tray bought")
 	check(Upgrades.shown(owned).has("tray2") and not Upgrades.shown(owned).has("tray"), "then the entree tray")
 	check(Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, owned).tray == 2, "server tray = 2")
-	check(Upgrades.buy("tray2", 70, owned) == 10, "entree tray bought")
+	check(Upgrades.buy("tray2", 100, owned) == 10, "entree tray bought")
 	check(Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, owned).tray == Upgrades.MAX_TRAY, "entree tray = 4")
 	for tray in [1, 2, 4]:
 		var k := Kitchen.new()

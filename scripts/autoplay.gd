@@ -170,7 +170,12 @@ func _run() -> void:
 			next_hint = true
 			break
 	await _shot("hint_end_turn")
-	_check(next_hint and not game.has_node("Coach_fire"), "COACH PASS (FIRE hint gone, END TURN hint up)")
+	# The hint sits between the NEXT line and the stations, never over the station names (it did on a
+	# tall phone's web browser, Nov 25).
+	var hint_rect: Rect2 = (game.get_node("Coach_end_turn") as Control).get_global_rect() if next_hint else Rect2()
+	var st_top: float = (game.field.get_global_transform() * game.station_rect(0).position).y
+	_check(next_hint and not game.has_node("Coach_fire") and hint_rect.end.y <= st_top + 1.0,
+		"COACH PASS (FIRE hint gone, END TURN hint up, %d px above the stations)" % int(st_top - hint_rect.end.y))
 	var until := Time.get_ticks_msec() + 15000
 	while Time.get_ticks_msec() < until and game.score < start_score + 1 and not game.over:
 		game.bot_play_turn()

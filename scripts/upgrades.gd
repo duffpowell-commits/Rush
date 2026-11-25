@@ -14,7 +14,7 @@ const ALL := {
 	# max of 4"). A RUN carries one plate; the server tray makes it 2, the entree tray (after the
 	# server tray) makes it 4.
 	"tray": {"name": "SERVER TRAY", "cost": 30, "says": "RUN 2 PLATES AT ONCE"},
-	"tray2": {"name": "ENTREE TRAY", "cost": 60, "says": "RUN 4 PLATES AT ONCE", "needs": "tray"},
+	"tray2": {"name": "ENTREE TRAY", "cost": 90, "says": "RUN 4 PLATES AT ONCE", "needs": "tray"},
 }
 const ORDER := ["meal", "lamps", "tray", "tray2", "iron", "comps"]
 const MAX_TRAY := 4
