@@ -253,15 +253,16 @@ func act() -> void:
 		match what:
 			"FIRE":
 				_fx_burst(c + Vector2(0, 10), MenuArt.FLAME, 14)
+				_fx_text(c - Vector2(0, 60), "FIRED!", MenuArt.FLAME)
 			"RUSH":
 				_fx_burst(c + Vector2(0, 10), MenuArt.EMBER, 22)
-				_fx_text(c - Vector2(0, 40), "RUSHED!", MenuArt.FLAME)
+				_fx_text(c - Vector2(0, 60), "RUSHED!", MenuArt.FLAME)
 			"PLATE":
 				_fx_ring(c, UI.key("good"))
-				_fx_text(c - Vector2(0, 40), "UP!", UI.key("good"))
+				_fx_text(c - Vector2(0, 60), "UP!", UI.key("good"))
 			"RUN":
 				score = k.served + _night_before
-				_fx_text(c - Vector2(0, 50), "+$%d" % (k.tips - tips_before) if k.tips > tips_before else "RAN", UI.key("good"))
+				_fx_text(c - Vector2(0, 70), "+$%d" % (k.tips - tips_before) if k.tips > tips_before else "RAN", UI.key("good"))
 				if k.served > served_before:   # a whole table out: the big moment
 					_fx_ring(c, UI.ACCENT, 90.0)
 					_fx_burst(c, UI.key("good"), 24)
@@ -290,7 +291,7 @@ func _fx_ring(pos: Vector2, col: Color, r: float = 60.0) -> void:
 func _fx_burst(pos: Vector2, col: Color, n: int) -> void:
 	if _settings.get_value("low_graphics"):
 		return
-	for i in n:
+	for i in int(n * get_node("/root/Feel").spark_scale):   # DEV MENU -> TUNE spark_scale
 		var a := randf() * TAU
 		var v := Vector2(cos(a), sin(a) - 0.8) * randf_range(80.0, 220.0)
 		fx.append({"kind": "spark", "pos": pos, "t": 0.0, "life": randf_range(0.35, 0.7), "col": col, "vel": v})
@@ -298,11 +299,11 @@ func _fx_burst(pos: Vector2, col: Color, n: int) -> void:
 
 func _shake(amt: float) -> void:
 	if not _settings.get_value("low_graphics"):
-		shake_amt = maxf(shake_amt, amt)
+		shake_amt = maxf(shake_amt, amt * get_node("/root/Feel").shake_scale)   # TUNE shake_scale
 
 
 func _tick_fx(dt: float) -> void:
-	if k != null and k.tickets.any(func(t): return t.time <= 2) and not _settings.get_value("low_graphics"):
+	if k != null and not (paused or over or between) and k.tickets.any(func(t): return t.time <= 2) and not _settings.get_value("low_graphics"):
 		field.queue_redraw()   # red tickets pulse (drawn in _draw_field)
 	if fx.is_empty() and shake_amt <= 0.0:
 		return
@@ -337,6 +338,9 @@ func _draw_fx(f: Control) -> void:
 				var pop := 1.0 + 0.3 * maxf(0.0, 1.0 - e.t * 8.0)   # a quick pop as it appears
 				var fs := int(sz * pop)
 				var w := font.get_string_size(e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+				while w > f.size.x - 12.0 and fs > 12:   # big text sizes: shrink to fit the field
+					fs -= 2
+					w = font.get_string_size(e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 				var p: Vector2 = e.pos - Vector2(w / 2.0, 0)
 				p.x = clampf(p.x, 6.0, f.size.x - w - 6.0)
 				f.draw_string_outline(font, p, e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 8, Color(MenuArt.PAPER_INK, a))
@@ -422,6 +426,7 @@ func _service_done() -> void:
 func _stamp(l: Control) -> void:
 	if _settings.get_value("low_graphics"):
 		return
+	l.modulate.a = 0.0   # hidden before the wait, so it never shows at rest first
 	await get_tree().process_frame   # laid out first, so the pivot is the letter's centre
 	if not is_instance_valid(l):
 		return
@@ -752,7 +757,7 @@ func _draw_field(f: Control) -> void:
 		var tone := "good" if t.time > 4 else ("warn" if t.time > 2 else "bad")
 		f.draw_rect(r, UI.panel_color())
 		f.draw_rect(r, UI.key(tone), false, 4.0 if tone == "bad" else 2.0)
-		if tone == "bad" and not _settings.get_value("low_graphics"):   # about to walk: the frame throbs
+		if tone == "bad" and not (paused or over or between) and not _settings.get_value("low_graphics"):   # about to walk: the frame throbs
 			var throb := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 120.0)
 			f.draw_rect(r.grow(3.0 + 3.0 * throb), Color(UI.key("bad"), 0.5 * throb), false, 3.0)
 		if t.id == pick_tid:   # picked: a thick accent frame plus a tab on the bottom (shape, not colour alone)
