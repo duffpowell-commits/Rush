@@ -196,6 +196,7 @@ func _refresh_hud() -> void:
 		return
 	var god := " GOD" if get_node("/root/DebugMenu").god_mode else ""
 	hud.text = "%s%s\nSERVICE %d" % [k.clock(), god, level]
+
 	if pick_tid != 0 and k.ticket(pick_tid).is_empty():
 		pick_tid = 0   # served or walked: back to most urgent
 	var a := k.action_here(sel)
@@ -374,6 +375,23 @@ func next_service() -> void:
 	_new_service()
 	checkpoint()
 	_after_move()
+	if k.event != "":
+		tonight()
+
+
+## The twist card at the top of a service: what's different tonight, one line.
+func tonight() -> void:
+	var ev: Array = Kitchen.EVENTS[k.event]
+	get_node("/root/Subs").cue("[bell: %s]" % ev[0].to_lower())
+	sheet_box = UI.sheet(self)
+	sheet_box.add_child(UI.label("TONIGHT", 22, UI.DIM))
+	var head := UI.label(ev[0], 36, MenuArt.FLAME)
+	head.name = "Twist"
+	sheet_box.add_child(head)
+	sheet_box.add_child(UI.label(ev[1], 24))
+	sheet_box.add_child(MenuArt.primary(UI.button("HEARD!", func():
+		UI.close_sheet(sheet_box)
+		sheet_box = null, 88)))
 
 
 func debug_skip_level() -> void:
@@ -581,6 +599,10 @@ func _draw_field(f: Control) -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 56, UI.font_size(18), ink)
 		if t.big:   # small, between the table number and the clock, so it never runs into either
 			f.draw_string(font, r.position + Vector2(46, 25), "BIG", HORIZONTAL_ALIGNMENT_LEFT, 28, UI.font_size(11), UI.key("warn"))
+		for tag in ["vip", "critic"]:   # tonight's twist: a word tag plus a doubled frame (not colour alone)
+			if t.get(tag, false):
+				f.draw_rect(r.grow(-6.0), MenuArt.FLAME, false, 2.0)
+				f.draw_string(font, r.position + Vector2(46, 25), tag.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, 40, UI.font_size(11), MenuArt.FLAME)
 		# Clock: number plus a shape cue (filled bars), not colour alone.
 		f.draw_string(font, r.position + Vector2(r.size.x - 44, 28), "%d'" % t.time,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(24), UI.key(tone))
@@ -695,6 +717,8 @@ func pause() -> void:
 	get_node("/root/Subs").clear()
 	sheet_box = UI.sheet(self)
 	sheet_box.add_child(UI.label("PAUSED", 30, UI.ACCENT))
+	if k.event != "":
+		sheet_box.add_child(UI.label("TONIGHT: " + Kitchen.EVENTS[k.event][0], 20, UI.DIM))
 	sheet_box.add_child(MenuArt.primary(UI.button("RESUME", resume, 88)))
 	sheet_box.add_child(UI.button("HOW TO PLAY", func(): HowToPlay.open(self)))
 	sheet_box.add_child(UI.button("SETTINGS", func(): SettingsSheet.open(self)))

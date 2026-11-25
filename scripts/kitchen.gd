@@ -15,6 +15,15 @@ extends RefCounted
 ## their station. At STRESS_CAP they walk out for the rest of the service. A cook who does nothing
 ## all turn rests and drops 2.
 
+## Services 2+ each roll one twist (Nov 25, Duff's "all six" fixes, #2 variety): name, one line.
+const EVENTS := {
+	"tour": ["BUS TOUR", "Three tables land at once mid-service."],
+	"fritz": ["GRILL ON THE FRITZ", "Grill dishes take a minute longer. Their tables wait one more."],
+	"vip": ["VIP TABLE", "Gold ticket: triple tips. Walk it and it counts as two."],
+	"critic": ["FOOD CRITIC", "Serve the critic: grade up. Walk them: grade down."],
+}
+const EVENT_IDS := ["tour", "fritz", "vip", "critic"]
+
 const STATIONS := ["GRILL", "FRY", "SAUTE", "PASS"]
 const PASS_IX := 3
 
@@ -47,6 +56,9 @@ var incoming: Array = []    # not yet on the rail: {arrive, ticket}
 var served := 0             # tickets out complete
 var walked := 0             # tickets comped this service
 var tips := 0
+var event := ""             # this service's twist (EVENTS), "" in service 1
+var with_events := true     # false: plain services (balance sweeps)
+var critic := ""            # "", "served" or "walked"
 var events: Array = []       # short lines for the HUD ("BURN on GRILL")
 var done := false
 var total := 0           # tickets this service, for the grade
@@ -81,7 +93,40 @@ func start(n: int, seed_value: int = 0) -> void:
 		incoming.append({"arrive": arrive, "ticket": _make_ticket(big)})
 	if n == 1:   # the first ticket of the night teaches the grill: DEV starts there
 		incoming[0].ticket.items = [{"dish": "BURGER", "state": "wait"}]
+	event = ""
+	critic = ""
+	if n >= 2 and with_events:
+		event = EVENT_IDS[rng.randi_range(0, EVENT_IDS.size() - 1)]
+		_set_up_event()
 	_arrivals()
+
+
+func _set_up_event() -> void:
+	var count := incoming.size()
+	match event:
+		"tour":   # three tickets from the middle of the service all arrive on the same minute
+			var at := maxi(count / 2 - 1, 0)
+			for i in range(at, mini(at + 3, count)):
+				incoming[i].arrive = incoming[at].arrive
+		"fritz":   # the floor knows: tickets with a grill dish get a minute's grace
+			for inc in incoming:
+				if inc.ticket.items.any(func(it): return DISHES[it.dish].st == 0):
+					inc.ticket.time += 1
+		"vip":
+			_mark(1 if count > 1 else 0, "vip")
+		"critic":
+			_mark(count / 3, "critic")
+
+
+func _mark(i: int, key: String) -> void:
+	if incoming[i].ticket.big and i + 1 < incoming.size():
+		i += 1
+	incoming[i].ticket[key] = true
+
+
+## Minutes a dish cooks for, with tonight's twist.
+func cook_time(dish: String) -> int:
+	return DISHES[dish].cook + (1 if event == "fritz" and DISHES[dish].st == 0 else 0)
 
 
 func _cook(nm: String) -> Dictionary:
@@ -157,7 +202,7 @@ func fire(c: int, tid: int = 0) -> bool:
 	if pick.is_empty():
 		return false
 	pick.item.state = "cooking"
-	pans[s] = {"tid": pick.t.id, "dish": pick.item.dish, "left": DISHES[pick.item.dish].cook, "sat": 0, "rushed": false}
+	pans[s] = {"tid": pick.t.id, "dish": pick.item.dish, "left": cook_time(pick.item.dish), "sat": 0, "rushed": false}
 	crew[c].ap -= 1
 	crew[c].acted = true
 	return true
@@ -256,7 +301,9 @@ func run(c: int) -> bool:
 	if t.items.all(func(it): return it.state == "served"):
 		tickets.erase(t)
 		served += 1
-		tips += 2 + t.time + (4 if t.big else 0)
+		tips += (2 + t.time + (4 if t.big else 0)) * (3 if t.get("vip", false) else 1)
+		if t.get("critic", false):
+			critic = "served"
 		_say("TABLE %d OUT" % t.table)
 	return true
 
@@ -325,7 +372,9 @@ func end_turn() -> void:
 		t.time -= 1
 		if t.time <= 0:
 			tickets.erase(t)
-			walked += 1
+			walked += 2 if t.get("vip", false) else 1
+			if t.get("critic", false):
+				critic = "walked"
 			_say("TABLE %d WALKED" % t.table)
 			for s in pans.size():
 				if not pans[s].is_empty() and pans[s].tid == t.id:
@@ -373,6 +422,7 @@ func grade() -> String:
 	var share := float(served) / maxf(total, 1)
 	var g := 4 if share >= 0.95 else (3 if share >= 0.8 else (2 if share >= 0.6 else (1 if share >= 0.4 else 0)))
 	g = maxi(0, g - walked)
+	g = clampi(g + {"served": 1, "walked": -1}.get(critic, 0), 0, 4)
 	return ["F", "D", "C", "B", "A"][g]
 
 
@@ -391,7 +441,7 @@ func to_dict() -> Dictionary:
 		"walked": walked, "tips": tips, "done": done, "total": total, "next_id": _next_id,
 		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
 		"stress_cap": stress_cap, "burn_after": burn_after,
-		"window": window.duplicate(true), "rush_stress": rush_stress}
+		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic}
 
 
 ## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
@@ -415,6 +465,8 @@ func from_dict(d: Dictionary) -> bool:
 	stress_cap = int(d.stress_cap)
 	burn_after = int(d.burn_after)
 	rush_stress = int(d.get("rush_stress", 1))
+	event = str(d.get("event", ""))
+	critic = str(d.get("critic", ""))
 	window = []
 	for w in d.window:
 		window.append({"tid": int(w.tid), "dish": str(w.dish)})
@@ -442,7 +494,11 @@ func _ticket_from(t: Dictionary) -> Dictionary:
 	var items: Array = []
 	for it in t.items:
 		items.append({"dish": str(it.dish), "state": str(it.state)})
-	return {"id": int(t.id), "table": int(t.table), "items": items, "time": int(t.time), "big": bool(t.big)}
+	var out := {"id": int(t.id), "table": int(t.table), "items": items, "time": int(t.time), "big": bool(t.big)}
+	for key in ["vip", "critic"]:
+		if t.get(key, false):
+			out[key] = true
+	return out
 
 
 func _say(s: String) -> void:

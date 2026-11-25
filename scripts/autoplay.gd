@@ -247,6 +247,14 @@ func _run() -> void:
 		"SHOP PASS (banked $%d, bought FAMILY MEAL, stress cap %d in service 2, saved, best night kept)" % [tips1, game.k.stress_cap])
 	_check(graded and game.level == 2 and not game.between,
 		"GRADE PASS (service 1 graded %s, NEXT SERVICE -> service %d)" % [letter, game.level])
+	# Service 2 opens on its twist card (bus tour, fritz, VIP or critic); HEARD! closes it.
+	var twist: Node = game.find_child("Twist", true, false)
+	var twist_name: String = twist.text if twist != null else "?"
+	await _shot("tonight")
+	await _click("HEARD!")
+	await _frames(3)
+	_check(game.k.event != "" and twist_name == game.k.EVENTS[game.k.event][0] and _find("HEARD!") == null,
+		"TWIST PASS (service 2 twist %s shown, HEARD! closes it)" % twist_name)
 	var saved: Dictionary = get_node("/root/Save").read()
 	_check(int(saved.get("level", 0)) == 2, "AUTOSAVE PASS (level 2 saved)")
 	# A few minutes into service 2, so CONTINUE has a service in progress to pick back up.

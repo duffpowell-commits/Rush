@@ -611,3 +611,54 @@ func test_upgrades_carry() -> void:
 	var d: Dictionary = sv._migrate({"_version": 3, "level": 2, "score": 8})
 	check(int(d._version) == 4 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v4")
 	sv.free()
+
+
+## Services 2+ roll a twist; each one does what its card says, and it survives a save.
+func test_kitchen_events() -> void:
+	var seen := {}
+	for sd in 40:
+		var k := Kitchen.new()
+		k.start(2, sd + 1)
+		seen[k.event] = true
+	check(seen.size() == 4 and not seen.has(""), "all four twists show up in service 2 (%s)" % [seen.keys()])
+	var one := Kitchen.new()
+	one.start(1, 5)
+	check(one.event == "", "service 1 is plain")
+	var k := _event_kitchen("tour")
+	var mid: int = k.incoming.size() / 2 - 1
+	check(k.incoming[mid].arrive == k.incoming[mid + 2].arrive, "bus tour: three tables on one minute")
+	k = _event_kitchen("fritz")
+	check(k.cook_time("STEAK") == 4 and k.cook_time("FRIES") == 1, "fritz: grill a minute slower, fryer not")
+	k = _event_kitchen("vip")
+	var vt: Array = k.incoming.filter(func(inc): return inc.ticket.get("vip", false))
+	check(vt.size() == 1, "one VIP ticket")
+	k.tickets = [{"id": 90, "table": 9, "items": [{"dish": "FRIES", "state": "carried"}], "time": 5, "big": false, "vip": true}]
+	k.window = [{"tid": 90, "dish": "FRIES"}]
+	k.crew[0].at = Kitchen.PASS_IX
+	k.run(0)
+	check(k.tips == (2 + 5) * 3, "VIP pays triple (%d)" % k.tips)
+	k.tickets = [{"id": 91, "table": 8, "items": [{"dish": "FRIES", "state": "wait"}], "time": 1, "big": false, "vip": true}]
+	k.incoming.clear()
+	k.end_turn()
+	check(k.walked == 2, "a walked VIP counts as two")
+	k = _event_kitchen("critic")
+	k.served = k.total
+	check(k.grade() == "A", "clean service")
+	k.walked = 1
+	k.critic = "served"
+	check(k.grade() == "A", "serving the critic lifts a B to an A")
+	k.critic = "walked"
+	check(k.grade() == "C", "walking the critic drops a B to a C")
+	var back := Kitchen.new()
+	var vk := _event_kitchen("vip")
+	check(back.from_dict(JSON.parse_string(JSON.stringify(vk.to_dict()))) and back.event == "vip"
+		and back.incoming.any(func(inc): return inc.ticket.get("vip", false)), "twist and VIP flag survive a save")
+
+
+func _event_kitchen(ev: String) -> Kitchen:
+	var k := Kitchen.new()
+	k.with_events = false
+	k.start(2, 11)
+	k.event = ev
+	k._set_up_event()
+	return k
