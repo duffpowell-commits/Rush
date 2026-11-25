@@ -31,19 +31,22 @@ const LIVES := 3             # tables you can walk in one service
 
 ## Live sliders (DEV MENU -> TUNE). Applied when a service starts.
 const TUNE := {"ticket_time": [4.0, 16.0], "crew_ap": [1.0, 5.0], "stress_cap": [2.0, 12.0],
-	"service_turns": [8.0, 40.0], "first_tickets": [2.0, 14.0], "more_tickets": [0.0, 4.0]}
+	"service_turns": [8.0, 40.0], "first_tickets": [2.0, 14.0], "more_tickets": [0.0, 4.0],
+	"rush_stress": [0.0, 3.0]}
 var ticket_time := 9.0
 var crew_ap := 3.0
 var stress_cap := 6.0
 var service_turns := 20.0
-var first_tickets := 6.0
+var first_tickets := 8.0
 var more_tickets := 1.0
+var rush_stress := 1.0
 
 var level := 1               # service number
 var score := 0               # tickets out, whole night
 var lives := LIVES
 var k: Kitchen
 var sel := 0                 # selected cook
+var pick_tid := 0            # ticket the player tapped: FIRE cooks for it first (0 = most urgent)
 var paused := false
 var over := false
 var between := false         # the grade sheet between two services is up
@@ -183,8 +186,15 @@ func _refresh_hud() -> void:
 		return
 	var god := " GOD" if get_node("/root/DebugMenu").god_mode else ""
 	hud.text = "%s%s\nSERVICE %d" % [k.clock(), god, level]
+	if pick_tid != 0 and k.ticket(pick_tid).is_empty():
+		pick_tid = 0   # served or walked: back to most urgent
 	var a := k.action_here(sel)
 	act_btn.text = a if a != "" else "NOTHING HERE"
+	if a == "FIRE":   # say which table it cooks for, picked or not
+		var fp := k.fire_pick(sel, pick_tid)
+		act_btn.text = "FIRE T%d" % fp.t.table
+	elif a == "RUSH":
+		act_btn.text = "RUSH +STRESS"
 	act_btn.disabled = a == ""
 	if note != null:
 		note.text = "  ".join(k.events)
@@ -200,9 +210,11 @@ func _new_service() -> void:
 	k.turns = int(service_turns)
 	k.first_tickets = int(first_tickets)
 	k.more_tickets = int(more_tickets)
+	k.rush_stress = int(rush_stress)
 	k.start(level, rng.randi() if level > 1 else 0)
 	lives = LIVES
 	sel = 0
+	pick_tid = 0
 
 
 ## Selected cook acts where they stand (the big button, or tapping their own station).
@@ -210,8 +222,10 @@ func act() -> void:
 	if paused or over or between:
 		return
 	var what := k.action_here(sel)
-	if k.act_here(sel):
+	if k.act_here(sel, pick_tid):
 		get_node("/root/Audio").sfx("good", {"FIRE": 0.9, "PLATE": 1.0, "RUN": 1.15}.get(what, 1.0))
+		if what == "RUSH":
+			get_node("/root/Subs").cue("[sizzle: rushed]")
 		UI.buzz(15)
 		if what == "RUN":
 			score = k.served + _night_before
@@ -335,11 +349,15 @@ func _coach_steps() -> Array:
 		["end_turn", "TAP END TURN: COOK", func(): return k.pans.any(func(p): return not p.is_empty()),
 			func(): return k.turn > 0],
 		["plate", "UP! TAP PLATE", func(): return k.pans.any(func(p): return not p.is_empty() and p.left <= 0),
-			func(): return k.crew.any(func(c): return not c.hand.is_empty()) or k.served > 0],
-		["run", "TAP PASS, THEN RUN", func(): return k.crew.any(func(c): return not c.hand.is_empty()),
+			func(): return not k.window.is_empty() or k.served > 0],
+		["run", "TAP PASS, THEN RUN", func(): return not k.window.is_empty(),
 			func(): return k.served > 0],
 		["switch", "TAP MO TO SWITCH", func(): return k.served > 0 and not k.crew[1].out,
 			func(): return sel != 0 or k.crew[1].out],
+		["pick", "TAP TICKET: COOK FIRST", func(): return k.tickets.size() >= 2,
+			func(): return pick_tid != 0],
+		["rush", "RUSH IT: +STRESS", func(): return k.action_here(sel) == "RUSH",
+			func(): return k.pans.any(func(p): return p.get("rushed", false))],
 	]
 
 
@@ -364,6 +382,20 @@ func _coach_next() -> void:
 
 
 # Layout, in field coordinates. Rail on top, the line in the middle, crew under their stations.
+## The rail's tickets, most urgent first: the order the cards are drawn in.
+func rail_tickets() -> Array:
+	var shown: Array = k.tickets.duplicate()
+	shown.sort_custom(func(a, b): return a.time < b.time)
+	return shown
+
+
+func ticket_rect(i: int) -> Rect2:
+	var pad := 10.0
+	var cw := (field.size.x - pad * 5.0) / 4.0
+	return Rect2(pad + i * (cw + pad), _rail_y(), cw, 200.0)
+
+
+
 func _rail_y() -> float:
 	return 30.0 + UI.MIN_TOUCH + 70.0
 
@@ -406,6 +438,13 @@ func _field_input(e: InputEvent) -> void:
 
 ## A tap at a point on the field (also used by the autoplay bot).
 func tap(p: Vector2) -> void:
+	var rail := rail_tickets()
+	for i in mini(rail.size(), 4):
+		if ticket_rect(i).has_point(p):   # pick this table to cook first; tap again to unpick
+			pick_tid = 0 if pick_tid == rail[i].id else rail[i].id
+			get_node("/root/Audio").sfx("click")
+			_after_move()
+			return
 	for c in k.crew.size():
 		if not k.crew[c].out and cook_pos(c).distance_to(p) <= COOK_R + 6.0:
 			sel = c
@@ -452,16 +491,19 @@ func _draw_field(f: Control) -> void:
 	var ink := UI.ink()
 	# --- the rail: tickets on now, then what's coming next
 	var y0 := _rail_y()
-	var shown: Array = k.tickets.duplicate()
-	shown.sort_custom(func(a, b): return a.time < b.time)
+	var shown: Array = rail_tickets()
 	var pad := 10.0
-	var cw := (f.size.x - pad * 5.0) / 4.0
 	for i in mini(shown.size(), 4):
 		var t: Dictionary = shown[i]
-		var r := Rect2(pad + i * (cw + pad), y0, cw, 200.0)
+		var r := ticket_rect(i)
 		var tone := "good" if t.time > 4 else ("warn" if t.time > 2 else "bad")
 		f.draw_rect(r, UI.panel_color())
 		f.draw_rect(r, UI.key(tone), false, 4.0 if tone == "bad" else 2.0)
+		if t.id == pick_tid:   # picked: a thick accent frame plus a tab on the bottom (shape, not colour alone)
+			f.draw_rect(r.grow(4.0), UI.ACCENT, false, 4.0)
+			f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), UI.ACCENT)
+			f.draw_string(font, Vector2(r.position.x, r.end.y - 7), "COOK FIRST", HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
+				UI.font_size(13), UI.BG)
 		f.draw_string(font, r.position + Vector2(8, 26), "T%d" % t.table,
 			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 56, UI.font_size(18), ink)
 		if t.big:   # small, between the table number and the clock, so it never runs into either
@@ -530,8 +572,12 @@ func _draw_field(f: Control) -> void:
 				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), "%d TO FIRE" % waiting,
 					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), UI.key("warn"))
 		elif i == Kitchen.PASS_IX:
+			for w in mini(k.window.size(), 3):   # plates up on the window, waiting for a runner
+				_draw_fit(f, ART_DISHES[k.window[w].dish], Rect2(r.position.x + 6 + w * 36, r.position.y + 34, 40, 40))
 			_plate(f, Rect2(r.position.x + 4, r.get_center().y - 14, r.size.x - 8, 32))
-			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), "RUN HERE", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), ink)
+			var up := "%d TO RUN" % k.window.size() if not k.window.is_empty() else "RUN HERE"
+			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), up, HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
+				UI.font_size(16), UI.key("good") if not k.window.is_empty() else ink)
 	# --- crew
 	for c in k.crew.size():
 		var cr: Dictionary = k.crew[c]

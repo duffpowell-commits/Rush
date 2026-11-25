@@ -7,7 +7,8 @@ extends Node
 ## Writes go to a temp file first, then replace the real one, so a kill mid-write can't leave
 ## a half-written save.
 
-const VERSION := 2   # 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
+const VERSION := 3   # 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
+# 3 (Rush, Nov 25 playtest): the kitchen gains a pass "window"; plates in a cook's hand move onto it
 var path := "user://run.json"
 
 
@@ -56,4 +57,14 @@ func _migrate(d: Dictionary) -> Dictionary:
 	if int(d.get("_version", 1)) < 2:
 		d.erase("lives")   # v1 had no mid-service state: CONTINUE starts the saved service fresh
 		d["_version"] = 2
+	if int(d.get("_version", 1)) < 3:
+		var kd: Variant = d.get("kitchen", null)
+		if kd is Dictionary and not kd.has("window"):
+			var win: Array = []
+			for c in kd.get("crew", []):   # a plate in hand goes up on the window (run() still takes hands too)
+				if c is Dictionary and c.get("hand", {}) is Dictionary and not c.hand.is_empty():
+					win.append(c.hand)
+					c.hand = {}
+			kd["window"] = win
+		d["_version"] = 3
 	return d
