@@ -62,7 +62,7 @@ func showing() -> String:
 
 func _process(dt: float) -> void:
 	# A modal sheet (pause, grade, game over) has its buttons where captions sit: move them to the top.
-	var y := 0.06 if get_tree().get_first_node_in_group("sheet") != null else 0.78
+	var y := 0.015 if get_tree().get_first_node_in_group("sheet") != null else 0.78
 	if _bg.anchor_top != y:
 		_bg.anchor_top = y
 		_bg.anchor_bottom = y

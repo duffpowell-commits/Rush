@@ -81,6 +81,6 @@ func _migrate(d: Dictionary) -> Dictionary:
 			for c in kd5.get("crew", []):
 				if c is Dictionary and int(c.get("at", 0)) == 3:
 					c.at = 4   # was at the pass
-			kd5["all_open"] = true
+			kd5["all_open"] = int(kd5.get("service", 1)) == 1   # only service 1 had saute closed
 		d["_version"] = 5
 	return d

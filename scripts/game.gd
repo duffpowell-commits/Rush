@@ -241,14 +241,106 @@ func act() -> void:
 	if paused or over or between:
 		return
 	var what := k.action_here(sel)
+	var at: int = k.crew[sel].at
+	var tips_before := k.tips
+	var served_before := k.served
 	if k.act_here(sel, pick_tid):
 		get_node("/root/Audio").sfx("good", {"FIRE": 0.9, "PLATE": 1.0, "RUN": 1.15}.get(what, 1.0))
 		if what == "RUSH":
 			get_node("/root/Subs").cue("[sizzle: rushed]")
 		UI.buzz(15)
-		if what == "RUN":
-			score = k.served + _night_before
+		var c := station_rect(at).get_center()
+		match what:
+			"FIRE":
+				_fx_burst(c + Vector2(0, 10), MenuArt.FLAME, 14)
+			"RUSH":
+				_fx_burst(c + Vector2(0, 10), MenuArt.EMBER, 22)
+				_fx_text(c - Vector2(0, 40), "RUSHED!", MenuArt.FLAME)
+			"PLATE":
+				_fx_ring(c, UI.key("good"))
+				_fx_text(c - Vector2(0, 40), "UP!", UI.key("good"))
+			"RUN":
+				score = k.served + _night_before
+				_fx_text(c - Vector2(0, 50), "+$%d" % (k.tips - tips_before) if k.tips > tips_before else "RAN", UI.key("good"))
+				if k.served > served_before:   # a whole table out: the big moment
+					_fx_ring(c, UI.ACCENT, 90.0)
+					_fx_burst(c, UI.key("good"), 24)
+					_fx_text(Vector2(field.size.x / 2, _rail_y() + 120), "TABLE OUT!", UI.ACCENT, 40)
+					_shake(4.0)
 	_after_move()
+
+
+# ---------------------------------------------------------------- juice (Nov 25, step 3)
+# Short-lived effects drawn on top of the field: sparks, rings, floating words, a screen shake.
+# Words always ride along, so nothing is colour or motion alone. Low graphics keeps the words only.
+
+var fx: Array = []           # {kind, pos, t, life, col, text, size, vel}
+var shake_amt := 0.0
+
+
+func _fx_text(pos: Vector2, text: String, col: Color, size: int = 28) -> void:
+	fx.append({"kind": "text", "pos": pos, "t": 0.0, "life": 0.9, "col": col, "text": text, "size": size})
+
+
+func _fx_ring(pos: Vector2, col: Color, r: float = 60.0) -> void:
+	if not _settings.get_value("low_graphics"):
+		fx.append({"kind": "ring", "pos": pos, "t": 0.0, "life": 0.45, "col": col, "r": r})
+
+
+func _fx_burst(pos: Vector2, col: Color, n: int) -> void:
+	if _settings.get_value("low_graphics"):
+		return
+	for i in n:
+		var a := randf() * TAU
+		var v := Vector2(cos(a), sin(a) - 0.8) * randf_range(80.0, 220.0)
+		fx.append({"kind": "spark", "pos": pos, "t": 0.0, "life": randf_range(0.35, 0.7), "col": col, "vel": v})
+
+
+func _shake(amt: float) -> void:
+	if not _settings.get_value("low_graphics"):
+		shake_amt = maxf(shake_amt, amt)
+
+
+func _tick_fx(dt: float) -> void:
+	if k != null and k.tickets.any(func(t): return t.time <= 2) and not _settings.get_value("low_graphics"):
+		field.queue_redraw()   # red tickets pulse (drawn in _draw_field)
+	if fx.is_empty() and shake_amt <= 0.0:
+		return
+	for e in fx:
+		e.t += dt
+		if e.kind == "spark":
+			e.vel.y += 420.0 * dt
+			e.pos += e.vel * dt
+		elif e.kind == "text":
+			e.pos.y -= 40.0 * dt
+	fx = fx.filter(func(e): return e.t < e.life)
+	if shake_amt > 0.0:
+		shake_amt = maxf(0.0, shake_amt - 30.0 * dt)
+		field.position = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake_amt
+	else:
+		field.position = Vector2.ZERO
+	field.queue_redraw()
+
+
+func _draw_fx(f: Control) -> void:
+	var font := ThemeDB.fallback_font
+	for e in fx:
+		var k01: float = e.t / e.life
+		var a := 1.0 - k01
+		match e.kind:
+			"spark":
+				f.draw_circle(e.pos, 3.0 + 3.0 * a, Color(e.col, a))
+			"ring":
+				f.draw_arc(e.pos, e.r * (0.4 + k01), 0.0, TAU, 32, Color(e.col, a), 6.0 * a + 1.0)
+			"text":
+				var sz := UI.font_size(e.size)
+				var pop := 1.0 + 0.3 * maxf(0.0, 1.0 - e.t * 8.0)   # a quick pop as it appears
+				var fs := int(sz * pop)
+				var w := font.get_string_size(e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+				var p: Vector2 = e.pos - Vector2(w / 2.0, 0)
+				p.x = clampf(p.x, 6.0, f.size.x - w - 6.0)
+				f.draw_string_outline(font, p, e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 8, Color(MenuArt.PAPER_INK, a))
+				f.draw_string(font, p, e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(e.col, a))
 
 
 ## One minute of service passes.
@@ -263,6 +355,8 @@ func end_turn() -> void:
 		get_node("/root/Audio").sfx("bad")
 		get_node("/root/Subs").cue("[buzz: table walked]")
 		UI.buzz(80)
+		_shake(12.0)
+		_fx_text(Vector2(field.size.x / 2, _rail_y() + 120), "TABLE WALKED!", UI.key("bad"), 40)
 	elif k.walked > walked_before:
 		k.walked = walked_before   # god mode: walked tables don't count
 		k.critic = critic_before
@@ -270,6 +364,10 @@ func end_turn() -> void:
 		if e.begins_with("BURN"):
 			get_node("/root/Audio").sfx("bad", 0.8)
 			get_node("/root/Subs").cue("[sizzle: burn]")
+			var bs: int = Kitchen.STATIONS.find(e.trim_prefix("BURN ON ").get_slice(",", 0))
+			if bs >= 0:
+				_fx_burst(station_rect(bs).get_center(), Color("6b6b6b"), 18)
+				_fx_text(station_rect(bs).get_center() - Vector2(0, 40), "BURNED!", UI.key("bad"))
 		elif e.ends_with("WALKED OUT"):
 			get_node("/root/Audio").sfx("bad", 0.6)
 			get_node("/root/Subs").cue("[door slams: cook walked out]")
@@ -309,6 +407,7 @@ func _service_done() -> void:
 	var grade := UI.label(g, 96, UI.key("good" if g in ["A", "B"] else ("warn" if g == "C" else "bad")))
 	grade.name = "Grade"
 	sheet_box.add_child(grade)
+	_stamp(grade)
 	sheet_box.add_child(UI.label("%d of %d tickets out\n%d walk%s against you\nTips $%d" % [k.served, k.total, k.walked, "" if k.walked == 1 else "s", k.tips], 24))
 	sheet_box.add_child(UI.label("Next: %d tickets." % maxi(1, int(first_tickets) + int(more_tickets) * (level - 1)), 20, UI.DIM))
 	var shop := UI.button("", func(): open_shop())
@@ -317,6 +416,22 @@ func _service_done() -> void:
 	_shop_label()
 	sheet_box.add_child(MenuArt.primary(UI.button("NEXT SERVICE", next_service, 96)))
 	sheet_box.add_child(UI.button("TITLE", quit_to_title))   # saved: CONTINUE starts the next service
+
+
+## The grade lands like a stamp: big, then slammed down with a thud and a buzz.
+func _stamp(l: Control) -> void:
+	if _settings.get_value("low_graphics"):
+		return
+	await get_tree().process_frame   # laid out first, so the pivot is the letter's centre
+	if not is_instance_valid(l):
+		return
+	l.pivot_offset = l.size / 2.0
+	l.scale = Vector2(2.6, 2.6)
+	l.modulate.a = 0.0
+	var tw := l.create_tween().set_parallel()
+	tw.tween_property(l, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l, "modulate:a", 1.0, 0.12)
+	tw.chain().tween_callback(func(): UI.buzz(40))
 
 
 func _shop_label() -> void:
@@ -414,7 +529,7 @@ func tonight() -> void:
 			pic.texture = tex
 			pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			pic.custom_minimum_size = Vector2(80, 80)
+			pic.custom_minimum_size = Vector2(64, 64)
 			row.add_child(pic)
 		box.add_child(row)
 		box.add_child(UI.label("Now on the menu: " + " and ".join(dishes.map(func(d): return d.to_lower())) + ".", 22))
@@ -458,6 +573,7 @@ var _coach_t := 0.0
 
 
 func _process(dt: float) -> void:
+	_tick_fx(dt)
 	_coach_t += dt
 	if _coach_t >= 0.25:
 		_coach_t = 0.0
@@ -636,6 +752,9 @@ func _draw_field(f: Control) -> void:
 		var tone := "good" if t.time > 4 else ("warn" if t.time > 2 else "bad")
 		f.draw_rect(r, UI.panel_color())
 		f.draw_rect(r, UI.key(tone), false, 4.0 if tone == "bad" else 2.0)
+		if tone == "bad" and not _settings.get_value("low_graphics"):   # about to walk: the frame throbs
+			var throb := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 120.0)
+			f.draw_rect(r.grow(3.0 + 3.0 * throb), Color(UI.key("bad"), 0.5 * throb), false, 3.0)
 		if t.id == pick_tid:   # picked: a thick accent frame plus a tab on the bottom (shape, not colour alone)
 			f.draw_rect(r.grow(4.0), UI.ACCENT, false, 4.0)
 			f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), UI.ACCENT)
@@ -761,6 +880,7 @@ func _draw_field(f: Control) -> void:
 	if not gone.is_empty():
 		_plate(f, Rect2(20, station_rect(0).end.y + 138, f.size.x - 40, 30))
 		f.draw_string(font, Vector2(0, station_rect(0).end.y + 160), "WALKED OUT: " + ", ".join(gone), HORIZONTAL_ALIGNMENT_CENTER, f.size.x, UI.font_size(18), UI.key("bad"))
+	_draw_fx(f)
 
 
 # ---------------------------------------------------------------- pause + game over
