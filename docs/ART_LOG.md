@@ -12,6 +12,7 @@ with crisp edges." Props/icons keyed on magenta (#FF00FF).
 | File | Forge job / take | Seed | Cleanup | Verdict |
 | --- | --- | --- | --- | --- |
 | `assets/art/bg_line.jpg` | rush-bg-kitchen-20261125 / 2 | 5150 | none; drawn under a 55% dark wash, text on dark plates. Replaced the plain tile wall (rush-bg-a, Duff: "more kitchen like") | waiting on Duff |
+| `assets/art/title_key.jpg` | rush-title-20261125 / 0 | 7310 | none; title backdrop, empty smoky top for the drawn RUSH logo (code, not AI text). Take 2 had a mark in the corner; take 1 failed | waiting on Duff |
 | `assets/art/station_grill.png` | rush-st-grill-20261125 / 0 | 24812 | `art_loop.py cut --height 256` | waiting on Duff |
 | `assets/art/station_fryer.png` | rush-st-fryer-20261125 / 0 | 24812 | cut; fake brand text painted out; key shadow removed | waiting on Duff |
 | `assets/art/station_saute.png` | rush-st-saute-20261125 / 0 | 24812 | cut | waiting on Duff |
