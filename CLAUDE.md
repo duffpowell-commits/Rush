@@ -55,7 +55,7 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   pushes it to gh-pages on main: https://duffpowell-commits.github.io/Rush/. The build clip is Rush
   itself now (`_record_kitchen_clip`: service 3 via `game.bot_step()`, no coach, no captions), not the
   template's 3D scene. Copy + links: docs/AD_KIT.md. Nothing posts without Duff's yes.
-- Latest build: Releases -> `dev` -> `rush.apk`.
+- Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
 - Next: Duff plays the APK; then real art and sound for the one service (QUEUE.md NOW).

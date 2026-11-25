@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      contents: write            # main only: the 10 s gameplay clip goes to the dev release
+      contents: write            # main only: the 15 s gameplay clip goes to the dev release
     steps:
       - uses: actions/checkout@v4
       - name: Install Godot
@@ -132,13 +132,6 @@ jobs:
           grep -A8 "configuration errors" export.log || true
           test -f build/android/$APK
           ls -la build/android
-      - name: Export web build (plays in a phone browser; the ad link)
-        run: |
-          mkdir -p build/web
-          touch build/.gdignore
-          godot --headless --path . --export-release "Web" build/web/index.html 2>&1 | tee web.log
-          test -f build/web/index.html && test -f build/web/index.wasm && test -f build/web/index.pck
-          ls -la build/web
       - name: Check the APK can update itself
         run: |
           AAPT=$(ls -d $ANDROID_HOME/build-tools/*/ | sort -V | tail -1)aapt
@@ -164,8 +157,15 @@ jobs:
           echo "{\"code\": ${{ github.run_number }}, \"sha\": \"${GITHUB_SHA::7}\"}" > version.json
           gh release upload dev version.json --clobber
           gh release edit dev --notes "Rebuilt on every push to main. Last: build ${{ github.run_number }} (${GITHUB_SHA::7})"
+      - name: Export web build (plays in a phone browser; the ad link)
+        run: |
+          mkdir -p build/web
+          touch build/.gdignore
+          godot --headless --path . --export-release "Web" build/web/index.html 2>&1 | tee web.log
+          test -f build/web/index.html && test -f build/web/index.wasm && test -f build/web/index.pck
+          ls -la build/web
       - name: Publish the web build to GitHub Pages (main only)
-        # Play link: https://<owner>.github.io/<repo>/ (Settings -> Pages -> branch gh-pages, once).
+        # Play link: https://duffpowell-commits.github.io/Rush/ (Settings -> Pages -> branch gh-pages, once).
         # build/web becomes the only commit on gh-pages. Threads are off in the Web preset, so Pages
         # needs no COOP/COEP headers.
         if: github.ref == 'refs/heads/main'

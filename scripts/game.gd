@@ -624,7 +624,6 @@ func debug_skip_level() -> void:
 	_after_move()
 
 
-## The autoplay bot's turn: the greedy line cook from kitchen.gd, then END TURN.
 ## One bot action through the real screen code, so the juice and sounds fire (the build clip uses it).
 ## Returns false when it ended the turn instead.
 func bot_step() -> bool:
@@ -637,8 +636,11 @@ func bot_step() -> bool:
 		pick_tid = 0
 		var what := k.action_here(c, false)
 		if what != "":
+			var ap_was: int = k.crew[c].ap
 			act()
-			return true
+			if k.crew[c].ap < ap_was:
+				return true
+			break   # the action didn't take: end the turn rather than retry it forever
 		var goal: int = k._bot_goal(c)
 		if goal < 0 or goal == k.crew[c].at:
 			continue
@@ -653,6 +655,7 @@ func bot_step() -> bool:
 	return false
 
 
+## The autoplay bot's turn: the greedy line cook from kitchen.gd, then END TURN.
 func bot_play_turn() -> void:
 	k.bot_turn()
 	score = _night_before + k.served
