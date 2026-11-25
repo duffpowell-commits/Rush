@@ -769,7 +769,7 @@ func _coach_next() -> void:
 				# phone (web, 9:19.5) stretches the canvas, and a fraction of its height landed on the station names
 				c.anchor_top = 0.0
 				c.anchor_bottom = 0.0
-				c.offset_top = station_rect(0).position.y - 58.0   # the field sits at the origin; the band adds a few px
+				c.offset_top = station_rect(0).position.y - 50.0   # the field sits at the origin; fits the gap under the NEXT bar
 				c.offset_bottom = c.offset_top + 48.0
 		return
 
