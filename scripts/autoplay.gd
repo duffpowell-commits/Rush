@@ -153,10 +153,15 @@ func _run() -> void:
 	k.crew[0].at = 1
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
 	var picked_pan: bool = game.sel == 0 and k.crew[0].at == 1 and k.crew[1].at == Kitchen.PASS_IX and k.crew[1].ap == mo_ap
+	# A second tap on the same station hands off: MO (picked before) walks to DEV's pan after all.
+	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
+	var handoff: bool = game.sel == 1 and k.crew[1].at == 0 and k.crew[0].at == 1
+	k.crew[1].at = Kitchen.PASS_IX
+	k.crew[1].ap = mo_ap
 	k.crew[0].at = 0
 	game._after_move()
 	await _shot("station_pick")
-	_check(picked_here and picked_pan, "STATION PICK PASS (MO picked, GRILL tap picked DEV who stands there; with DEV away it picked him again by his burger; MO never moved)")
+	_check(picked_here and picked_pan and handoff, "STATION PICK PASS (MO picked, GRILL tap picked DEV who stands there; with DEV away it picked him by his burger; a 2nd GRILL tap sent MO to it)")
 	# The next hint follows by itself: after FIRE, END TURN is taught.
 	var next_hint := false
 	for i in 60:

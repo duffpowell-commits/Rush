@@ -6,7 +6,7 @@ const UI = preload("res://scripts/ui.gd")
 
 const STEPS := [
 	["dish_burger", "Tickets are the enemy. Each one has a clock. Get its food out before it hits zero."],
-	["cook_dev", "Tap a cook, then a station, to walk there. Every move and job costs an action."],
+	["cook_dev", "Tap a cook, then a station, to walk there. Tap a busy station to pick its cook; tap it again to send yours. Moves and jobs cost an action."],
 	["station_grill", "At a station, FIRE starts the next dish. When the pan is done, PLATE it."],
 	["station_pass", "Plates wait on the pass. Any cook at the PASS can RUN one to its table. Trays in the SHOP carry more."],
 	["cook_mo", "END TURN and every clock ticks a minute. Hot work adds stress. Max stress and that cook walks out."],
