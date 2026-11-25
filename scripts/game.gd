@@ -480,6 +480,7 @@ func _draw_field(f: Control) -> void:
 				f.draw_string(font, Vector2(r.position.x + 8, iy + 14), "  at " + Kitchen.station_of(it.dish),
 					HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(11), UI.DIM)
 			iy += 33
+	_plate(f, Rect2(pad - 6, y0 + 218, f.size.x - 2 * pad + 12, 30))
 	if shown.size() > 4:
 		f.draw_string(font, Vector2(f.size.x - 70, y0 + 222), "+%d" % (shown.size() - 4), HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(20), UI.key("warn"))
 	_plate(f, Rect2(pad - 6, y0 - 36, f.size.x - 2 * pad + 12, 30))   # busy kitchen wall behind: text sits on plates
@@ -490,7 +491,6 @@ func _draw_field(f: Control) -> void:
 		nx += "%d' %s   " % [pv["in"], ("BIG" if pv.ticket.big else "%d dish" % pv.ticket.items.size())]
 	if k.preview(1).is_empty():
 		nx += "last tickets"
-	_plate(f, Rect2(pad - 6, y0 + 218, f.size.x - 2 * pad + 12, 30))
 	f.draw_string(font, Vector2(pad, y0 + 240), nx, HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20, UI.font_size(18), ink)
 	# --- the line
 	for i in Kitchen.STATIONS.size():
@@ -513,7 +513,11 @@ func _draw_field(f: Control) -> void:
 			_draw_fit(f, ART_DISHES[p.dish], Rect2(pc - Vector2(28, 28), Vector2(56, 56)))
 			# State in words, not colour alone: 2' cooking, UP! ready, BURN! about to burn.
 			_plate(f, Rect2(r.position.x + 4, r.end.y - 38, r.size.x - 8, 30))
-			f.draw_string(font, r.position + Vector2(0, r.size.y - 16), "%s %s" % [p.dish, ("BURN!" if burning else "UP!") if up else "%d'" % p.left],
+			var st := ("BURN!" if burning else "UP!") if up else "%d'" % p.left
+			var lbl := "%s %s" % [p.dish, st]
+			if font.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(15)).x > r.size.x - 14:
+				lbl = st   # big text sizes: the state wins, the dish art still says which dish
+			f.draw_string(font, r.position + Vector2(0, r.size.y - 16), lbl,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(15), UI.key(tone))
 		elif i < k.pans.size():
 			var waiting := 0
