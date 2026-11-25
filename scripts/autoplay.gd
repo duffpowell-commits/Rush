@@ -135,6 +135,51 @@ func _run() -> void:
 		await _frames(3)
 	await _shot("game")
 	_check(game.score > start_score, "PLAY PASS (%d ticket out by %s)" % [game.score, game.k.clock()])
+	# Nov 25 playtest features, by real taps on a set-up minute (then the service is put back):
+	# tap a ticket to cook it first, RUSH a cooking pan, plates go up on the pass window and MO runs one.
+	var real: Dictionary = game.k.to_dict()
+	var kk: Object = game.k
+	kk.tickets = [
+		{"id": 901, "table": 21, "items": [{"dish": "STEAK", "state": "wait"}], "time": 3, "big": false},
+		{"id": 902, "table": 22, "items": [{"dish": "BURGER", "state": "wait"}, {"dish": "FRIES", "state": "cooking"}], "time": 8, "big": false}]
+	kk.pans = [{}, {"tid": 902, "dish": "FRIES", "left": 0, "sat": 0, "rushed": false}, {}]
+	kk.window = []
+	kk.crew[0].at = 0
+	kk.crew[1].at = 1
+	for cr in kk.crew:
+		cr.ap = kk.ap
+		cr.out = false
+		cr.stress = 0
+		cr.hand = {}
+	game.sel = 0
+	game.pick_tid = 0
+	game._after_move()
+	var fire_default: String = game.act_btn.text
+	await _tap_at(game.field.get_global_transform() * game.ticket_rect(1).get_center())   # table 22: less urgent
+	var pick_ok: bool = game.pick_tid == 902 and game.act_btn.text == "FIRE T22"
+	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())   # DEV's own station: act
+	pick_ok = pick_ok and kk.pans[0].get("tid", 0) == 902 and fire_default == "FIRE T21"
+	_check(pick_ok, "PICK PASS (button said FIRE T21, tapped table 22's ticket, FIRE cooked its burger)")
+	var left0: int = kk.pans[0].left
+	var rush_label: String = game.act_btn.text
+	game.act()
+	_check(rush_label == "RUSH +STRESS" and kk.pans[0].left == left0 - 1 and kk.crew[0].stress == kk.rush_stress,
+		"RUSH PASS (burger %d -> %d minutes, DEV stress %d)" % [left0, kk.pans[0].left, kk.crew[0].stress])
+	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
+	await _tap_at(game.field.get_global_transform() * game.station_rect(1).get_center())   # MO plates the fries
+	var up: bool = kk.window.size() == 1 and kk.crew[1].hand.is_empty()
+	game.field.queue_redraw()
+	await _shot("pick_rush_window")
+	game.end_turn()   # MO spent an action plating: a fresh turn to walk 2 stations and run
+	await _tap_at(game.field.get_global_transform() * game.station_rect(Kitchen.PASS_IX).get_center())
+	var on_pass: bool = kk.crew[1].at == Kitchen.PASS_IX and game.act_btn.text == "RUN"
+	game.act()
+	var ran: bool = kk.window.is_empty() and kk.ticket(902).items[1].state == "served"
+	_check(up and on_pass and ran, "WINDOW PASS (fries plated up on the window, MO walked to the pass and ran them)")
+	game.k = Kitchen.new()
+	game.k.from_dict(real)
+	game.pick_tid = 0
+	game._after_move()
 	# Both cooks at an end station stay fully on screen, a touch target apart.
 	var at_before: Array = [game.k.crew[0].at, game.k.crew[1].at]
 	var edge_ok := true

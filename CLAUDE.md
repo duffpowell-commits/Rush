@@ -12,7 +12,7 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   Tests: `test_kitchen_*` in tests/run_tests.gd. Autoplay: TAP PASS + PLAY PASS drive a real service.
 - Tuning lives in game.gd TUNE (ticket_time, crew_ap, stress_cap, service_turns, first_tickets,
   more_tickets): DEV MENU -> TUNE. Defaults: 9-minute tickets, 3 actions, stress cap 6, 20-minute
-  service, 6 tickets in service 1 and +1 each service after.
+  service, 8 tickets in service 1 and +1 each service after.
 - Nov 25 (audit, this is what changed): the curve was 5+2n, which the greedy bot lost 81% of the
   time in service 2 and 99% in service 3; it is now 6+1(n-1) (~40% / ~65%, `test_kitchen_service_curve`
   holds service 2 at or under 55%). A service now ends on a grade sheet (`Kitchen.grade()`, A-F:
@@ -24,6 +24,13 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   station shows "N TO FIRE". The intro is Rush's own. The APK drops the template's 3D test scene
   and its imported models (export exclude_filter; ~2.2 MB: the 16 MB .glb sources never shipped), so the dev menu hides those two buttons when
   the scene isn't in the build.
+- Nov 25 (Claude playtest, Duff picked "top 3"): tap a ticket card to make FIRE cook that table
+  first (the button names the table); RUSH takes a minute off a cooking pan once a turn for
+  `rush_stress` stress (TUNE); plating puts the dish on the pass window (`Kitchen.window`) and any cook
+  at the pass runs it, so nobody carries plates. The window made the bot much stronger, so the curve
+  is now 8 tickets + 1 per service (bot: s2 ~41%, s3 ~69% game over). Save.VERSION 3 moves a carried
+  plate onto the window. Autoplay: PICK, RUSH, WINDOW PASS. Open from the playtest: grades only land
+  A/C/F, and the sounds are the template's.
 - Latest build: Releases -> `dev` -> `rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

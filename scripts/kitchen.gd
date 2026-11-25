@@ -4,8 +4,11 @@ extends RefCounted
 ##
 ## The line, left to right: GRILL, FRY, SAUTE, PASS. Each cook station holds one pan.
 ## A turn is one minute of service. Each cook gets AP actions a turn:
-##   move one station = 1 AP, FIRE a dish at your station = 1, PLATE a finished dish = 1,
-##   RUN a plate at the pass = 1 (that dish is served).
+##   move one station = 1 AP, FIRE a dish at your station = 1 (the player can pick the ticket),
+##   RUSH a cooking pan = 1 (a minute off, once a turn, costs stress), PLATE a finished dish = 1
+##   (it goes up on the pass window), RUN a plate from the window at the pass = 1 (served).
+## Nov 25 playtest: picking the ticket, RUSH and the window were added so the turn is choices,
+## not walking (a grill->pass->grill trip used to eat a whole turn).
 ## End of turn: pans cook one step, finished pans left sitting burn, ticket clocks tick down.
 ## A ticket at 0 is walked (a comp). Too many comps and the night is over.
 ## Stress: a working cook gains 1 at end of turn while any ticket is red (2 min or less), and 2 for a burn on
@@ -30,13 +33,15 @@ var ticket_time := 9     # minutes a ticket has before it's walked
 var ap := 3              # actions per cook per turn
 var stress_cap := 6
 var burn_after := 1      # a finished pan burns at the end of the turn its wait passes this (2 turns to plate at 1)
-var first_tickets := 6   # tickets in service 1
-var more_tickets := 1    # extra tickets each later service (greedy bot, 200 seeds: s2 ~40% game over, s3 ~65%)
+var rush_stress := 1     # stress a RUSH costs the cook
+var first_tickets := 8   # tickets in service 1
+var more_tickets := 1    # extra tickets each later service (greedy bot with the pass window, 200 seeds: s2 ~41% game over, s3 ~69%; was 6+1 before the window)
 
 var service := 1
 var turn := 0
 var crew: Array = []        # {name, at, ap, stress, out, hand: {} or {tid, dish}, acted}
-var pans: Array = []        # per cook station: {} or {tid, dish, left, sat}
+var pans: Array = []        # per cook station: {} or {tid, dish, left, sat, rushed}
+var window: Array = []      # plated dishes up on the pass: {tid, dish}
 var tickets: Array = []     # active: {id, table, items: [{dish, state}], time, big}
 var incoming: Array = []    # not yet on the rail: {arrive, ticket}
 var served := 0             # tickets out complete
@@ -64,6 +69,7 @@ func start(n: int, seed_value: int = 0) -> void:
 	crew[0].at = 0
 	crew[1].at = 2
 	pans = [{}, {}, {}]
+	window.clear()
 	tickets.clear()
 	incoming.clear()
 	var count := maxi(1, first_tickets + more_tickets * (n - 1))
@@ -139,21 +145,35 @@ func move(c: int, s: int) -> bool:
 	return true
 
 
-## Fire the most urgent waiting dish for this cook's station. tid picks a ticket instead.
+## Fire a waiting dish at this cook's station: the picked ticket (tid) if it has one here, else the
+## most urgent ticket.
 func fire(c: int, tid: int = 0) -> bool:
 	if not can_act(c):
 		return false
 	var s: int = crew[c].at
 	if s == PASS_IX or not pans[s].is_empty():
 		return false
-	var pick := _waiting_for(s, tid)
+	var pick := fire_pick(c, tid)
 	if pick.is_empty():
 		return false
 	pick.item.state = "cooking"
-	pans[s] = {"tid": pick.t.id, "dish": pick.item.dish, "left": DISHES[pick.item.dish].cook, "sat": 0}
+	pans[s] = {"tid": pick.t.id, "dish": pick.item.dish, "left": DISHES[pick.item.dish].cook, "sat": 0, "rushed": false}
 	crew[c].ap -= 1
 	crew[c].acted = true
 	return true
+
+
+## What FIRE would cook for cook c ({t, item}, or {} for nothing), so the screen can say which table.
+func fire_pick(c: int, tid: int = 0) -> Dictionary:
+	if c < 0 or c >= crew.size():
+		return {}
+	var s: int = crew[c].at
+	if s == PASS_IX:
+		return {}
+	var pick := _waiting_for(s, tid)
+	if pick.is_empty() and tid != 0:
+		pick = _waiting_for(s, 0)
+	return pick
 
 
 func _waiting_for(s: int, tid: int) -> Dictionary:
@@ -168,9 +188,9 @@ func _waiting_for(s: int, tid: int) -> Dictionary:
 	return {}
 
 
-## Pick up the finished dish from this cook's station.
+## Plate the finished dish at this cook's station: it goes up on the pass window.
 func plate(c: int) -> bool:
-	if not can_act(c) or not crew[c].hand.is_empty():
+	if not can_act(c):
 		return false
 	var s: int = crew[c].at
 	if s == PASS_IX or pans[s].is_empty() or pans[s].left > 0:
@@ -186,18 +206,44 @@ func plate(c: int) -> bool:
 		if it.state == "cooking" and it.dish == p.dish:
 			it.state = "carried"
 			break
-	crew[c].hand = {"tid": p.tid, "dish": p.dish}
+	window.append({"tid": p.tid, "dish": p.dish})
 	crew[c].ap -= 1
 	crew[c].acted = true
 	return true
 
 
-## Run the plate in hand at the pass. A ticket with every dish run is out: tips by time left.
+## A minute off a cooking pan, once per pan per turn. The cook pays in stress.
+func rush(c: int) -> bool:
+	if not can_act(c) or crew[c].at == PASS_IX:
+		return false
+	var p: Dictionary = pans[crew[c].at]
+	if p.is_empty() or p.left <= 0 or p.get("rushed", false):
+		return false
+	p.left -= 1
+	p.rushed = true
+	crew[c].stress += rush_stress
+	crew[c].ap -= 1
+	crew[c].acted = true
+	return true
+
+
+## Run a plate at the pass: the one in hand (saves from before the window), else the window plate
+## whose table is closest to walking. A ticket with every dish run is out: tips by time left.
 func run(c: int) -> bool:
-	if not can_act(c) or crew[c].at != PASS_IX or crew[c].hand.is_empty():
+	if not can_act(c) or crew[c].at != PASS_IX:
 		return false
 	var h: Dictionary = crew[c].hand
-	crew[c].hand = {}
+	if not h.is_empty():
+		crew[c].hand = {}
+	elif window.is_empty():
+		return false
+	else:
+		var best := 0
+		for i in window.size():
+			if ticket(window[i].tid).get("time", 99) < ticket(window[best].tid).get("time", 99):
+				best = i
+		h = window[best]
+		window.remove_at(best)
 	crew[c].ap -= 1
 	crew[c].acted = true
 	var t := ticket(h.tid)
@@ -216,27 +262,33 @@ func run(c: int) -> bool:
 
 
 ## The one sensible action for cook c where they stand, or "" (game.gd's big button).
-func action_here(c: int) -> String:
+## RUSH only when allow_rush: the bot leaves it alone, so the balance curve measures the base game.
+func action_here(c: int, allow_rush: bool = true) -> String:
 	if not can_act(c):
 		return ""
 	var s: int = crew[c].at
 	if s == PASS_IX:
-		return "RUN" if not crew[c].hand.is_empty() else ""
-	if not pans[s].is_empty() and pans[s].left <= 0 and crew[c].hand.is_empty():
+		return "RUN" if not crew[c].hand.is_empty() or not window.is_empty() else ""
+	var p: Dictionary = pans[s]
+	if not p.is_empty() and p.left <= 0:
 		return "PLATE"
-	if pans[s].is_empty() and not _waiting_for(s, 0).is_empty():
+	if p.is_empty() and not _waiting_for(s, 0).is_empty():
 		return "FIRE"
+	if allow_rush and not p.is_empty() and p.left > 0 and not p.get("rushed", false):
+		return "RUSH"
 	return ""
 
 
-func act_here(c: int) -> bool:
-	match action_here(c):
+func act_here(c: int, tid: int = 0, allow_rush: bool = true) -> bool:
+	match action_here(c, allow_rush):
 		"RUN":
 			return run(c)
 		"PLATE":
 			return plate(c)
 		"FIRE":
-			return fire(c)
+			return fire(c, tid)
+		"RUSH":
+			return rush(c)
 	return false
 
 
@@ -251,6 +303,7 @@ func end_turn() -> void:
 		var p: Dictionary = pans[s]
 		if p.is_empty():
 			continue
+		p.rushed = false
 		if p.left > 0:
 			p.left -= 1
 		else:
@@ -277,6 +330,7 @@ func end_turn() -> void:
 			for s in pans.size():
 				if not pans[s].is_empty() and pans[s].tid == t.id:
 					pans[s] = {}
+			window = window.filter(func(w): return w.tid != t.id)   # its plates on the pass are binned
 			for cr in crew:   # a plate for a walked table is binned, so the cook's hands are free
 				if not cr.hand.is_empty() and cr.hand.tid == t.id:
 					cr.hand = {}
@@ -336,13 +390,14 @@ func to_dict() -> Dictionary:
 		"tickets": tickets.duplicate(true), "incoming": incoming.duplicate(true), "served": served,
 		"walked": walked, "tips": tips, "done": done, "total": total, "next_id": _next_id,
 		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
-		"stress_cap": stress_cap, "burn_after": burn_after}
+		"stress_cap": stress_cap, "burn_after": burn_after,
+		"window": window.duplicate(true), "rush_stress": rush_stress}
 
 
 ## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
 func from_dict(d: Dictionary) -> bool:
 	for key in ["crew", "tickets", "pans", "incoming", "service", "turn", "served", "walked", "tips",
-			"done", "next_id", "rng", "turns", "ticket_time", "ap", "stress_cap", "burn_after"]:
+			"done", "next_id", "rng", "turns", "ticket_time", "ap", "stress_cap", "burn_after", "window"]:
 		if not d.has(key):
 			return false   # a mangled save: keep the fresh service instead
 	service = int(d.service)
@@ -359,6 +414,10 @@ func from_dict(d: Dictionary) -> bool:
 	ap = int(d.ap)
 	stress_cap = int(d.stress_cap)
 	burn_after = int(d.burn_after)
+	rush_stress = int(d.get("rush_stress", 1))
+	window = []
+	for w in d.window:
+		window.append({"tid": int(w.tid), "dish": str(w.dish)})
 	crew = []
 	for c in d.crew:
 		var h: Dictionary = c.hand
@@ -367,7 +426,8 @@ func from_dict(d: Dictionary) -> bool:
 			"hand": {} if h.is_empty() else {"tid": int(h.tid), "dish": str(h.dish)}})
 	pans = []
 	for p in d.pans:
-		pans.append({} if p.is_empty() else {"tid": int(p.tid), "dish": str(p.dish), "left": int(p.left), "sat": int(p.sat)})
+		pans.append({} if p.is_empty() else {"tid": int(p.tid), "dish": str(p.dish), "left": int(p.left), "sat": int(p.sat),
+			"rushed": bool(p.get("rushed", false))})
 	tickets = []
 	for t in d.tickets:
 		tickets.append(_ticket_from(t))
@@ -404,7 +464,7 @@ func bot_turn() -> int:
 			continue   # rest this turn or walk out
 		while can_act(c) and guard < 8:
 			guard += 1
-			if act_here(c):
+			if act_here(c, 0, false):
 				acts += 1
 				continue
 			var goal := _bot_goal(c)
@@ -420,6 +480,9 @@ func bot_turn() -> int:
 
 func _bot_goal(c: int) -> int:
 	if not crew[c].hand.is_empty():
+		return PASS_IX
+	# Plates waiting on the window and nobody at the pass.
+	if not window.is_empty() and not _other_at(c, PASS_IX):
 		return PASS_IX
 	# A finished pan nobody else is standing at.
 	for s in pans.size():

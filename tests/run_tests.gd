@@ -367,7 +367,7 @@ func test_kitchen_fire_to_table() -> void:
 	k.end_turn()
 	k.end_turn()
 	check(k.pans[0].left == 0 and k.action_here(0) == "PLATE", "burger is up after 2 minutes")
-	check(k.plate(0) and k.crew[0].hand.dish == "BURGER", "plated into DEV's hand")
+	check(k.plate(0) and k.window.size() == 1 and k.window[0].dish == "BURGER", "plated up onto the pass window")
 	check(not k.move(0, 3), "can't cross 3 stations on 2 actions")
 	check(k.move(0, 2) and k.crew[0].ap == 0, "2 stations = 2 actions")
 	k.end_turn()
@@ -493,7 +493,7 @@ func test_rush_save_no_double_count() -> void:
 func test_save_migrates_v1() -> void:
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 1, "level": 3, "score": 9, "lives": 2})
-	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 2, "v1 -> v2")
+	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 3, "v1 -> v3")
 	sv.free()
 
 
@@ -514,6 +514,71 @@ func test_kitchen_service_curve() -> void:
 					break
 	check(over[2] <= 55, "service 2: bot game over in %d%% (want <= 55)" % over[2])
 	check(over[3] > over[2], "service 3 is harder (%d%% vs %d%%)" % [over[3], over[2]])
+
+
+## Nov 25 playtest: the player picks which ticket FIRE cooks; without a pick it's the most urgent.
+func test_kitchen_pick_ticket() -> void:
+	var k := _kitchen()
+	k.tickets = [
+		{"id": 50, "table": 5, "items": [{"dish": "STEAK", "state": "wait"}], "time": 3, "big": false},
+		{"id": 60, "table": 6, "items": [{"dish": "BURGER", "state": "wait"}], "time": 9, "big": false}]
+	check(k.fire_pick(0).t.id == 50, "no pick: the most urgent ticket")
+	check(k.fire_pick(0, 60).t.id == 60, "picked: that ticket")
+	check(k.fire_pick(0, 999).t.id == 50, "a pick with nothing at this station falls back to most urgent")
+	check(k.act_here(0, 60) and k.pans[0].tid == 60 and k.pans[0].dish == "BURGER", "FIRE cooked the picked table")
+
+
+## RUSH: a minute off a cooking pan, once a turn, for stress. The bot never rushes.
+func test_kitchen_rush() -> void:
+	var k := _kitchen()
+	k.tickets = [{"id": 70, "table": 7, "items": [{"dish": "STEAK", "state": "wait"}], "time": 9, "big": false}]
+	k.fire(0)
+	check(k.action_here(0) == "RUSH" and k.action_here(0, false) == "", "a cooking pan offers RUSH (not to the bot)")
+	var st: int = k.crew[0].stress
+	check(k.rush(0) and k.pans[0].left == 2 and k.crew[0].stress == st + k.rush_stress, "rush: a minute off, stress up")
+	check(not k.rush(0), "only once a turn")
+	k.end_turn()
+	check(k.pans[0].left == 1 and k.rush(0) and k.pans[0].left == 0, "next turn it can rush again")
+	check(k.action_here(0) == "PLATE", "a 3-minute steak is up after one end of turn")
+
+
+## The pass window: plates go up, any cook at the pass runs them; a walked table's plates are binned.
+func test_kitchen_window() -> void:
+	var k := _kitchen()
+	k.tickets = [
+		{"id": 80, "table": 8, "items": [{"dish": "FRIES", "state": "wait"}], "time": 9, "big": false},
+		{"id": 81, "table": 9, "items": [{"dish": "SCAMPI", "state": "wait"}], "time": 1, "big": false}]
+	k.move(0, 1)
+	k.fire(0)
+	k.crew[1].at = 2
+	k.fire(1)
+	k.end_turn()   # both are 1-minute dishes; table 9 walks at the end of this turn
+	check(k.walked == 1, "table 9 walked")
+	k.crew[1].at = 2
+	check(k.pans[2].is_empty(), "its pan was cleared")
+	check(k.plate(0) and k.window.size() == 1, "fries up on the window")
+	check(k.crew[0].hand.is_empty(), "DEV's hands stay free")
+	k.crew[1].at = 3
+	check(k.action_here(1) == "RUN" and k.run(1) and k.served == 1, "MO runs it from the pass")
+	k.window = [{"tid": 999, "dish": "PASTA"}]
+	k.tickets = [{"id": 999, "table": 3, "items": [{"dish": "PASTA", "state": "carried"}], "time": 1, "big": false}]
+	k.end_turn()
+	check(k.window.is_empty(), "a walked table's plate leaves the window")
+
+
+## A v2 save from before the window: a plate in a cook's hand moves onto the window.
+func test_save_migrates_v2() -> void:
+	var sv = load("res://scripts/save_game.gd").new()
+	var a := Kitchen.new()
+	a.start(1)
+	var kd: Dictionary = a.to_dict()
+	kd.erase("window")
+	kd.crew[0].hand = {"tid": 1, "dish": "BURGER"}
+	var d: Dictionary = sv._migrate({"_version": 2, "level": 1, "score": 0, "kitchen": kd})
+	check(int(d._version) == 3 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
+	var b := Kitchen.new()
+	check(b.from_dict(d.kitchen) and b.window.size() == 1, "and it loads")
+	sv.free()
 
 
 ## Grades: a clean service is an A; walked tables cost a letter each.
