@@ -24,8 +24,12 @@ const EVENTS := {
 }
 const EVENT_IDS := ["tour", "fritz", "vip", "critic"]
 
-const STATIONS := ["GRILL", "FRY", "SAUTE", "PASS"]
-const PASS_IX := 3
+const STATIONS := ["GRILL", "FRY", "SAUTE", "COLD", "PASS"]
+const PASS_IX := 4
+## The line grows as the night goes on (Duff, Nov 25: "add stations as they progress", by service):
+## service 1 is grill + fry, saute opens in service 2, the cold station (salad, cake) in service 3.
+## A closed station is walked past for free and takes no tickets.
+const OPENS := [1, 1, 2, 3]
 
 ## Dish: station it cooks at, minutes on the heat.
 const DISHES := {
@@ -35,6 +39,8 @@ const DISHES := {
 	"WINGS": {"st": 1, "cook": 2},
 	"PASTA": {"st": 2, "cook": 2},
 	"SCAMPI": {"st": 2, "cook": 1},
+	"SALAD": {"st": 3, "cook": 1},
+	"CAKE": {"st": 3, "cook": 2},
 }
 
 var turns := 20          # service length in minutes (7:00 to 7:20 PM)
@@ -43,7 +49,7 @@ var ap := 3              # actions per cook per turn
 var stress_cap := 6
 var burn_after := 1      # a finished pan burns at the end of the turn its wait passes this (2 turns to plate at 1)
 var rush_stress := 1     # stress a RUSH costs the cook
-var first_tickets := 8   # tickets in service 1
+var first_tickets := 7   # tickets in service 1 (Nov 25 stations: bot s1 ~8%, s2 ~32%, s3 ~48%, s4 ~71% game over, twists on)
 var more_tickets := 1    # extra tickets each later service (greedy bot with the pass window, 200 seeds: s2 ~41% game over, s3 ~69%; was 6+1 before the window)
 
 var service := 1
@@ -56,6 +62,7 @@ var incoming: Array = []    # not yet on the rail: {arrive, ticket}
 var served := 0             # tickets out complete
 var walked := 0             # tickets comped this service
 var tips := 0
+var all_open := false      # true: every station open from service 1 (old tests, sweeps)
 var event := ""             # this service's twist (EVENTS), "" in service 1
 var with_events := true     # false: plain services (balance sweeps)
 var critic := ""            # "", "served" or "walked"
@@ -79,8 +86,8 @@ func start(n: int, seed_value: int = 0) -> void:
 	rng.seed = seed_value if seed_value != 0 else 1000 + n
 	crew = [_cook("DEV"), _cook("MO")]
 	crew[0].at = 0
-	crew[1].at = 2
-	pans = [{}, {}, {}]
+	pans = [{}, {}, {}, {}]
+	crew[1].at = 2 if is_open(2) else 1
 	window.clear()
 	tickets.clear()
 	incoming.clear()
@@ -129,12 +136,25 @@ func cook_time(dish: String) -> int:
 	return DISHES[dish].cook + (1 if event == "fritz" and DISHES[dish].st == 0 else 0)
 
 
+func is_open(st: int) -> bool:
+	return st == PASS_IX or all_open or (st >= 0 and st < OPENS.size() and service >= OPENS[st])
+
+
+## Walking cost between two stations: one action per open stop, closed ones are passed for free.
+func walk_cost(from: int, to: int) -> int:
+	var cost := 0
+	for st in range(mini(from, to) + 1, maxi(from, to) + 1):
+		if is_open(st):
+			cost += 1
+	return cost
+
+
 func _cook(nm: String) -> Dictionary:
 	return {"name": nm, "at": 0, "ap": ap, "stress": 0, "out": false, "hand": {}, "acted": false}
 
 
 func _make_ticket(big: bool) -> Dictionary:
-	var names: Array = DISHES.keys()
+	var names: Array = DISHES.keys().filter(func(d): return is_open(DISHES[d].st))
 	var items: Array = []
 	var k := 4 if big else rng.randi_range(1, 2)
 	for i in k:
@@ -179,9 +199,9 @@ func can_act(c: int) -> bool:
 
 ## Move cook c to station s. Costs 1 AP per station crossed.
 func move(c: int, s: int) -> bool:
-	if not can_act(c) or s < 0 or s >= STATIONS.size() or s == crew[c].at:
+	if not can_act(c) or s < 0 or s >= STATIONS.size() or s == crew[c].at or not is_open(s):
 		return false
-	var cost: int = absi(s - crew[c].at)
+	var cost: int = walk_cost(crew[c].at, s)
 	if cost > crew[c].ap:
 		return false
 	crew[c].ap -= cost
@@ -441,7 +461,7 @@ func to_dict() -> Dictionary:
 		"walked": walked, "tips": tips, "done": done, "total": total, "next_id": _next_id,
 		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
 		"stress_cap": stress_cap, "burn_after": burn_after,
-		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic}
+		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic, "all_open": all_open}
 
 
 ## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
@@ -466,6 +486,7 @@ func from_dict(d: Dictionary) -> bool:
 	burn_after = int(d.burn_after)
 	rush_stress = int(d.get("rush_stress", 1))
 	event = str(d.get("event", ""))
+	all_open = bool(d.get("all_open", false))
 	critic = str(d.get("critic", ""))
 	window = []
 	for w in d.window:
@@ -527,6 +548,8 @@ func bot_turn() -> int:
 			if goal < 0 or goal == crew[c].at:
 				break
 			var step: int = crew[c].at + signi(goal - crew[c].at)
+			while not is_open(step):   # walk past closed stations to the next open stop
+				step += signi(goal - crew[c].at)
 			if move(c, step):
 				acts += 1
 			else:
@@ -548,7 +571,7 @@ func _bot_goal(c: int) -> int:
 	var best := -1
 	for s in pans.size():
 		if pans[s].is_empty() and not _waiting_for(s, 0).is_empty() and not _other_at(c, s):
-			if best < 0 or absi(s - crew[c].at) < absi(best - crew[c].at):
+			if best < 0 or walk_cost(crew[c].at, s) < walk_cost(crew[c].at, best):
 				best = s
 	return best
 

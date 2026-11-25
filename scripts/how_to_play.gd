@@ -12,7 +12,7 @@ const STEPS := [
 	["cook_mo", "END TURN and every clock ticks a minute. Hot work adds stress. Max stress and that cook walks out."],
 	["dish_steak", "Walk 3 tables in one service and the night is over. Clear the service to get a grade."],
 ]
-const TIPS := "Tap a ticket to make FIRE cook it first.\nRUSH takes a minute off a pan, for stress."
+const TIPS := "Tap a ticket to make FIRE cook it first.\nRUSH takes a minute off a pan, for stress.\nThe line grows: saute opens in service 2, cold in service 3."
 
 
 static func open(parent: Node) -> VBoxContainer:
