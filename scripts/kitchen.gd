@@ -329,7 +329,8 @@ static func station_of(dish: String) -> String:
 
 # ---------------------------------------------------------------- save mid-service
 
-## Everything needed to pick the service back up exactly where it was (JSON-safe).
+## Everything needed to pick the service back up exactly where it was (JSON-safe). The service's own
+## tuning rides along on purpose: a TUNE change applies from the next service, not mid-service.
 func to_dict() -> Dictionary:
 	return {"service": service, "turn": turn, "crew": crew.duplicate(true), "pans": pans.duplicate(true),
 		"tickets": tickets.duplicate(true), "incoming": incoming.duplicate(true), "served": served,
@@ -340,8 +341,10 @@ func to_dict() -> Dictionary:
 
 ## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
 func from_dict(d: Dictionary) -> bool:
-	if not d.has("crew") or not d.has("tickets") or not d.has("pans") or not d.has("incoming"):
-		return false
+	for key in ["crew", "tickets", "pans", "incoming", "service", "turn", "served", "walked", "tips",
+			"done", "next_id", "rng", "turns", "ticket_time", "ap", "stress_cap", "burn_after"]:
+		if not d.has(key):
+			return false   # a mangled save: keep the fresh service instead
 	service = int(d.service)
 	turn = int(d.turn)
 	served = int(d.served)

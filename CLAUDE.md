@@ -22,7 +22,7 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   minute instead of rerolling with full lives. Five coach hints teach FIRE, END TURN, PLATE, RUN
   and switching cooks, one at a time. Ticket cards show each waiting dish's station; an empty
   station shows "N TO FIRE". The intro is Rush's own. The APK drops the template's 3D test scene
-  and its 16 MB of models (export exclude_filter), so the dev menu hides those two buttons when
+  and its imported models (export exclude_filter; ~2.2 MB: the 16 MB .glb sources never shipped), so the dev menu hides those two buttons when
   the scene isn't in the build.
 - Latest build: Releases -> `dev` -> `rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and

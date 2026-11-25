@@ -321,6 +321,13 @@ func test_coach_hints_short() -> void:
 			continue
 		for m in re.search_all(FileAccess.get_file_as_string(f)):
 			check(m.get_string(1).split(" ", false).size() <= 4, "hint '%s' is 4 words or fewer" % m.get_string(1))
+	# Rush teaches from a table of steps, not literal teach() calls.
+	var g = load("res://scripts/game.gd").new()
+	var steps: Array = g._coach_steps()
+	check(steps.size() >= 5, "Rush has its five hints")
+	for st in steps:
+		check(str(st[1]).split(" ", false).size() <= 4, "hint '%s' is 4 words or fewer" % st[1])
+	g.free()
 
 
 func test_tune_saves_applies_and_reports() -> void:

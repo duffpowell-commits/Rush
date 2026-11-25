@@ -19,7 +19,7 @@
       service in progress (Save.VERSION 2).
 - [x] A plate from a walked table jammed the cook's hands for the rest of the service.
 - [x] GAME OVER showed a stale board and never said why.
-- [x] The APK shipped the template's 3D test scene and 16 MB of models.
+- [x] The APK shipped the template's 3D test scene and its imported models (~2.2 MB).
 - [x] Scene changes went through change_scene_to_file instead of Loader.go (intro, quit, try again).
 - [x] Save could be lost if the app died between the delete and the rename in Save.write.
 - [ ] Settings still offers INVERT LOOK, LOOK SENSITIVITY and a controls legend for a tap-only game.

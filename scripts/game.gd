@@ -264,8 +264,9 @@ func _service_done() -> void:
 	grade.name = "Grade"
 	sheet_box.add_child(grade)
 	sheet_box.add_child(UI.label("%d of %d tickets out\n%d table%s walked\nTips $%d" % [k.served, k.total, k.walked, "" if k.walked == 1 else "s", k.tips], 24))
-	sheet_box.add_child(UI.label("Next: %d tickets, faster." % maxi(1, int(first_tickets) + int(more_tickets) * (level - 1)), 20, UI.DIM))
+	sheet_box.add_child(UI.label("Next: %d tickets." % maxi(1, int(first_tickets) + int(more_tickets) * (level - 1)), 20, UI.DIM))
 	sheet_box.add_child(UI.button("NEXT SERVICE", next_service, 96))
+	sheet_box.add_child(UI.button("TITLE", quit_to_title))   # saved: CONTINUE starts the next service
 
 
 func next_service() -> void:
@@ -280,6 +281,9 @@ func next_service() -> void:
 
 
 func debug_skip_level() -> void:
+	if between:   # the grade sheet already banked this service: just move on
+		next_service()
+		return
 	_night_before += k.served
 	score = _night_before
 	level += 1
@@ -325,7 +329,8 @@ func _coach_steps() -> Array:
 			func(): return k.crew.any(func(c): return not c.hand.is_empty()) or k.served > 0],
 		["run", "TAP PASS, THEN RUN", func(): return k.crew.any(func(c): return not c.hand.is_empty()),
 			func(): return k.served > 0],
-		["switch", "TAP MO TO SWITCH", func(): return k.served > 0, func(): return sel != 0],
+		["switch", "TAP MO TO SWITCH", func(): return k.served > 0 and not k.crew[1].out,
+			func(): return sel != 0 or k.crew[1].out],
 	]
 
 
@@ -384,7 +389,7 @@ const COOK_R := 36.0         # 72 wide: the touch rule
 
 
 func _field_input(e: InputEvent) -> void:
-	if paused or over:
+	if paused or over or between:
 		return
 	if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
 		tap(e.position)
@@ -425,8 +430,10 @@ func _draw_field(f: Control) -> void:
 		var tone := "good" if t.time > 4 else ("warn" if t.time > 2 else "bad")
 		f.draw_rect(r, UI.panel_color())
 		f.draw_rect(r, UI.key(tone), false, 4.0 if tone == "bad" else 2.0)
-		f.draw_string(font, r.position + Vector2(8, 26), ("BIG T%d" if t.big else "T%d") % t.table,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(18), ink)
+		f.draw_string(font, r.position + Vector2(8, 26), "T%d" % t.table,
+			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 56, UI.font_size(18), ink)
+		if t.big:   # small, between the table number and the clock, so it never runs into either
+			f.draw_string(font, r.position + Vector2(46, 25), "BIG", HORIZONTAL_ALIGNMENT_LEFT, 28, UI.font_size(11), UI.key("warn"))
 		# Clock: number plus a shape cue (filled bars), not colour alone.
 		f.draw_string(font, r.position + Vector2(r.size.x - 44, 28), "%d'" % t.time,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(24), UI.key(tone))
@@ -437,10 +444,10 @@ func _draw_field(f: Control) -> void:
 			var mark: String = {"wait": "  ", "cooking": "~ ", "carried": "> ", "served": "V "}[it.state]
 			var col: Color = UI.DIM if it.state == "served" else ink
 			f.draw_string(font, Vector2(r.position.x + 8, iy), mark + it.dish, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(16), col)
-			if it.state == "wait":   # where it cooks, on the same line: routing is on the ticket
-				f.draw_string(font, Vector2(r.position.x + 8, iy), Kitchen.station_of(it.dish),
-					HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 16, UI.font_size(12), UI.DIM)
-			iy += 32
+			if it.state == "wait":   # where it cooks, on its own small line: routing is on the ticket
+				f.draw_string(font, Vector2(r.position.x + 8, iy + 14), "  at " + Kitchen.station_of(it.dish),
+					HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(11), UI.DIM)
+			iy += 33
 	if shown.size() > 4:
 		f.draw_string(font, Vector2(f.size.x - 70, y0 + 222), "+%d" % (shown.size() - 4), HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(20), UI.key("warn"))
 	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [score, k.walked, LIVES, k.tips],
