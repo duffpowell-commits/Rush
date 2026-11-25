@@ -7,12 +7,12 @@ extends Node
 ## Writes go to a temp file first, then replace the real one, so a kill mid-write can't leave
 ## a half-written save.
 
-const VERSION := 1
+const VERSION := 2   # 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
 var path := "user://run.json"
 
 
 func exists() -> bool:
-	return FileAccess.file_exists(path)
+	return FileAccess.file_exists(path) or FileAccess.file_exists(path + ".tmp")
 
 
 func write(state: Dictionary) -> bool:
@@ -37,17 +37,23 @@ func write(state: Dictionary) -> bool:
 func read() -> Dictionary:
 	if not exists():
 		return {}
+	# Killed between "delete old" and "rename new" in write(): the temp file is the save.
+	var p := path if FileAccess.file_exists(path) else path + ".tmp"
 	var j := JSON.new()
-	if j.parse(FileAccess.get_file_as_string(path)) != OK or typeof(j.data) != TYPE_DICTIONARY:
+	if j.parse(FileAccess.get_file_as_string(p)) != OK or typeof(j.data) != TYPE_DICTIONARY:
 		return {}
 	return _migrate(j.data)
 
 
 func clear() -> void:
-	if exists():
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	for p in [path, path + ".tmp"]:
+		if FileAccess.file_exists(p):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 
 
 ## Old saves keep loading: bump VERSION and upgrade here when the save format changes.
 func _migrate(d: Dictionary) -> Dictionary:
+	if int(d.get("_version", 1)) < 2:
+		d.erase("lives")   # v1 had no mid-service state: CONTINUE starts the saved service fresh
+		d["_version"] = 2
 	return d

@@ -4,7 +4,8 @@ extends Control
 ##   Tap a cook to pick them. Tap a station to walk there (1 action per station). Tap the station
 ##   they stand at, or the big button, to FIRE / PLATE / RUN. END TURN = one minute passes.
 ##   Every ticket out is a point. 3 tables walked in one service = GAME OVER. A service survived =
-##   next service (level) = checkpoint (autosave).
+##   a grade sheet, then the next service (level) = checkpoint (autosave). Pause / focus-out saves
+##   the service in progress too (kitchen.to_dict), so CONTINUE picks up the same minute.
 ## Foundation pieces here: PAUSE button, Android back = pause, auto-pause + save when the app
 ## goes to the background (call, home button), pause menu (resume / settings / bug / quit),
 ## GAME OVER -> try again / title, checkpoint autosave + CONTINUE, left-handed layout, low
@@ -21,11 +22,13 @@ const LIVES := 3             # tables you can walk in one service
 
 ## Live sliders (DEV MENU -> TUNE). Applied when a service starts.
 const TUNE := {"ticket_time": [4.0, 16.0], "crew_ap": [1.0, 5.0], "stress_cap": [2.0, 12.0],
-	"service_turns": [8.0, 40.0]}
+	"service_turns": [8.0, 40.0], "first_tickets": [2.0, 14.0], "more_tickets": [0.0, 4.0]}
 var ticket_time := 9.0
 var crew_ap := 3.0
 var stress_cap := 6.0
 var service_turns := 20.0
+var first_tickets := 6.0
+var more_tickets := 1.0
 
 var level := 1               # service number
 var score := 0               # tickets out, whole night
@@ -34,6 +37,7 @@ var k: Kitchen
 var sel := 0                 # selected cook
 var paused := false
 var over := false
+var between := false         # the grade sheet between two services is up
 var rng := RandomNumberGenerator.new()
 
 var hud: Label
@@ -56,11 +60,18 @@ func _ready() -> void:
 	if not d.is_empty():
 		level = int(d.get("level", 1))
 		score = int(d.get("score", 0))
-		lives = int(d.get("lives", LIVES))
 		_night_before = score
 	add_to_group("tunable")
 	get_node("/root/DebugMenu").apply_tune(self)
 	_new_service()
+	# Pick the service in progress back up: same minute, same tickets, same tables walked.
+	var mid: Variant = d.get("kitchen", {})
+	if mid is Dictionary and not mid.is_empty() and int(mid.get("service", 0)) == level:
+		var back := Kitchen.new()
+		if back.from_dict(mid):
+			k = back
+			lives = LIVES - k.walked
+			score = _night_before + k.served
 	_build()
 	checkpoint()
 	get_node("/root/Audio").music("music_loop")
@@ -68,8 +79,13 @@ func _ready() -> void:
 
 # ---------------------------------------------------------------- state + saving
 
+## score = finished services only; the service in progress rides along in "kitchen" (its own
+## served count), so a reload can't count tickets twice.
 func state() -> Dictionary:
-	return {"level": level, "score": _night_before, "lives": lives}   # finished services only: a reload restarts the service
+	var d := {"level": level, "score": _night_before}
+	if k != null and not between and not over and not k.done:
+		d["kitchen"] = k.to_dict()
+	return d
 
 
 func checkpoint() -> void:
@@ -133,8 +149,7 @@ func _build() -> void:
 		if sh.get_parent() == self:
 			move_child(sh, -1)
 	# First minute: one hint, taught by doing.
-	if k != null and not Coach.seen("fire"):
-		Coach.teach(self, "fire", "TAP GRILL TO FIRE", func(): return k.pans.any(func(p): return not p.is_empty()))
+	_coach_next()
 	_refresh_hud()
 
 
@@ -174,6 +189,8 @@ func _new_service() -> void:
 	k.ap = int(crew_ap)
 	k.stress_cap = int(stress_cap)
 	k.turns = int(service_turns)
+	k.first_tickets = int(first_tickets)
+	k.more_tickets = int(more_tickets)
 	k.start(level, rng.randi() if level > 1 else 0)
 	lives = LIVES
 	sel = 0
@@ -181,7 +198,7 @@ func _new_service() -> void:
 
 ## Selected cook acts where they stand (the big button, or tapping their own station).
 func act() -> void:
-	if paused or over:
+	if paused or over or between:
 		return
 	var what := k.action_here(sel)
 	if k.act_here(sel):
@@ -194,7 +211,7 @@ func act() -> void:
 
 ## One minute of service passes.
 func end_turn() -> void:
-	if paused or over:
+	if paused or over or between:
 		return
 	var walked_before := k.walked
 	k.end_turn()
@@ -228,18 +245,45 @@ func end_turn() -> void:
 var _night_before := 0       # tickets out in earlier services tonight
 
 
+## Service survived: a grade sheet (the moment it lands), then NEXT SERVICE. The checkpoint is
+## already the next service, so quitting here loses nothing.
 func _service_done() -> void:
 	_night_before += k.served
 	score = _night_before
 	get_node("/root/Audio").sfx("level")
 	get_node("/root/Subs").cue("[chime: service %d done]" % level)
+	UI.buzz(40)
+	_after_move()
+	between = true
 	level += 1
 	checkpoint()
+	var g := k.grade()
+	sheet_box = UI.sheet(self)
+	sheet_box.add_child(UI.label("SERVICE %d DONE" % k.service, 34, UI.ACCENT))
+	var grade := UI.label(g, 96, UI.key("good" if g in ["A", "B"] else ("warn" if g == "C" else "bad")))
+	grade.name = "Grade"
+	sheet_box.add_child(grade)
+	sheet_box.add_child(UI.label("%d of %d tickets out\n%d table%s walked\nTips $%d" % [k.served, k.total, k.walked, "" if k.walked == 1 else "s", k.tips], 24))
+	sheet_box.add_child(UI.label("Next: %d tickets." % maxi(1, int(first_tickets) + int(more_tickets) * (level - 1)), 20, UI.DIM))
+	sheet_box.add_child(UI.button("NEXT SERVICE", next_service, 96))
+	sheet_box.add_child(UI.button("TITLE", quit_to_title))   # saved: CONTINUE starts the next service
+
+
+func next_service() -> void:
+	if not between:
+		return
+	UI.close_sheet(sheet_box)
+	sheet_box = null
+	between = false
 	_new_service()
+	checkpoint()
 	_after_move()
 
 
 func debug_skip_level() -> void:
+	if between:   # the grade sheet already banked this service: just move on
+		next_service()
+		return
 	_night_before += k.served
 	score = _night_before
 	level += 1
@@ -260,8 +304,54 @@ func _after_move() -> void:
 	field.queue_redraw()
 
 
-func _process(_dt: float) -> void:
-	pass
+var _coach_t := 0.0
+
+
+func _process(dt: float) -> void:
+	_coach_t += dt
+	if _coach_t >= 0.25:
+		_coach_t = 0.0
+		_coach_next()
+
+
+## Teach by doing, one hint at a time, in the order a first ticket needs them. Each shows only
+## once its moment comes and goes for good once done.
+var _coached := {}
+
+
+func _coach_steps() -> Array:
+	return [
+		["fire", "TAP GRILL TO FIRE", func(): return true,
+			func(): return k.turn > 0 or k.pans.any(func(p): return not p.is_empty())],
+		["end_turn", "TAP END TURN: COOK", func(): return k.pans.any(func(p): return not p.is_empty()),
+			func(): return k.turn > 0],
+		["plate", "UP! TAP PLATE", func(): return k.pans.any(func(p): return not p.is_empty() and p.left <= 0),
+			func(): return k.crew.any(func(c): return not c.hand.is_empty()) or k.served > 0],
+		["run", "TAP PASS, THEN RUN", func(): return k.crew.any(func(c): return not c.hand.is_empty()),
+			func(): return k.served > 0],
+		["switch", "TAP MO TO SWITCH", func(): return k.served > 0 and not k.crew[1].out,
+			func(): return sel != 0 or k.crew[1].out],
+	]
+
+
+func _coach_next() -> void:
+	if k == null or paused or over or between:
+		return
+	for ch in get_children():
+		if ch.name.begins_with("Coach_"):
+			return
+	for st in _coach_steps():
+		if _coached.get(st[0], false):
+			continue
+		if Coach.seen(st[0]) or st[3].call():
+			_coached[st[0]] = true
+			continue
+		if st[2].call():
+			var c := Coach.teach(self, st[0], st[1], st[3])
+			if c != null:   # just under the rail, clear of the NEXT line and the line itself
+				c.anchor_top = 0.455
+				c.anchor_bottom = 0.455
+		return
 
 
 # Layout, in field coordinates. Rail on top, the line in the middle, crew under their stations.
@@ -299,7 +389,7 @@ const COOK_R := 36.0         # 72 wide: the touch rule
 
 
 func _field_input(e: InputEvent) -> void:
-	if paused or over:
+	if paused or over or between:
 		return
 	if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
 		tap(e.position)
@@ -340,8 +430,10 @@ func _draw_field(f: Control) -> void:
 		var tone := "good" if t.time > 4 else ("warn" if t.time > 2 else "bad")
 		f.draw_rect(r, UI.panel_color())
 		f.draw_rect(r, UI.key(tone), false, 4.0 if tone == "bad" else 2.0)
-		f.draw_string(font, r.position + Vector2(8, 26), ("BIG T%d" if t.big else "T%d") % t.table,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(18), ink)
+		f.draw_string(font, r.position + Vector2(8, 26), "T%d" % t.table,
+			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 56, UI.font_size(18), ink)
+		if t.big:   # small, between the table number and the clock, so it never runs into either
+			f.draw_string(font, r.position + Vector2(46, 25), "BIG", HORIZONTAL_ALIGNMENT_LEFT, 28, UI.font_size(11), UI.key("warn"))
 		# Clock: number plus a shape cue (filled bars), not colour alone.
 		f.draw_string(font, r.position + Vector2(r.size.x - 44, 28), "%d'" % t.time,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(24), UI.key(tone))
@@ -352,7 +444,10 @@ func _draw_field(f: Control) -> void:
 			var mark: String = {"wait": "  ", "cooking": "~ ", "carried": "> ", "served": "V "}[it.state]
 			var col: Color = UI.DIM if it.state == "served" else ink
 			f.draw_string(font, Vector2(r.position.x + 8, iy), mark + it.dish, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(16), col)
-			iy += 30
+			if it.state == "wait":   # where it cooks, on its own small line: routing is on the ticket
+				f.draw_string(font, Vector2(r.position.x + 8, iy + 14), "  at " + Kitchen.station_of(it.dish),
+					HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(11), UI.DIM)
+			iy += 33
 	if shown.size() > 4:
 		f.draw_string(font, Vector2(f.size.x - 70, y0 + 222), "+%d" % (shown.size() - 4), HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(20), UI.key("warn"))
 	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [score, k.walked, LIVES, k.tips],
@@ -383,6 +478,15 @@ func _draw_field(f: Control) -> void:
 			f.draw_string(font, r.position + Vector2(0, r.size.y - 18), p.dish, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), ink)
 			f.draw_string(font, r.get_center() + Vector2(-30, 30), ("BURN!" if burning else "UP!") if up else "%d'" % p.left,
 				HORIZONTAL_ALIGNMENT_CENTER, 60, UI.font_size(22), Color.BLACK)
+		elif i < k.pans.size():
+			var waiting := 0
+			for t in k.tickets:
+				for it in t.items:
+					if it.state == "wait" and Kitchen.DISHES[it.dish].st == i:
+						waiting += 1
+			if waiting > 0:   # work waiting here: what to FIRE, and how much
+				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), "%d TO FIRE" % waiting,
+					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), UI.key("warn"))
 		elif i == Kitchen.PASS_IX:
 			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), "RUN HERE", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), UI.DIM)
 	# --- crew
@@ -411,6 +515,9 @@ func _draw_field(f: Control) -> void:
 # ---------------------------------------------------------------- pause + game over
 
 func pause() -> void:
+	if between:
+		checkpoint()   # the next service is already the checkpoint; the grade sheet stays up
+		return
 	if paused or over:
 		return
 	paused = true
@@ -433,18 +540,23 @@ func resume() -> void:
 func quit_to_title() -> void:
 	if not over:
 		checkpoint()
-	get_tree().change_scene_to_file("res://scenes/title.tscn")
+	get_node("/root/Loader").go("res://scenes/title.tscn")
 
 
 func game_over() -> void:
 	over = true
 	_save.clear()
+	_after_move()   # the board behind the sheet shows the turn that lost it
 	get_node("/root/Audio").sfx("gameover")
 	get_node("/root/Subs").cue("[game over sting]")
 	sheet_box = UI.sheet(self)
 	sheet_box.add_child(UI.label("GAME OVER", 40, UI.key("bad")))
-	sheet_box.add_child(UI.label("Service %d, %d tickets out" % [level, score], 24))
-	sheet_box.add_child(UI.button("TRY AGAIN", func(): get_tree().reload_current_scene(), 88))
+	var why := "THE WHOLE LINE WALKED OUT" if k.crew.all(func(c): return c.out) else "%d TABLES WALKED" % k.walked
+	var reason := UI.label(why, 26, UI.key("bad"))
+	reason.name = "Reason"
+	sheet_box.add_child(reason)
+	sheet_box.add_child(UI.label("Service %d, %d tickets out tonight" % [level, score], 22))
+	sheet_box.add_child(UI.button("TRY AGAIN", func(): get_node("/root/Loader").go("res://scenes/game.tscn"), 88))
 	sheet_box.add_child(UI.button("TITLE", quit_to_title))
 
 
@@ -459,10 +571,16 @@ func _notification(what: int) -> void:
 
 
 func _go_back() -> void:
-	var sheets := get_tree().get_nodes_in_group("sheet")
+	# Only this screen's sheets: autoload sheets (DEV MENU) come first in tree order and handle
+	# their own back. A sheet on top of the pause / grade / game over sheet closes first.
+	var sheets: Array = get_tree().get_nodes_in_group("sheet").filter(func(n): return n.get_parent() == self and not n.is_queued_for_deletion())
 	if sheets.size() > 1:
 		sheets[-1].queue_free()
-	elif paused and not over:
+	elif between:
+		next_service()
+	elif over:
+		quit_to_title()
+	elif paused:
 		resume()
 	else:
 		pause()

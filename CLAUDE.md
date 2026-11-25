@@ -10,9 +10,20 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   docs/PITCH.md. Queue: QUEUE.md (NOW = M1 slice). Progress: tasks/todo.md.
 - Rules: `scripts/kitchen.gd` (pure logic, no nodes). Screen: `scripts/game.gd` PLAY section.
   Tests: `test_kitchen_*` in tests/run_tests.gd. Autoplay: TAP PASS + PLAY PASS drive a real service.
-- Tuning lives in game.gd TUNE (ticket_time, crew_ap, stress_cap, service_turns): DEV MENU -> TUNE.
-  Defaults: 9-minute tickets, 3 actions, stress cap 6, 20-minute service. Greedy bot clears ~6 of 7
-  tickets in service 1 and ~4 of 9 in service 2.
+- Tuning lives in game.gd TUNE (ticket_time, crew_ap, stress_cap, service_turns, first_tickets,
+  more_tickets): DEV MENU -> TUNE. Defaults: 9-minute tickets, 3 actions, stress cap 6, 20-minute
+  service, 6 tickets in service 1 and +1 each service after.
+- Nov 25 (audit, this is what changed): the curve was 5+2n, which the greedy bot lost 81% of the
+  time in service 2 and 99% in service 3; it is now 6+1(n-1) (~40% / ~65%, `test_kitchen_service_curve`
+  holds service 2 at or under 55%). A service now ends on a grade sheet (`Kitchen.grade()`, A-F:
+  share of tickets out, minus a letter per walked table) with NEXT SERVICE. GAME OVER says why and
+  redraws the board behind it. The save carries the service in progress (`Kitchen.to_dict` /
+  `from_dict`, Save.VERSION 2), so PAUSE -> QUIT -> CONTINUE and a phone call pick up the same
+  minute instead of rerolling with full lives. Five coach hints teach FIRE, END TURN, PLATE, RUN
+  and switching cooks, one at a time. Ticket cards show each waiting dish's station; an empty
+  station shows "N TO FIRE". The intro is Rush's own. The APK drops the template's 3D test scene
+  and its imported models (export exclude_filter; ~2.2 MB: the 16 MB .glb sources never shipped), so the dev menu hides those two buttons when
+  the scene isn't in the build.
 - Latest build: Releases -> `dev` -> `rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

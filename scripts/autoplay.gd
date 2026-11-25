@@ -120,6 +120,15 @@ func _run() -> void:
 	await _frames(2)
 	fired_by_tap = k.pans[0].get("dish", "") == "BURGER"
 	_check(coach_up and moved and fired_by_tap, "TAP PASS (hint shown, MO walked to FRY for 1 action, DEV fired the burger)")
+	# The next hint follows by itself: after FIRE, END TURN is taught.
+	var next_hint := false
+	for i in 60:
+		await _frames(1)
+		if game.has_node("Coach_end_turn"):
+			next_hint = true
+			break
+	await _shot("hint_end_turn")
+	_check(next_hint and not game.has_node("Coach_fire"), "COACH PASS (FIRE hint gone, END TURN hint up)")
 	var until := Time.get_ticks_msec() + 15000
 	while Time.get_ticks_msec() < until and game.score < start_score + 1 and not game.over:
 		game.bot_play_turn()
@@ -148,11 +157,30 @@ func _run() -> void:
 	var bat: Node = get_node("/root/Battery")
 	var playing_full: bool = bat.state == "play" and Engine.max_fps == 60
 
-	# Checkpoint: next level autosaves.
-	game.debug_skip_level()
-	await _frames(2)
+	# Finish service 1: a grade sheet lands, NEXT SERVICE starts service 2 (the checkpoint).
+	var guard := 0
+	while not game.between and not game.over and guard < 80:
+		game.bot_play_turn()
+		await _frames(1)
+		guard += 1
+	await _frames(5)
+	await _shot("grade")
+	var grade_node: Node = game.find_child("Grade", true, false)
+	var letter: String = grade_node.text if grade_node != null else "?"
+	var graded: bool = game.between and grade_node != null and _find("NEXT SERVICE") != null
+	await _click("NEXT SERVICE")
+	await _frames(5)
+	_check(graded and game.level == 2 and not game.between,
+		"GRADE PASS (service 1 graded %s, NEXT SERVICE -> service %d)" % [letter, game.level])
 	var saved: Dictionary = get_node("/root/Save").read()
 	_check(int(saved.get("level", 0)) == 2, "AUTOSAVE PASS (level 2 saved)")
+	# A few minutes into service 2, so CONTINUE has a service in progress to pick back up.
+	for i in 3:
+		game.bot_play_turn()
+		await _frames(1)
+	var mid_turn: int = game.k.turn
+	var mid_walked: int = game.k.walked
+	var mid_tickets: int = game.k.tickets.size()
 
 	# Phone interruption: the app loses focus -> pause + save.
 	get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
@@ -190,7 +218,9 @@ func _run() -> void:
 	await _click("CONTINUE")
 	await _wait_scene("Game")
 	game = get_tree().current_scene
-	_check(game.level == 2, "RESUME PASS (continued at level %d)" % game.level)
+	_check(game.level == 2 and game.k.turn == mid_turn and game.k.walked == mid_walked and game.k.tickets.size() == mid_tickets
+		and game.lives == 3 - mid_walked,
+		"RESUME PASS (service %d picked up at %s, %d walked)" % [game.level, game.k.clock(), game.k.walked])
 	await _frames(10)
 	_shot("game_lefthanded")
 
@@ -209,8 +239,9 @@ func _run() -> void:
 		waited += 1
 	await _frames(10)
 	_shot("gameover")
-	_check(game.over and _find("TRY AGAIN") != null and not get_node("/root/Save").exists(),
-		"GAMEOVER PASS (game over screen, save cleared)")
+	var reason: Node = game.find_child("Reason", true, false)
+	_check(game.over and _find("TRY AGAIN") != null and not get_node("/root/Save").exists() and reason != null and "WALKED" in reason.text,
+		"GAMEOVER PASS (game over screen says why, save cleared)")
 	await _click("TITLE")
 	await _wait_scene("Title")
 	await _frames(5)

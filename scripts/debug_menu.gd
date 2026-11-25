@@ -116,13 +116,16 @@ func open() -> void:
 		if s != null and s.has_method("debug_skip_level"):
 			s.debug_skip_level()
 		close()))
-	box.add_child(UI.button("3D CHARACTER TEST", func():
-		close()
-		get_node("/root/Loader").go("res://scenes/character_test.tscn")))
-	box.add_child(UI.button("PHONE SPEED TEST", func():
-		close()
-		get_tree().root.set_meta("perf_test", true)
-		get_node("/root/Loader").go("res://scenes/character_test.tscn")))
+	# The 3D test scene and its models stay out of a 2D game's APK (export exclude_filter), so
+	# these two only show where the scene exists (the editor, autoplay).
+	if ResourceLoader.exists("res://scenes/character_test.tscn"):
+		box.add_child(UI.button("3D CHARACTER TEST", func():
+			close()
+			get_node("/root/Loader").go("res://scenes/character_test.tscn")))
+		box.add_child(UI.button("PHONE SPEED TEST", func():
+			close()
+			get_tree().root.set_meta("perf_test", true)
+			get_node("/root/Loader").go("res://scenes/character_test.tscn")))
 	box.add_child(UI.button("CLEAR SAVE", func():
 		get_node("/root/Save").clear()
 		Tune.clear()
