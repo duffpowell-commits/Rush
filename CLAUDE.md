@@ -31,6 +31,12 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   is now 8 tickets + 1 per service (bot: s2 ~41%, s3 ~69% game over). Save.VERSION 3 moves a carried
   plate onto the window. Autoplay: PICK, RUSH, WINDOW PASS. Open from the playtest: grades only land
   A/C/F, and the sounds are the template's.
+- Nov 25 (Duff: "all six" score fixes, "step by step", one PR each): PR #10 menu polish (painted
+  title + drawn RUSH logo in `menu_art.gd`, order-slip intro, HOW TO PLAY `how_to_play.gd`, captions
+  jump to the top under a sheet) and tips that carry between services (grade sheet SHOP,
+  `upgrades.gd`, Save v4, best night in Settings). Next PR: a twist per service from 2 on
+  (`Kitchen.EVENTS`: bus tour, grill on the fritz, VIP, critic; bot s2 ~43-52% per twist).
+  Still to come in order: juice, real sound, grades/difficulty that fit the player, then the ad kit.
 - Latest build: Releases -> `dev` -> `rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
