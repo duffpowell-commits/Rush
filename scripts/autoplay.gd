@@ -207,6 +207,32 @@ func _run() -> void:
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())   # DEV's own station: act
 	pick_ok = pick_ok and kk.pans[0].get("tid", 0) == 902 and fire_default == "FIRE T21"
 	_check(pick_ok, "PICK PASS (button said FIRE T21, tapped table 22's ticket, FIRE cooked its burger)")
+	# Tap a dish (Duff, Nov 25): table 22 now wants a burger and a steak, both grill. A tap on the
+	# STEAK row picks that dish: the button names it and FIRE cooks it, not the burger listed first.
+	var keep_items: Array = kk.tickets[1].items.duplicate(true)
+	var keep_pan: Dictionary = kk.pans[0].duplicate()
+	var keep_ap: int = kk.crew[0].ap
+	kk.tickets[1].items = [{"dish": "BURGER", "state": "wait"}, {"dish": "STEAK", "state": "wait"}]
+	kk.pans[0] = {}
+	kk.crew[0].ap = kk.ap
+	game.pick_tid = 0
+	game.pick_ix = -1
+	game._after_move()
+	var r22: Rect2 = game.ticket_rect(1)
+	var steak_row := Vector2(r22.get_center().x, r22.position.y + game.DISH_ROW0 + game.DISH_ROW * 1.5)
+	await _tap_at(game.field.get_global_transform() * steak_row)
+	var dish_label: String = game.act_btn.text
+	await _frames(2)
+	await _shot("dish_pick")
+	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
+	_check(game.pick_ix == -1 and dish_label == "FIRE STEAK" and kk.pans[0].get("dish", "") == "STEAK"
+		and kk.tickets[1].items[0].state == "wait",
+		"DISH PICK PASS (tapped T22's STEAK row: button said '%s', FIRE cooked the steak, the burger still waits)" % dish_label)
+	kk.tickets[1].items = keep_items   # back to the minute the next checks expect
+	kk.pans[0] = keep_pan
+	kk.crew[0].ap = keep_ap
+	game.pick_tid = 0
+	game._after_move()
 	var left0: int = kk.pans[0].left
 	var rush_label: String = game.act_btn.text
 	game.act()

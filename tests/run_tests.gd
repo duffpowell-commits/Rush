@@ -642,6 +642,21 @@ func test_upgrades_carry() -> void:
 	sv.free()
 
 
+## Tap a dish (Duff, Nov 25): FIRE cooks that exact dish when it waits at this station; a dish
+## from another station, or one already on, falls back to the table's first dish here.
+func test_fire_picked_dish() -> void:
+	var k := Kitchen.new()
+	k.start(1, 3)
+	k.tickets = [{"id": 70, "table": 7, "items": [{"dish": "BURGER", "state": "wait"},
+		{"dish": "STEAK", "state": "wait"}, {"dish": "FRIES", "state": "wait"}], "time": 9, "big": false}]
+	k.crew[0].at = 0
+	check(k.fire_pick(0, 70, -1).item.dish == "BURGER", "no dish picked: the first grill dish")
+	check(k.fire_pick(0, 70, 1).item.dish == "STEAK", "the tapped steak")
+	check(k.fire_pick(0, 70, 2).item.dish == "BURGER", "fries cook at the fryer: back to the table's grill dish")
+	check(k.act_here(0, 70, true, 1) and k.pans[0].dish == "STEAK" and k.tickets[0].items[1].state == "cooking", "FIRE cooked the steak")
+	check(k.fire_pick(0, 70, 1).is_empty() or k.fire_pick(0, 70, 1).item.dish == "BURGER", "steak on: falls back")
+
+
 ## A pan remembers the cook who fired it, through a save (the screen picks that cook on a station tap).
 func test_pan_owner() -> void:
 	var k := Kitchen.new()
