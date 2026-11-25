@@ -14,6 +14,8 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   Defaults: 9-minute tickets, 3 actions, stress cap 6, 20-minute service. Greedy bot clears ~6 of 7
   tickets in service 1 and ~4 of 9 in service 2.
 - Latest build: Releases -> `dev` -> `rush.apk`.
+- Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
+  screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
 - Next: Duff plays the APK; then real art and sound for the one service (QUEUE.md NOW).
 
 ## Claude-only notes

@@ -8,3 +8,6 @@
 - [ ] Real art + sound for one service.
 - [ ] Service events: 12-top push, 86, refire call-out.
 - [ ] End-of-service grade screen.
+- [ ] Found by Eyes (Nov 24): the intro still shows the template line "Every game starts here."
+- [ ] Found by Eyes (Nov 24): after FIRE the first-minute hint disappears and the action button
+      reads a greyed "NOTHING HERE"; nothing tells a new player to tap END TURN to let it cook.

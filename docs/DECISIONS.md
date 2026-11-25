@@ -1,5 +1,11 @@
 # Decisions log (catch-up file for Claude, Grok and any agent)
 
+## 2026-11-24 — Eyes copied in from the starter (tools/eyes)
+Approved by Duff on Nov 24 ("go ahead and do them both", Rush and Lethemoor; Lethemoor waits for its
+other session). Same tool as starter PRs #22/#23: godot-mcp-runtime 4.0.1 (pinned) under xvfb. Rush's
+smoke plays NEW GAME -> FIRE -> END TURN. First run found two first-minute problems, logged in
+tasks/todo.md. Outside QUEUE NOW (tooling, not the slice).
+
 ## 2026-11-24 — Rush made from the starter
 Duff picked Rush (kitchen tactics) from the Nov 24 games scan and chose a one-week side test next to
 Lethemoor. First playable: rules in scripts/kitchen.gd, screen in game.gd, 4 rule tests, autoplay

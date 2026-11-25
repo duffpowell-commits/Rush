@@ -1,0 +1,15 @@
+[
+  {"click": "SKIP", "optional": true},
+  {"click": "SKIP", "optional": true},
+  {"shot": "title"},
+  {"click": "NEW GAME"},
+  {"wait": 2000},
+  {"ui": true},
+  {"shot": "game"},
+  {"click": "FIRE"},
+  {"wait": 600},
+  {"click": "END TURN"},
+  {"wait": 900},
+  {"shot": "after-turn"},
+  {"gd": "return scene_tree.current_scene.name"}
+]

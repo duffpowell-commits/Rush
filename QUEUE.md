@@ -16,6 +16,7 @@ Work only on NOW. New asks go under IDEAS with a date until Duff swaps them into
 - M4: demo: free first service on itch and CrazyGames, store page with a clip.
 
 ## DONE
+- Eyes tool (Nov 24, 2026, Duff's OK; outside NOW): docs/EYES.md. Its first run's findings are in tasks/todo.md.
 - Rush first playable (Nov 24, 2026): rules engine + screen + tests + autoplay.
 - Milestone 0: foundation, items 1-14 (Nov 19, 2026). See CLAUDE.md.
 
