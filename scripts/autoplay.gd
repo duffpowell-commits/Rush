@@ -200,6 +200,16 @@ func _run() -> void:
 	var run_fx: bool = game.fx.any(func(e): return e.kind == "text")
 	await _shot("juice")
 	_check(fire_fx and run_fx, "JUICE PASS (sparks on FIRE, floating words on RUN, %d effects live)" % game.fx.size())
+	# Real sound (Nov 25): each action plays its own kitchen recording, and the busy layer runs under the jazz.
+	var au := get_node("/root/Audio")
+	var heard: bool = ["fire", "rush", "plate", "bell"].all(func(n): return au.played.has(n))
+	var real_clips: bool = ["fire", "rush", "plate", "bell", "burn", "walk", "door", "ticket", "gameover", "level", "click",
+		"music_loop", "music_busy"].all(func(n): return au._stream(n) is AudioStreamOggVorbis)
+	var on_first: bool = au._combat.playing
+	au.music("music_loop")   # back to the title: the busy layer stops...
+	var off_on_title: bool = not au._combat.playing
+	au.music_layers("music_loop", "music_busy")   # ...and comes back on the next service
+	_check(heard and real_clips and on_first and off_on_title and au._combat.playing, "SOUND PASS (FIRE sizzle, RUSH, plate, pass bell played; 13 real clips; busy layer on, off on the title, back on re-entry)")
 	game.k = Kitchen.new()
 	game.k.from_dict(real)
 	game.pick_tid = 0

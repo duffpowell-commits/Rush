@@ -43,8 +43,13 @@ func _ready() -> void:
 
 func _stream(name: String) -> AudioStream:
 	if not _cache.has(name):
-		var path := DIR + name + ".wav"
-		_cache[name] = load(path) if ResourceLoader.exists(path) else null
+		_cache[name] = null
+		for ext in [".ogg", ".wav"]:   # a real recording (.ogg) wins over the template's placeholder .wav
+			if ResourceLoader.exists(DIR + name + ext):
+				_cache[name] = load(DIR + name + ext)
+				break
+		if _cache[name] is AudioStreamOggVorbis and name.begins_with("music"):
+			_cache[name].loop = true
 	return _cache[name]
 
 
@@ -73,7 +78,11 @@ func step(surface: String) -> void:
 
 func music(name: String) -> void:
 	var s := _stream(name)
-	if s == null or (_music.stream == s and _music.playing):
+	if s == null:
+		return
+	if _music.stream == s and _music.playing:   # same track: drop any layer on top of it (game -> title)
+		_combat.stop()
+		target_intensity = 0.0
 		return
 	# Looping is set in the track's .import (edit/loop_mode=2) or an .ogg's loop flag.
 	_music.stream = s
@@ -87,10 +96,15 @@ func music_layers(explore: String, combat: String) -> void:
 	var b := _stream(combat)
 	if a == null or b == null:
 		return
-	if _music.stream == a and _combat.stream == b and _music.playing:
+	if _music.stream == a and _combat.stream == b and _music.playing and _combat.playing:
+		return
+	_combat.stream = b
+	if _music.stream == a and _music.playing:   # already on this track (from the title): restart both in sync
+		var pos := _music.get_playback_position()
+		_music.play(pos)
+		_combat.play(pos)
 		return
 	_music.stream = a
-	_combat.stream = b
 	_music.play()
 	_combat.play()
 
