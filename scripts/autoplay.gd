@@ -350,6 +350,7 @@ func _run() -> void:
 	var bought: bool = game.perks.has("meal") and game.cash == tips1 - 25 and _find("FAMILY MEAL") == null
 	await _click("DONE")
 	await _tray_checks(game, pst)
+	await _polish_checks(game)
 	await _click("NEXT SERVICE")
 	await _frames(5)
 	var sv: Dictionary = get_node("/root/Save").read()
@@ -939,6 +940,55 @@ func _record_kitchen_clip() -> void:
 ## Trays (Duff, Nov 25): a RUN starts at one plate; the SHOP sells the server tray (2), then the
 ## entree tray (4) in the same row. The shop fits at HUGE text, and a tray RUN sends 2 plates on one
 ## tap of the real button. Cash, perks and the service are put back afterwards.
+## The fresh-player polish pass: plain words on the NEXT bar and tickets, a badge for hidden
+## tickets, END TURN warns before a pan burns, and the shop lists what's owned.
+func _polish_checks(game: Node) -> void:
+	var kk = game.k
+	var keep: Dictionary = kk.to_dict()
+	var perks_was: Array = game.perks.duplicate()
+	var cash_was: int = game.cash
+	game.between = false
+	kk.done = false
+	var covers: Array = get_tree().get_nodes_in_group("sheet").filter(func(n): return n.visible)
+	for n in covers:
+		n.visible = false
+	kk.tickets.clear()
+	for i in 6:   # six on the rail: two hide behind the badge, one of them red
+		kk.tickets.append({"id": 970 + i, "table": 40 + i, "items": [{"dish": "STEAK", "state": "wait"},
+			{"dish": "FRIES", "state": ["cooking", "carried", "served"][i % 3]}], "time": [6, 5, 4, 3, 7, 1][i], "big": false})
+	kk.pans[0] = {"tid": 970, "dish": "STEAK", "left": 0, "sat": kk.burn_after, "rushed": false, "by": 0}
+	kk.incoming = [{"arrive": kk.turn + 2, "ticket": {"items": [{"dish": "STEAK"}], "big": false}},
+		{"arrive": kk.turn + 3, "ticket": {"items": [{"dish": "STEAK"}, {"dish": "FRIES"}], "big": false}},
+		{"arrive": kk.turn + 5, "ticket": {"items": [], "big": true}}]
+	game._refresh_hud()
+	game.field.queue_redraw()
+	await _frames(3)
+	var warn: String = game.end_btn.text
+	var nx: String = game.next_line(ThemeDB.fallback_font, 2000.0)
+	await _shot("polish_board")
+	kk.from_dict(JSON.parse_string(JSON.stringify(keep)))
+	game._refresh_hud()
+	var calm: String = game.end_btn.text
+	for n in covers:
+		n.visible = true
+	game.perks = perks_was.filter(func(p): return not String(p).begins_with("tray")) + ["tray"]
+	game.open_shop()
+	await _frames(4)
+	var owned: Label = get_tree().root.find_child("Owned", true, false)
+	var owned_txt: String = owned.text if owned != null else "-"   # read now: DONE frees the sheet
+	var owned_ok: bool = owned_txt.contains("SERVER TRAY")
+	await _shot("polish_shop")
+	await _click("DONE")
+	game.perks = perks_was
+	game.cash = cash_was
+	game.between = true
+	game._refresh_hud()
+	await _frames(2)
+	_check(warn == "END TURN\nGRILL BURNS" and calm == "END TURN" and nx.begins_with("NEXT: ") and nx.contains("1 dish in 2 min") and nx.contains("2 dishes in 3 min")
+		and owned_ok,
+		"POLISH PASS (END TURN warns '%s', NEXT bar '%s', shop says '%s')" % [warn.replace("\n", " / "), nx, owned_txt])
+
+
 func _tray_checks(game: Node, pst: Node) -> void:
 	var cash_was: int = game.cash
 	var perks_was: Array = game.perks.duplicate()

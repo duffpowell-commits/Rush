@@ -71,6 +71,12 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   (`pick_ix`, `dish_at`, rows DISH_ROW0/DISH_ROW); FIRE cooks it when the cook is at its station and the
   button names it ("FIRE STEAK"), else falls back to the table's first dish there (`fire_pick(c, tid, ix)`).
   DISH PICK PASS.
+- Nov 25 first-time-player review (7/10; reviews are played blind now, Duff's rule): polish pass. Ticket
+  rows say "at GRILL" / "cooking" / "on the pass" / "served" (struck) instead of ~ > V; the NEXT bar is
+  words ("1 dish in 2 min", `next_line`); hidden tickets get a "+N MORE" badge (red if one is red);
+  a pan about to burn says PLATE NOW and END TURN reads "END TURN / GRILL BURNS"; the idle button says
+  TAP A STATION; coach hints sit on a dark band; sound captions sit above the status line
+  (`Subs.lift`) in a softer style; the shop lists OWNED. POLISH PASS.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

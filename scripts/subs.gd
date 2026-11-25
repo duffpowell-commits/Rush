@@ -10,6 +10,9 @@ var _queue: Array[String] = []
 var _label: Label
 var _bg: PanelContainer
 var _left := 0.0
+## A gameplay screen can lift captions off its own bottom HUD: pixels from the bottom edge to the
+## caption's bottom (0 = the default spot). Sheets still move them to the top.
+var lift := 0.0
 
 
 func _ready() -> void:
@@ -62,10 +65,20 @@ func showing() -> String:
 
 func _process(dt: float) -> void:
 	# A modal sheet (pause, grade, game over) has its buttons where captions sit: move them to the top.
-	var y := 0.015 if get_tree().get_first_node_in_group("sheet") != null else 0.78
-	if _bg.anchor_top != y:
+	var sheet := get_tree().get_first_node_in_group("sheet") != null
+	if lift > 0.0 and not sheet:   # sits with its bottom edge lift px above the screen's bottom
+		_bg.anchor_top = 1.0
+		_bg.anchor_bottom = 1.0
+		_bg.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		_bg.offset_top = -lift
+		_bg.offset_bottom = -lift
+	else:
+		var y := 0.015 if sheet else 0.78
 		_bg.anchor_top = y
 		_bg.anchor_bottom = y
+		_bg.grow_vertical = Control.GROW_DIRECTION_END
+		_bg.offset_top = 0.0
+		_bg.offset_bottom = 0.0
 	if _left > 0.0:
 		_left -= dt
 		if _left <= 0.0:
@@ -73,7 +86,8 @@ func _process(dt: float) -> void:
 	if _left <= 0.0 and _queue.size() > 0:
 		var line: String = _queue.pop_front()
 		_label.text = line
-		_label.add_theme_font_size_override("font_size", UI.font_size(22))
-		_label.add_theme_color_override("font_color", UI.ink())
+		var sound := line.begins_with("[")   # a sound, not speech: smaller and softer, so it reads as a caption
+		_label.add_theme_font_size_override("font_size", UI.font_size(18 if sound else 22))
+		_label.add_theme_color_override("font_color", Color(UI.ink(), 0.75) if sound else UI.ink())
 		_bg.visible = true
 		_left = 1.2 + 0.3 * line.split(" ").size()
