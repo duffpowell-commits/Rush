@@ -246,6 +246,45 @@ func _run() -> void:
 	await _shot("grade")
 	var grade_node: Node = game.find_child("Grade", true, false)
 	var letter: String = grade_node.text if grade_node != null else "?"
+	# Grades + pace (Nov 25): the sheet shows the points behind the letter; PACE and the house's read move the load.
+	var pst: Node = get_node("/root/Settings")
+	var points_ok: bool = game.find_child("Points", true, false) != null and str(game.find_child("Points", true, false).text).contains("POINTS")
+	var ease_was = pst.get_value("house_ease")
+	pst.set_value("house_ease", 0)
+	pst.set_value("pace", 0)
+	var relaxed: Dictionary = game.pace_adjust()
+	var t_relaxed: int = game.tickets_for(1)
+	pst.set_value("pace", 2)
+	var t_slammed: int = game.tickets_for(1)
+	pst.set_value("pace", 1)
+	var t_normal: int = game.tickets_for(1)
+	game._house_reads("F")
+	var eased: bool = int(pst.get_value("house_ease")) == 1 and game.tickets_for(1) == t_normal - 1
+	game._house_reads("A+")
+	var back: bool = int(pst.get_value("house_ease")) == 0
+	pst.set_value("house_ease", ease_was)
+	_check(points_ok and relaxed.time == 2 and t_relaxed < t_normal and t_slammed > t_normal and eased and back,
+		"PACE PASS (grade %s with its points; tickets relaxed %d / normal %d / slammed %d; an F eases a ticket, an A+ takes it back)" % [letter, t_relaxed, t_normal, t_slammed])
+	# The grade sheet fits at HUGE text with its longest content (walks, critic, the house's read).
+	var real_box: Node = game.sheet_box
+	var ts_was = pst.get_value("text_size")
+	pst.set_value("text_size", 3)
+	await _frames(2)
+	game._grade_sheet("D", {"total": 47, "out": 43, "speed": 9, "pans": 10, "walks": -20, "critic": -8},
+		"The floor eases off a ticket.", {"service": 3, "served": 7, "total": 9, "walked": 2, "tips": 148})
+	var tb: VBoxContainer = game.sheet_box
+	tb.add_child(UI.button("SHOP ($148) NEW!", func(): pass))
+	tb.add_child(preload("res://scripts/menu_art.gd").primary(UI.button("NEXT SERVICE", func(): pass, 96)))
+	tb.add_child(UI.button("TITLE", func(): pass))
+	await _frames(4)
+	var pr: Rect2 = (tb.get_parent() as Control).get_global_rect()
+	var vh: float = get_viewport().get_visible_rect().size.y
+	await _shot("grade_huge")
+	UI.close_sheet(tb)
+	game.sheet_box = real_box
+	pst.set_value("text_size", ts_was)
+	await _frames(2)
+	_check(pr.position.y >= 0.0 and pr.end.y <= vh, "GRADE FIT PASS (worst-case sheet at HUGE text: %d px of %d)" % [int(pr.size.y), int(vh)])
 	var graded: bool = game.between and grade_node != null and _find("NEXT SERVICE") != null
 	# Tips carry over: they're banked, the SHOP spends them, the upgrade shapes service 2 and is saved.
 	var tips1: int = game.k.tips

@@ -30,6 +30,8 @@ const DEFAULTS := {
 	"best_service": 0,     # Rush: most services cleared in one night on this phone (title shows it)
 	"best_tickets": 0,     # tickets out that night
 	"intro_seen": false,   # the intro plays once; after that it never forces itself
+	"pace": 1,             # Rush: 0 RELAXED, 1 NORMAL, 2 SLAMMED (Settings)
+	"house_ease": 0,       # Rush: -2..2, the kitchen reads you: rough services ease it, aced ones push it
 }
 
 var values := DEFAULTS.duplicate()

@@ -69,6 +69,8 @@ var critic := ""            # "", "served" or "walked"
 var events: Array = []       # short lines for the HUD ("BURN on GRILL")
 var done := false
 var total := 0           # tickets this service, for the grade
+var burns := 0           # pans burned this service (grade)
+var speed := 0.0         # sum over served tickets of the share of their clock left (grade)
 
 var _next_id := 1
 var rng := RandomNumberGenerator.new()
@@ -81,6 +83,8 @@ func start(n: int, seed_value: int = 0) -> void:
 	served = 0
 	walked = 0
 	tips = 0
+	burns = 0
+	speed = 0.0
 	done = false
 	events.clear()
 	rng.seed = seed_value if seed_value != 0 else 1000 + n
@@ -119,6 +123,7 @@ func _set_up_event() -> void:
 			for inc in incoming:
 				if inc.ticket.items.any(func(it): return DISHES[it.dish].st == 0):
 					inc.ticket.time += 1
+					inc.ticket.t0 = inc.ticket.time
 		"vip":
 			_mark(1 if count > 1 else 0, "vip")
 		"critic":
@@ -161,6 +166,7 @@ func _make_ticket(big: bool) -> Dictionary:
 		items.append({"dish": names[rng.randi_range(0, names.size() - 1)], "state": "wait"})
 	var t := {"id": _next_id, "table": rng.randi_range(1, 30), "items": items,
 		"time": ticket_time + (3 if big else 0), "big": big}
+	t.t0 = t.time   # the clock it started with: speed for the grade
 	_next_id += 1
 	return t
 
@@ -321,6 +327,7 @@ func run(c: int) -> bool:
 	if t.items.all(func(it): return it.state == "served"):
 		tickets.erase(t)
 		served += 1
+		speed += clampf(float(t.time) / maxf(float(t.get("t0", ticket_time)), 1.0), 0.0, 1.0)
 		tips += (2 + t.time + (4 if t.big else 0)) * (3 if t.get("vip", false) else 1)
 		if t.get("critic", false):
 			critic = "served"
@@ -382,6 +389,7 @@ func end_turn() -> void:
 					if it.state == "cooking" and it.dish == p.dish:
 						it.state = "wait"   # refire
 						break
+				burns += 1
 				_say("BURN ON %s, REFIRE" % STATIONS[s])
 				for cr in crew:
 					if cr.at == s and not cr.out:
@@ -437,13 +445,33 @@ func _drop_hand(cr: Dictionary) -> void:
 	cr.hand = {}
 
 
-## The letter for a finished service: share of tickets out, minus a step per table walked.
-func grade() -> String:
+## The service's score out of 100 and where it came from (Nov 25: the old letter only landed A/C/F).
+## Tickets out 60, speed 25 (how much clock was left when each table went out), clean pans 15,
+## minus 10 per table walked (on top of the ticket it lost), critic +-8.
+func score_parts() -> Dictionary:
 	var share := float(served) / maxf(total, 1)
-	var g := 4 if share >= 0.95 else (3 if share >= 0.8 else (2 if share >= 0.6 else (1 if share >= 0.4 else 0)))
-	g = maxi(0, g - walked)
-	g = clampi(g + {"served": 1, "walked": -1}.get(critic, 0), 0, 4)
-	return ["F", "D", "C", "B", "A"][g]
+	var avg := speed / maxf(served, 1)
+	var parts := {
+		"out": int(round(60.0 * share)),
+		"speed": int(round(25.0 * clampf((avg - 0.35) / 0.4, 0.0, 1.0) * share)),
+		"pans": maxi(0, 15 - 5 * burns),
+		"walks": -10 * walked,
+		"critic": {"served": 8, "walked": -8}.get(critic, 0),
+	}
+	parts.total = clampi(parts.out + parts.speed + parts.pans + parts.walks + parts.critic, 0, 100)
+	return parts
+
+
+const GRADES := [[95, "A+"], [87, "A"], [77, "B"], [65, "C"], [45, "D"], [0, "F"]]
+
+
+## The letter for a finished service, from score_parts().total.
+func grade() -> String:
+	var pts: int = score_parts().total
+	for g in GRADES:
+		if pts >= g[0]:
+			return g[1]
+	return "F"
 
 
 ## Station name for a dish ("GRILL"), so the screen can show where each dish cooks.
@@ -461,7 +489,8 @@ func to_dict() -> Dictionary:
 		"walked": walked, "tips": tips, "done": done, "total": total, "next_id": _next_id,
 		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
 		"stress_cap": stress_cap, "burn_after": burn_after,
-		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic, "all_open": all_open}
+		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic, "all_open": all_open,
+		"burns": burns, "speed": speed}
 
 
 ## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
@@ -487,6 +516,8 @@ func from_dict(d: Dictionary) -> bool:
 	rush_stress = int(d.get("rush_stress", 1))
 	event = str(d.get("event", ""))
 	all_open = bool(d.get("all_open", false))
+	burns = int(d.get("burns", 0))
+	speed = float(d.get("speed", 0.0))
 	critic = str(d.get("critic", ""))
 	window = []
 	for w in d.window:

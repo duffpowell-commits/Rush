@@ -10,9 +10,9 @@ const STEPS := [
 	["station_grill", "At a station, FIRE starts the next dish. When the pan is done, PLATE it."],
 	["station_pass", "Plates wait on the pass. Any cook at the PASS can RUN them to the table."],
 	["cook_mo", "END TURN and every clock ticks a minute. Hot work adds stress. Max stress and that cook walks out."],
-	["dish_steak", "Walk 3 tables in one service and the night is over. Clear the service to get a grade."],
+	["dish_steak", "Walk 3 tables in one service and the night is over. Clear the service to get a grade: tables out, speed and clean pans all count."],
 ]
-const TIPS := "Tap a ticket to make FIRE cook it first.\nRUSH takes a minute off a pan, for stress.\nThe line grows: saute opens in service 2, cold in service 3."
+const TIPS := "Tap a ticket to make FIRE cook it first.\nRUSH takes a minute off a pan, for stress.\nThe line grows: saute opens in service 2, cold in service 3.\nToo hot or too easy? Settings -> PACE. The kitchen also eases off after a rough night."
 
 
 static func open(parent: Node) -> VBoxContainer:

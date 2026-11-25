@@ -47,6 +47,10 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   over, ticket printer) and cafe jazz (CC0) as `music_loop` with a synced `music_busy` layer
   (kitchen noise under the jazz) that rises as tickets go red (`_music_heat`). Built by
   `tools/make_sounds.py`; credits in assets/audio/SOURCES.md. Audio plays `.ogg` before `.wav`.
+- Nov 25 grades + pace: `Kitchen.score_parts()` scores a service out of 100 (out 60, speed 25 from
+  clock left at serve, clean pans 15, -10 a walk, critic +-8) and `grade()` maps it A+/A/B/C/D/F (bot
+  s1 lands all six). Settings PACE (RELAXED/NORMAL/SLAMMED) and `house_ease` (-2..2: D/F or a lost
+  night eases a ticket, A/A+ adds one) move ticket count and clock (`pace_adjust`, `tickets_for`).
 - Latest build: Releases -> `dev` -> `rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
