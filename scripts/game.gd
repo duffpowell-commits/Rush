@@ -260,6 +260,7 @@ func _house_reads(g: String, lost: bool = false) -> String:
 
 
 func _new_service() -> void:
+	_pick_from = {}   # a station handoff only counts on the very next field tap
 	k = Kitchen.new()
 	var u := Upgrades.apply({"ticket_time": int(ticket_time), "stress_cap": int(stress_cap),
 		"rush_stress": int(rush_stress), "lives": LIVES}, perks)
@@ -281,6 +282,7 @@ func _new_service() -> void:
 
 ## Selected cook acts where they stand (the big button, or tapping their own station).
 func act() -> void:
+	_pick_from = {}   # a station handoff only counts on the very next field tap
 	if paused or over or between:
 		return
 	var what := k.action_here(sel)
@@ -398,6 +400,7 @@ func _draw_fx(f: Control) -> void:
 
 ## One minute of service passes.
 func end_turn() -> void:
+	_pick_from = {}   # a station handoff only counts on the very next field tap
 	if paused or over or between:
 		return
 	var walked_before := k.walked
