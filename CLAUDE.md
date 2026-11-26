@@ -106,6 +106,16 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   tap on a cook's face always wins (`_portrait_pick`: the next station tap sends that cook instead
   of picking the station's cook); an empty rail reads "END TURN / FINISH SERVICE"; RUSH says
   "+1 STRESS" or "(FREE)" after Cast Iron; the top bar's OUT counts this service. MOVE, FINISH PASS.
+- Nov 26 8.5 pass (Duff's new bar: plan to an 8.5 blind first-timer review, OK'd once, built in one
+  pass; he picked "Build all of it"). Fairness: SHOP TEMP COOK ($45, a third cook JO at the pass for
+  one service, `Kitchen.hires`, erased in `_service_done`); service 4+ is a ticket lighter; the
+  second ticket lands at once from service 2 (a minute in on service 1). Clarity: END TURN names
+  every burn and quit ("GRILL + FRY BURN"), FIRE says ": TOO LATE" when the dish can't beat the
+  table, a cook's first move shows its stress ("+1 STRESS" / "(MO QUITS)"), the status line clears on
+  the first move, a tap in the strip under a station picks its cook, window plates wear "T12", walk
+  chips sit above station names. Feel: cooks walk (`_cook_draw`), steam over pans, red-ticket jolt,
+  bigger burns, a CRITIC stamp on the grade sheet. Loss: RETRY SERVICE n keeps bank + upgrades
+  (`retry_service`). Bot: s1 ~7%, s2 ~33%, s3 ~41%, s4 ~41% lost. WARN, RETRY PASS; GRADE FIT has the critic.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

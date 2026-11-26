@@ -852,3 +852,30 @@ func test_table_numbers_unique() -> void:
 				dup += 1
 				break
 	check(dup == 0, "no service deals two tickets the same table number (%d of 200 did)" % dup)
+
+
+## 8.5 pass: the shop's TEMP COOK adds a third cook for one service, starting at the pass; the
+## second ticket lands with the first from service 2 on; service 4 is a ticket lighter.
+func test_temp_cook_and_curve_tweaks() -> void:
+	var owned: Array = []
+	check(Upgrades.apply({}, owned).hires == 0, "no temp without the perk")
+	owned.append("temp")
+	check(Upgrades.apply({}, owned).hires == 1, "temp perk = one hire")
+	var k := Kitchen.new()
+	k.hires = 1
+	k.start(2, 5)
+	check(k.crew.size() == 3 and k.crew[2].at == Kitchen.PASS_IX and k.crew[2].name == Kitchen.TEMPS[0], "temp cook at the pass")
+	var back := Kitchen.new()
+	check(back.from_dict(JSON.parse_string(JSON.stringify(k.to_dict()))) and back.crew.size() == 3, "temp cook survives a save")
+	var plain := Kitchen.new()
+	plain.start(2, 5)
+	check(plain.crew.size() == 2, "no hire, two cooks")
+	check(plain.tickets.size() >= 2, "service 2's second ticket comes at once")
+	var s1 := Kitchen.new()
+	s1.start(1, 5)
+	check(s1.tickets.size() == 1 and not s1.incoming.is_empty() and int(s1.incoming[0].arrive) == 1, "service 1 still eases in")
+	var s3 := Kitchen.new()
+	s3.start(3, 5)
+	var s4 := Kitchen.new()
+	s4.start(4, 5)
+	check(s4.total == s3.total, "service 4 is a ticket lighter than the +1 curve (same as service 3)")

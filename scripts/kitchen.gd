@@ -30,6 +30,7 @@ const PASS_IX := 4
 ## service 1 is grill + fry, saute opens in service 2, the cold station (salad, cake) in service 3.
 ## A closed station is walked past for free and takes no tickets.
 const OPENS := [1, 1, 2, 3]
+const TEMPS := ["JO", "KAI"]
 
 ## Dish: station it cooks at, minutes on the heat.
 const DISHES := {
@@ -65,6 +66,7 @@ var walked := 0             # tickets comped this service
 var tips := 0
 var all_open := false      # true: every station open from service 1 (old tests, sweeps)
 var event := ""             # this service's twist (EVENTS), "" in service 1
+var hires := 0              # temp cooks for this service (shop TEMP COOK): a third pair of hands
 var with_events := true     # false: plain services (balance sweeps)
 var critic := ""            # "", "served" or "walked"
 var events: Array = []       # short lines for the HUD ("BURN on GRILL")
@@ -93,16 +95,26 @@ func start(n: int, seed_value: int = 0) -> void:
 	crew[0].at = 0
 	pans = [{}, {}, {}, {}]
 	crew[1].at = 2 if is_open(2) else 1
+	for h in hires:   # a temp starts at the pass, where plates pile up
+		var tc := _cook(TEMPS[h % TEMPS.size()])
+		tc.at = PASS_IX
+		crew.append(tc)
 	window.clear()
 	tickets.clear()
 	incoming.clear()
-	var count := maxi(1, first_tickets + more_tickets * (n - 1))
+	# From service 4 (the full line is open) the rail grows one ticket
+	# less (8.5 pass: service 4 was a wall for two cooks).
+	var count := maxi(1, first_tickets + more_tickets * (n - 1) - (1 if n >= 4 else 0))
 	total = count
 	var last_arrival := maxi(turns - ticket_time - 2, 4)
 	for i in count:
 		var arrive := int(round(float(i) * last_arrival / maxf(count - 1, 1)))
 		var big := i == count / 2 + 1
 		incoming.append({"arrive": arrive, "ticket": _make_ticket(big)})
+	# No dead opening turns (build-76 review: "fire one dish, END TURN, END TURN"): the second ticket
+	# lands at 7:00 from service 2, and a minute in on service 1 while the first one teaches.
+	if count > 1:
+		incoming[1].arrive = 0 if n >= 2 else 1
 	if n == 1:   # the first ticket of the night teaches the grill: DEV starts there
 		incoming[0].ticket.items = [{"dish": "BURGER", "state": "wait"}]
 	event = ""
