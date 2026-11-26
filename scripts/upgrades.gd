@@ -9,7 +9,7 @@ const ALL := {
 	"lamps": {"name": "HEAT LAMPS", "cost": 30, "says": "+1 MIN ON EVERY TICKET"},
 	"meal": {"name": "FAMILY MEAL", "cost": 25, "says": "+1 STRESS BEFORE QUITTING"},
 	"iron": {"name": "CAST IRON", "cost": 35, "says": "RUSH COSTS NO STRESS"},
-	"comps": {"name": "COMP CARDS", "cost": 50, "says": "+1 TABLE CAN WALK"},
+	"comps": {"name": "SECOND CHANCE", "cost": 50, "says": "+1 WALK BEFORE GAME OVER"},
 	# Trays (Duff, Nov 25: "start out with the one dish ran rule and then upgrade it in the shop for a
 	# max of 4"). A RUN carries one plate; the server tray makes it 2, the entree tray (after the
 	# server tray) makes it 4.

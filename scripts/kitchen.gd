@@ -15,7 +15,8 @@ extends RefCounted
 ## their station. At STRESS_CAP they walk out for the rest of the service. A cook who does nothing
 ## all turn rests and drops 2.
 
-## Services 2+ each roll one twist (Nov 25, Duff's "all six" fixes, #2 variety): name, one line.
+## Services 3+ each roll one twist (8.5 plan #3: service 2 already opens saute, and a new station
+## plus a twist plus more tickets was a wall for the build-84 first-timer) (Nov 25, Duff's "all six" fixes, #2 variety): name, one line.
 const EVENTS := {
 	"tour": ["BUS TOUR", "Three tables land at once mid-service."],
 	"fritz": ["GRILL ON THE FRITZ", "Grill dishes take a minute longer. Their tables wait one more."],
@@ -54,7 +55,7 @@ var stress_cap := 6
 var burn_after := 1      # a finished pan burns at the end of the turn its wait passes this (2 turns to plate at 1)
 var rush_stress := 1     # stress a RUSH costs the cook
 var tray := 1            # plates one RUN carries (shop trays: 2, then 4)
-var first_tickets := 7   # tickets in service 1 (Nov 25 stations: bot s1 ~8%, s2 ~32%, s3 ~48%, s4 ~71% game over, twists on)
+var first_tickets := 7   # tickets in service 1 (8.5 plan #3 tried 8: the bot lost s1 26% vs 8%, so it stays 7) (Nov 25 stations: bot s1 ~8%, s2 ~32%, s3 ~48%, s4 ~71% game over, twists on)
 var more_tickets := 1    # extra tickets each later service (greedy bot with the pass window, 200 seeds: s2 ~41% game over, s3 ~69%; was 6+1 before the window)
 
 var service := 1
@@ -69,6 +70,7 @@ var walked := 0             # tickets comped this service
 var tips := 0
 var all_open := false      # true: every station open from service 1 (old tests, sweeps)
 var event := ""             # this service's twist (EVENTS), "" in service 1
+var breaks := 1             # second winds left this service: a cook who'd quit takes five instead (8.5 plan #3)
 var hires := 0              # temp cooks for this service (shop TEMP COOK): a third pair of hands
 var with_events := true     # false: plain services (balance sweeps)
 var critic := ""            # "", "served" or "walked"
@@ -107,7 +109,7 @@ func start(n: int, seed_value: int = 0) -> void:
 	incoming.clear()
 	# From service 4 (the full line is open) the rail grows one ticket
 	# less (8.5 pass: service 4 was a wall for two cooks).
-	var count := maxi(1, first_tickets + more_tickets * (n - 1) - (1 if n >= 4 else 0))
+	var count := count_for(first_tickets, more_tickets, n)
 	total = count
 	var last_arrival := maxi(turns - ticket_time - 2, 4)
 	for i in count:
@@ -122,10 +124,16 @@ func start(n: int, seed_value: int = 0) -> void:
 		incoming[0].ticket.items = [{"dish": "BURGER", "state": "wait"}]
 	event = ""
 	critic = ""
-	if n >= 2 and with_events:
+	if n >= 3 and with_events:
 		event = EVENT_IDS[rng.randi_range(0, EVENT_IDS.size() - 1)]
 		_set_up_event()
 	_arrivals()
+
+
+## Tickets service n deals: first, then +more a service, and from service 4 (the full line) one fewer.
+## game.gd's tickets_for() uses the same sum (8.5 plan #3 put it in one place).
+static func count_for(first: int, more: int, n: int) -> int:
+	return maxi(1, first + more * (n - 1) - (1 if n >= 4 else 0))
 
 
 func _set_up_event() -> void:
@@ -181,7 +189,7 @@ func walk_cost(from: int, to: int) -> int:
 
 
 func _cook(nm: String) -> Dictionary:
-	return {"name": nm, "at": 0, "ap": ap, "stress": 0, "out": false, "hand": {}, "acted": false}
+	return {"name": nm, "at": 0, "ap": ap, "stress": 0, "out": false, "hand": {}, "acted": false, "brk": false}
 
 
 func _make_ticket(big: bool) -> Dictionary:
@@ -480,11 +488,19 @@ func end_turn() -> void:
 			cr.stress += (1 if red > 0 else 0) + (1 if heat_turn() else 0)
 		else:
 			cr.stress = maxi(0, cr.stress - 2)
-		if cr.stress >= stress_cap:
+		cr.brk = false   # a break lasts the one turn it was taken for
+		if cr.stress >= stress_cap and breaks > 0:
+			# Second wind (8.5 plan #3: one walkout snowballed into GAME OVER): the first cook who'd
+			# quit this service takes five instead. Down to cap-3, sits out next turn (resting).
+			breaks -= 1
+			cr.stress = maxi(0, stress_cap - 3)
+			cr.brk = true
+			_say("%s TAKES FIVE" % cr.name)
+		elif cr.stress >= stress_cap:
 			cr.out = true
 			_drop_hand(cr)
 			_say("%s WALKED OUT" % cr.name)
-		cr.ap = ap
+		cr.ap = 0 if cr.brk else ap
 		cr.acted = false
 	turn += 1
 	_arrivals()
@@ -550,7 +566,7 @@ func to_dict() -> Dictionary:
 		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
 		"stress_cap": stress_cap, "burn_after": burn_after,
 		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic, "all_open": all_open,
-		"burns": burns, "speed": speed, "tray": tray}
+		"burns": burns, "speed": speed, "tray": tray, "breaks": breaks}
 
 
 ## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
@@ -580,6 +596,7 @@ func from_dict(d: Dictionary) -> bool:
 	speed = float(d.get("speed", 0.0))
 	tray = clampi(int(d.get("tray", 1)), 1, 4)
 	critic = str(d.get("critic", ""))
+	breaks = int(d.get("breaks", 1))
 	window = []
 	for w in d.window:
 		window.append({"tid": int(w.tid), "dish": str(w.dish)})
@@ -587,7 +604,7 @@ func from_dict(d: Dictionary) -> bool:
 	for c in d.crew:
 		var h: Dictionary = c.hand
 		crew.append({"name": str(c.name), "at": int(c.at), "ap": int(c.ap), "stress": int(c.stress),
-			"out": bool(c.out), "acted": bool(c.acted),
+			"out": bool(c.out), "acted": bool(c.acted), "brk": bool(c.get("brk", false)),
 			"hand": {} if h.is_empty() else {"tid": int(h.tid), "dish": str(h.dish)}})
 	pans = []
 	for p in d.pans:

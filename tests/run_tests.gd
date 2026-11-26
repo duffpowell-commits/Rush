@@ -397,6 +397,7 @@ func test_kitchen_walks_and_stress() -> void:
 	var k := _kitchen()
 	k.ticket_time = 3
 	k.start(1)
+	k.breaks = 0   # no second wind here: test_second_wind_and_ramp covers it
 	k.crew[0].acted = true
 	k.end_turn()
 	check(k.crew[0].stress == 1, "worked through a red ticket: +1 stress")
@@ -418,6 +419,7 @@ func test_kitchen_walks_and_stress() -> void:
 func test_kitchen_walkout_drops_plate() -> void:
 	var k := _kitchen()
 	k.start(1)
+	k.breaks = 0
 	var t: Dictionary = k.tickets[0]
 	t.items[0].state = "carried"
 	k.crew[1].hand = {"tid": t.id, "dish": t.items[0].dish}
@@ -498,16 +500,24 @@ func test_quit_warning_matches_end_turn() -> void:
 			k.pans[0] = {"tid": k.tickets[0].id, "dish": k.tickets[0].items[0].dish, "left": 0,
 				"sat": rng.randi_range(0, k.burn_after), "rushed": false, "by": 0}
 			k.tickets[0].items[0].state = "cooking"
+		k.breaks = i % 2   # half the states have tonight's second wind left
 		g.k = k
 		var said: Array = g.cooks_quitting()
+		var resting: Array = g.cooks_breaking()
 		var was_out: Array = k.crew.map(func(c): return c.out)
 		var shown: Array = []
 		for c in k.crew.size():
 			shown.append(g.stress_after(c))
 		k.end_turn()
-		for c in k.crew.size():   # the meter's preview is the stress END TURN really leaves
-			if not was_out[c] and k.crew[c].stress != shown[c]:
+		for c in k.crew.size():   # the meter's preview is the stress END TURN really leaves (bar a second wind)
+			if not was_out[c] and not k.crew[c].brk and k.crew[c].stress != shown[c]:
 				bad += 1
+		var took: Array = []
+		for c in k.crew.size():
+			if k.crew[c].brk:
+				took.append(k.crew[c].name)
+		if resting != took:
+			bad += 1
 		var walked: Array = []
 		for c in k.crew.size():
 			if k.crew[c].out and not was_out[c]:
@@ -516,6 +526,30 @@ func test_quit_warning_matches_end_turn() -> void:
 			bad += 1
 	check(bad == 0, "quit warning and stress preview matched end_turn on 300 random states (%d mismatches)" % bad)
 	g.free()
+
+
+## 8.5 plan #3 (build-84 review: one walkout snowballed into GAME OVER): the first cook who'd quit
+## in a service takes five instead, once.
+func test_second_wind_and_ramp() -> void:
+	var k := _kitchen()
+	k.tickets = [{"id": 95, "table": 5, "items": [{"dish": "STEAK", "state": "wait"}], "time": 2, "big": false}]
+	k.incoming.clear()
+	k.breaks = 1
+	for c in k.crew:
+		c.stress = k.stress_cap - 1
+		c.acted = true
+	k.end_turn()
+	check(k.crew[0].brk and not k.crew[0].out and k.crew[0].stress == k.stress_cap - 3 and k.crew[0].ap == 0,
+		"first cook over the cap takes five: stress %d, no moves" % k.crew[0].stress)
+	check(k.crew[1].out, "the second wind is spent: the next one quits")
+	check(k.events.any(func(e): return e.ends_with("TAKES FIVE")), "the status line says so")
+	check(not k.can_act(0), "on break: can't act")
+	var back := Kitchen.new()
+	check(back.from_dict(JSON.parse_string(JSON.stringify(k.to_dict()))) and back.crew[0].brk and back.breaks == 0, "a break survives a save")
+	k.end_turn()
+	check(not k.crew[0].brk and k.crew[0].ap == k.ap and k.crew[0].stress == k.stress_cap - 5, "back after one turn, rested")
+	check(Kitchen.count_for(7, 1, 1) == 7 and Kitchen.count_for(7, 1, 2) == 8 and Kitchen.count_for(7, 1, 3) == 9
+		and Kitchen.count_for(7, 1, 4) == 9 and Kitchen.count_for(7, 1, 5) == 10, "ramp: 7, 8, 9, 9, 10")
 
 
 ## The game screen's save carries the service in progress, and score only counts finished services.
@@ -754,9 +788,12 @@ func test_kitchen_events() -> void:
 	var seen := {}
 	for sd in 40:
 		var k := Kitchen.new()
-		k.start(2, sd + 1)
+		k.start(3, sd + 1)
 		seen[k.event] = true
-	check(seen.size() == Kitchen.EVENT_IDS.size() and not seen.has(""), "every twist shows up in service 2 (%s)" % [seen.keys()])
+	check(seen.size() == Kitchen.EVENT_IDS.size() and not seen.has(""), "every twist shows up in service 3 (%s)" % [seen.keys()])
+	var two := Kitchen.new()   # 8.5 plan #3: service 2 opens saute; its twist waits for service 3
+	two.start(2, 5)
+	check(two.event == "", "service 2 is plain")
 	var one := Kitchen.new()
 	one.start(1, 5)
 	check(one.event == "", "service 1 is plain")
@@ -809,7 +846,7 @@ func test_kitchen_events() -> void:
 	for sd in 400:
 		var sk := Kitchen.new()
 		sk.first_tickets = 1
-		sk.start(2, sd + 1)
+		sk.start(3, sd + 1)
 		if sk.event == "party":
 			short = sk
 			break

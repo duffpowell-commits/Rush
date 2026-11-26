@@ -132,6 +132,14 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   picked, each station's name row becomes a two-line chip (FRY / WALK 1, SAUTE / TOO FAR) (above the
   station a coach hint hid it; at the foot it hid UP! / PLATE NOW). Bot loss with all six twists:
   s1 7%, s2 36%, s3 50%, s4 50%, s5 73%.
+- Nov 26 build-84 blind first-timer: 7/10 (service 1 easy, service 2 a wall, busy rail unreadable, stress
+  late, losses snowball; docs/reviews/firsttimer_rush_build84.md). 8.5 plan #3 (Duff: "Build all of it"):
+  no twist in service 2 (twists from 3), acing service 1 doesn't stack service 2, shop nudges TEMP COOK;
+  URGENT band on the first-to-walk ticket and red "N WAITING" on an unmanned station with work; hint
+  FULL STRESS = QUITS and a red face ring 2 from the cap; second wind (`Kitchen.breaks`, TUNE): the first
+  cook who'd quit in a service takes five instead (BREAK, "DEV TAKES 5"); bigger moves badge, DONE hint,
+  COMP CARDS -> SECOND CHANCE. `Kitchen.count_for` holds the ticket curve. Bot: s1 7%, s2 22%, s3 50%,
+  s4 50%, s5 73%. WIND, URGENT, NUDGE PASS. Details: docs/HANDOFF.md.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
