@@ -165,7 +165,13 @@ func _make_ticket(big: bool) -> Dictionary:
 	var k := 4 if big else rng.randi_range(1, 2)
 	for i in k:
 		items.append({"dish": names[rng.randi_range(0, names.size() - 1)], "state": "wait"})
-	var t := {"id": _next_id, "table": rng.randi_range(1, 30), "items": items,
+	# A table number nobody on the rail or still to come has (IGN review: two tickets both read T22).
+	# One draw either way, so a seed still deals the same service.
+	var used: Array = tickets.map(func(o): return o.table) + incoming.map(func(o): return o.ticket.table)
+	var free: Array = range(1, 31).filter(func(n): return not used.has(n))
+	if free.is_empty():
+		free = range(1, 31)
+	var t := {"id": _next_id, "table": free[rng.randi_range(0, free.size() - 1)], "items": items,
 		"time": ticket_time + (3 if big else 0), "big": big}
 	t.t0 = t.time   # the clock it started with: speed for the grade
 	_next_id += 1

@@ -501,14 +501,20 @@ func test_quit_warning_matches_end_turn() -> void:
 		g.k = k
 		var said: Array = g.cooks_quitting()
 		var was_out: Array = k.crew.map(func(c): return c.out)
+		var shown: Array = []
+		for c in k.crew.size():
+			shown.append(g.stress_after(c))
 		k.end_turn()
+		for c in k.crew.size():   # the meter's preview is the stress END TURN really leaves
+			if not was_out[c] and k.crew[c].stress != shown[c]:
+				bad += 1
 		var walked: Array = []
 		for c in k.crew.size():
 			if k.crew[c].out and not was_out[c]:
 				walked.append(k.crew[c].name)
 		if said != walked:
 			bad += 1
-	check(bad == 0, "quit warning matched end_turn on 300 random states (%d mismatches)" % bad)
+	check(bad == 0, "quit warning and stress preview matched end_turn on 300 random states (%d mismatches)" % bad)
 	g.free()
 
 
@@ -832,3 +838,17 @@ func test_kitchen_stations_open() -> void:
 	check(back.from_dict(d.kitchen) and back.crew[1].at == Kitchen.PASS_IX and back.pans[2].dish == "PASTA"
 		and back.pans[3].is_empty() and back.is_open(2), "a v4 mid-service save loads onto the longer line")
 	sv.free()
+
+
+## IGN review (build 70): two tickets both read T22. Every ticket in a service gets its own table.
+func test_table_numbers_unique() -> void:
+	var dup := 0
+	for seed in 200:
+		var k := Kitchen.new()
+		k.start(1 + seed % 5, seed)
+		var tables: Array = k.tickets.map(func(t): return t.table) + k.incoming.map(func(i): return i.ticket.table)
+		for t in tables:
+			if tables.count(t) > 1:
+				dup += 1
+				break
+	check(dup == 0, "no service deals two tickets the same table number (%d of 200 did)" % dup)

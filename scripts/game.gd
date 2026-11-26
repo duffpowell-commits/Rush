@@ -219,6 +219,11 @@ func _refresh_hud() -> void:
 		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after:
 			end_btn.text = "END TURN\n%s BURNS" % Kitchen.STATIONS[i]
 			break
+	if end_btn.text == "END TURN":   # a turn earlier (stress pass): one more worked turn after this one and they quit
+		for c in k.crew.size():
+			if not k.crew[c].out and stress_after(c) == k.stress_cap - 1:
+				end_btn.text = "END TURN\n%s NEAR QUIT" % k.crew[c].name
+				break
 	act_btn.text = a if a != "" else "TAP A STATION"   # nothing to do here: say how to move
 	if a == "" and not k.crew[sel].out and k.crew[sel].ap <= 0:   # say why: this cook is spent till END TURN
 		act_btn.text = "%s: NO MOVES" % k.crew[sel].name   # short: HUGE text wraps it over the status line
@@ -231,11 +236,17 @@ func _refresh_hud() -> void:
 		var cr: Dictionary = k.crew[sel]
 		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
 		var red := 1 if k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2) else 0
-		act_btn.text = "RUSH: QUITS!" if cr.stress + k.rush_stress + red >= k.stress_cap else "RUSH +STRESS"
+		act_btn.text = "RUSH (QUITS!)" if cr.stress + k.rush_stress + red >= k.stress_cap else "RUSH +STRESS"
 	elif a == "RUN" and k.tray > 1:   # a tray: say how many plates go out on this one action
 		var n := mini(k.tray, k.window.size() + (0 if k.crew[sel].hand.is_empty() else 1))
 		if n > 1:
 			act_btn.text = "RUN %d PLATES" % n
+	if a != "":   # whose move this is, on the button (stress pass: taps moved the wrong cook)
+		var named := "%s: %s" % [k.crew[sel].name, act_btn.text]
+		var bf := act_btn.get_theme_font("font")
+		var room := act_btn.size.x - 20.0 if act_btn.size.x > 40.0 else 210.0
+		if bf == null or bf.get_string_size(named, HORIZONTAL_ALIGNMENT_LEFT, -1, act_btn.get_theme_font_size("font_size")).x <= room * 2.0:
+			act_btn.text = named   # up to two lines: the button wraps, and grows up, not off the screen
 	act_btn.disabled = a == ""
 	if note != null:
 		note.text = " | ".join(k.events)   # a bar between events: they ran together as one sentence
@@ -431,7 +442,12 @@ func end_turn() -> void:
 	var walked_before := k.walked
 	var critic_before := k.critic
 	var tickets_before: Array = k.tickets.map(func(t): return t.id)
+	var stress_before: Array = k.crew.map(func(c): return c.stress)
 	k.end_turn()
+	for c in k.crew.size():   # say what the turn cost, on the cook who paid it
+		var d: int = k.crew[c].stress - stress_before[c]
+		if d > 0 and not k.crew[c].out:
+			_fx_text(cook_pos(c) + Vector2(0, -COOK_R - 30), "+%d STRESS" % d, UI.key("bad"), 24)
 	if k.tickets.any(func(t): return not tickets_before.has(t.id)):
 		get_node("/root/Audio").sfx("ticket", randf_range(0.95, 1.05))
 		get_node("/root/Subs").cue("[printer: new ticket]")
@@ -762,7 +778,7 @@ func _coach_steps() -> Array:
 			func(): return sel != 0 or k.crew[1].out],
 		["pick", "TAP TICKET: COOK FIRST", func(): return k.tickets.size() >= 2,
 			func(): return pick_tid != 0],
-		["rest", "IDLE COOKS LOSE STRESS", func(): return k.crew.any(func(c): return not c.out and c.stress >= k.stress_cap - 2),
+		["rest", "IDLE COOKS LOSE STRESS", func(): return k.crew.any(func(c): return not c.out and c.stress >= k.stress_cap - 3),
 			func(): return false],   # nothing to do but read it: it retires after a few turns
 		["rush", "RUSH IT: +STRESS", func(): return k.action_here(sel) == "RUSH",
 			func(): return k.pans.any(func(p): return p.get("rushed", false))],
@@ -967,20 +983,23 @@ func _draw_cover(f: Control, tex: Texture2D, box: Rect2) -> void:
 ## Cooks whose stress hits the cap if the turn ends now: the same sums as Kitchen.end_turn (a burn at
 ## their station +2, a worked cook +1 while a ticket will be red, an idle one rests).
 func cooks_quitting() -> Array:
-	var red := k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2)
 	var out: Array = []
-	for c in k.crew:
-		if c.out:
-			continue
-		var s: int = c.stress
-		for i in k.pans.size():
-			var p: Dictionary = k.pans[i]
-			if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after and c.at == i:
-				s += 2
-		s = s + (1 if red else 0) if c.acted else maxi(0, s - 2)
-		if s >= k.stress_cap:
-			out.append(c.name)
+	for c in k.crew.size():
+		if not k.crew[c].out and stress_after(c) >= k.stress_cap:
+			out.append(k.crew[c].name)
 	return out
+
+
+## Cook c's stress once the turn ends now (the meter shows the change before END TURN is pressed).
+func stress_after(c: int) -> int:
+	var cr: Dictionary = k.crew[c]
+	var red := k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2)
+	var s: int = cr.stress
+	for i in k.pans.size():
+		var p: Dictionary = k.pans[i]
+		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after and cr.at == i:
+			s += 2
+	return s + (1 if red else 0) if cr.acted else maxi(0, s - 2)
 
 
 ## The NEXT bar in plain words ("NEXT: 2 dishes in 3 min"), as many as fit the width.
@@ -1127,13 +1146,19 @@ func _draw_field(f: Control) -> void:
 			# State in words, not colour alone: 2' cooking, UP! ready, PLATE NOW: burns at the next END TURN.
 			_plate(f, Rect2(r.position.x + 4, r.end.y - 38, r.size.x - 8, 30))
 			var st := ("PLATE NOW" if burning else "UP!") if up else "%d'" % p.left
-			if burning:
-				st = _fit(font, st, "PLATE!", r.size.x - 14, 15)
+			# Smaller text before cutting words (stress pass: "BURGER UP!" read just "UP!"); the state
+			# always wins over the dish name, since the art says which dish.
 			var lbl := "%s %s" % [p.dish, st]
-			if font.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(15)).x > r.size.x - 14:
-				lbl = st   # big text sizes: the state wins, the dish art still says which dish
+			var fs := 15
+			for cand in ([st, "PLATE!"] if burning else [lbl, st]):
+				lbl = cand
+				fs = 15
+				while fs > 11 and font.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(fs)).x > r.size.x - 8:
+					fs -= 1
+				if font.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(fs)).x <= r.size.x - 8:
+					break
 			f.draw_string(font, r.position + Vector2(0, r.size.y - 16), lbl,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(15), UI.key(tone))
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(fs), UI.key(tone))
 		elif i < k.pans.size():
 			var waiting := 0
 			for t in k.tickets:
@@ -1181,14 +1206,29 @@ func _draw_field(f: Control) -> void:
 		var seg := sw / cap
 		var tired: bool = cr.stress >= k.stress_cap - 2
 		var tone := "bad" if tired else ("warn" if cr.stress > 0 else "good")
+		# Stress pass: what END TURN will do, before it's pressed. Boxes it adds are outlined red,
+		# boxes a rest takes off are outlined green.
+		var after := stress_after(c)
 		for b in cap:
 			var box := Rect2(pos.x - sw / 2 + b * seg, pos.y + COOK_R + 6, seg - 2, 10)
-			f.draw_rect(box, UI.key(tone) if b < cr.stress else Color("2b3448"))
+			f.draw_rect(box, UI.key(tone) if b < cr.stress else Color("2b3448"))   # real stress stays filled; a rest only outlines
+			if b >= cr.stress and b < after:
+				f.draw_rect(box, UI.key("bad"), false, 2.0)
+			elif b >= after and b < cr.stress:
+				f.draw_rect(box, UI.key("good"), false, 2.0)
 		if cr.hand.is_empty() and (note == null or note.text == ""):   # (a carried plate's name, or the event line, sits here instead)
-			_plate(f, Rect2(pos.x - 50, pos.y + COOK_R + 18, 100, 22))
-			var sl := ("TIRED %d/%d" if tired else "STRESS %d/%d") % [cr.stress, cap]
-			f.draw_string(font, Vector2(pos.x - 50, pos.y + COOK_R + 35), sl, HORIZONTAL_ALIGNMENT_CENTER, 100,
-				UI.font_size(14), UI.key(tone) if cr.stress > 0 else ink)
+			# As wide as the gap to the next cook allows: two plates side by side ran together.
+			var pw := 100.0
+			for o in k.crew.size():
+				if o != c and not k.crew[o].out:
+					pw = minf(pw, absf(cook_pos(o).x - pos.x) - 6.0 if absf(cook_pos(o).y - pos.y) < 60.0 else pw)
+			pw = maxf(pw, 44.0)
+			var dl := "" if after == cr.stress else (" %+d" % (after - cr.stress))
+			var sl := ("TIRED %d/%d" if tired else "STRESS %d/%d") % [cr.stress, cap] + dl
+			sl = _fit(font, sl, "%d/%d%s" % [cr.stress, cap, dl], pw - 4, 14)
+			_plate(f, Rect2(pos.x - pw / 2, pos.y + COOK_R + 18, pw, 22))
+			f.draw_string(font, Vector2(pos.x - pw / 2, pos.y + COOK_R + 35), sl, HORIZONTAL_ALIGNMENT_CENTER, pw,
+				UI.font_size(14), UI.key("bad") if after > cr.stress else (UI.key(tone) if cr.stress > 0 else ink))
 		if not cr.hand.is_empty():   # the plate in hand, on the cook's shoulder, plus its name
 			_draw_fit(f, ART_DISHES[cr.hand.dish], Rect2(pos + Vector2(COOK_R - 18, -COOK_R - 6), Vector2(40, 40)))
 			_plate(f, Rect2(pos + Vector2(-50, COOK_R + 22), Vector2(100, 24)))

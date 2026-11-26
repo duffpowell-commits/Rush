@@ -203,9 +203,9 @@ func _run() -> void:
 	game._after_move()
 	var fire_default: String = game.act_btn.text
 	await _tap_at(game.field.get_global_transform() * game.ticket_rect(1).get_center())   # table 22: less urgent
-	var pick_ok: bool = game.pick_tid == 902 and game.act_btn.text == "FIRE T22"
+	var pick_ok: bool = game.pick_tid == 902 and game.act_btn.text == "DEV: FIRE T22"
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())   # DEV's own station: act
-	pick_ok = pick_ok and kk.pans[0].get("tid", 0) == 902 and fire_default == "FIRE T21"
+	pick_ok = pick_ok and kk.pans[0].get("tid", 0) == 902 and fire_default == "DEV: FIRE T21"
 	_check(pick_ok, "PICK PASS (button said FIRE T21, tapped table 22's ticket, FIRE cooked its burger)")
 	# Tap a dish (Duff, Nov 25): table 22 now wants a burger and a steak, both grill. A tap on the
 	# STEAK row picks that dish: the button names it and FIRE cooks it, not the burger listed first.
@@ -225,7 +225,7 @@ func _run() -> void:
 	await _frames(2)
 	await _shot("dish_pick")
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
-	_check(game.pick_ix == -1 and dish_label == "FIRE STEAK" and kk.pans[0].get("dish", "") == "STEAK"
+	_check(game.pick_ix == -1 and dish_label == "DEV: FIRE STEAK" and kk.pans[0].get("dish", "") == "STEAK"
 		and kk.tickets[1].items[0].state == "wait",
 		"DISH PICK PASS (tapped T22's STEAK row: button said '%s', FIRE cooked the steak, the burger still waits)" % dish_label)
 	kk.tickets[1].items = keep_items   # back to the minute the next checks expect
@@ -236,7 +236,7 @@ func _run() -> void:
 	var left0: int = kk.pans[0].left
 	var rush_label: String = game.act_btn.text
 	game.act()
-	_check(rush_label == "RUSH +STRESS" and kk.pans[0].left == left0 - 1 and kk.crew[0].stress == kk.rush_stress,
+	_check(rush_label == "DEV: RUSH +STRESS" and kk.pans[0].left == left0 - 1 and kk.crew[0].stress == kk.rush_stress,
 		"RUSH PASS (burger %d -> %d minutes, DEV stress %d)" % [left0, kk.pans[0].left, kk.crew[0].stress])
 	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
 	await _tap_at(game.field.get_global_transform() * game.station_rect(1).get_center())   # MO plates the fries
@@ -245,7 +245,7 @@ func _run() -> void:
 	await _shot("pick_rush_window")
 	game.end_turn()   # MO spent an action plating: a fresh turn to walk to the pass and run
 	await _tap_at(game.field.get_global_transform() * game.station_rect(Kitchen.PASS_IX).get_center())
-	var on_pass: bool = kk.crew[1].at == Kitchen.PASS_IX and game.act_btn.text == "RUN"
+	var on_pass: bool = kk.crew[1].at == Kitchen.PASS_IX and game.act_btn.text == "MO: RUN"
 	game.act()
 	var ran: bool = kk.window.is_empty() and kk.ticket(902).items[1].state == "served"
 	_check(up and on_pass and ran, "WINDOW PASS (fries plated up on the window, MO walked to the pass and ran them)")
@@ -982,6 +982,23 @@ func _polish_checks(game: Node) -> void:
 	await _tap_at(game.field.get_global_transform() * game._more_rect.get_center())
 	var back: bool = game.rail_off == 0 and game.rail_tickets()[0].id == first_id
 	_check(paged and back, "RAIL PAGE PASS (+2 MORE showed tickets 5-6, BACK returned to the most urgent)")
+	# Stress pass: two away and working: END TURN warns a turn early, the meter shows the +1, and
+	# the action button names the cook it moves.
+	var sat_was: int = kk.pans[0].sat
+	kk.pans[0].sat = 0   # no burn this turn, so the early warning isn't outranked
+	kk.crew[1].stress = kk.stress_cap - 2
+	kk.crew[1].acted = true
+	game._refresh_hud()
+	var near_warn: String = game.end_btn.text
+	var near_after: int = game.stress_after(1)
+	var named: String = game.act_btn.text
+	game.field.queue_redraw()
+	await _frames(2)
+	await _shot("stress_preview")
+	kk.pans[0].sat = sat_was
+	_check(near_warn == "END TURN\nMO NEAR QUIT" and near_after == kk.stress_cap - 1
+		and (named.begins_with(kk.crew[game.sel].name + ": ") or named == "TAP A STATION" or named.ends_with("NO MOVES")),
+		"STRESS PASS (END TURN '%s', MO %d -> %d before it's pressed, button '%s')" % [near_warn.replace("\n", " / "), kk.stress_cap - 2, near_after, named.replace("\n", " ")])
 	kk.crew[1].stress = kk.stress_cap - 1   # MO is one away and worked this turn: END TURN names her
 	kk.crew[1].acted = true
 	kk.crew[0].ap = 0
@@ -1072,7 +1089,7 @@ func _tray_checks(game: Node, pst: Node) -> void:
 	game.cash = cash_was
 	game.perks = perks_was
 	game._refresh_hud()
-	_check(one and row1 and row2 and four and pr.position.y >= 0.0 and pr.end.y <= vh and label == "RUN 2 PLATES" and ran,
+	_check(one and row1 and row2 and four and pr.position.y >= 0.0 and pr.end.y <= vh and label.ends_with("RUN 2 PLATES") and ran,
 		"TRAY PASS (one plate a RUN to start; shop row SERVER TRAY -> ENTREE TRAY = 4, fits at HUGE %d px of %d; '%s' sent 2 plates for one action)" % [int(pr.size.y), int(vh), label])
 
 
@@ -1142,7 +1159,7 @@ func _shot(name: String) -> void:
 func _find(prefix: String) -> Button:
 	var found: Button = null
 	for b in get_tree().root.find_children("*", "Button", true, false):
-		if b.is_visible_in_tree() and not b.disabled and b.text.begins_with(prefix) and not b.is_queued_for_deletion():
+		if b.is_visible_in_tree() and not b.disabled and (b.text.begins_with(prefix) or b.text.contains(": " + prefix)) and not b.is_queued_for_deletion():
 			found = b
 	return found
 
