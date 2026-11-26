@@ -1079,5 +1079,15 @@ func test_double_burners() -> void:
 	k.end_turn()
 	k.crew[0].at = 1
 	check(k.plate(0) and k.window.size() == 2, "PLATE puts both up")
+	# The pan's first table walks: the rider's fries keep cooking for it, nothing is stuck.
+	k.window.clear()
+	k.tickets = [{"id": 83, "table": 3, "items": [{"dish": "FRIES", "state": "wait"}], "time": 1, "big": false, "t0": 1},
+		{"id": 84, "table": 4, "items": [{"dish": "FRIES", "state": "wait"}], "time": 7, "big": false, "t0": 7}]
+	k.crew[0].at = 1
+	k.crew[0].ap = 3
+	k.fire(0)
+	k.end_turn()
+	check(k.ticket(83).is_empty() and not k.pans[1].is_empty() and k.pans[1].tid == 84 and not k.pans[1].has("more"),
+		"a walked first table hands the pan to the other one")
 	var u := Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, ["burners"])
 	check(u.batch == 2 and Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, []).batch == 1, "the shop sets it")

@@ -634,8 +634,20 @@ func end_turn() -> void:
 				critic = "walked"
 			_say("TABLE %d WALKED" % t.table)
 			for s in pans.size():
-				if not pans[s].is_empty() and pans[s].tid == t.id:
-					pans[s] = {}
+				if pans[s].is_empty():
+					continue
+				var more: Array = pans[s].get("more", [])
+				more.erase(t.id)   # DOUBLE BURNERS: a walked rider just drops out of the pan
+				if pans[s].tid == t.id:
+					if more.is_empty():
+						pans[s] = {}
+					else:   # the other table's dish keeps cooking in this pan
+						pans[s].tid = more.pop_front()
+				if not pans[s].is_empty():
+					if more.is_empty():
+						pans[s].erase("more")
+					else:
+						pans[s]["more"] = more
 			window = window.filter(func(w): return w.tid != t.id)   # its plates on the pass are binned
 			for cr in crew:   # a plate for a walked table is binned, so the cook's hands are free
 				if not cr.hand.is_empty() and cr.hand.tid == t.id:
