@@ -883,7 +883,7 @@ func test_kitchen_events() -> void:
 	check(k.score_parts().total == mini(plain + 8, 100), "serving the critic is worth 8 points")
 	k.critic = "walked"
 	check(k.score_parts().total == plain - 8, "walking the critic costs 8")
-	# 8.5 plan #2: HEAT WAVE adds a point to working cooks every other turn; PARTY OF 12 adds a big table.
+	# 8.5 plan #2: HEAT WAVE adds a point to working cooks every fourth turn; PARTY OF 12 swaps in a big table.
 	k = _event_kitchen("heat")
 	k.tickets = [{"id": 92, "table": 7, "items": [{"dish": "FRIES", "state": "wait"}], "time": 9, "big": false}]
 	k.incoming.clear()
@@ -900,9 +900,9 @@ func test_kitchen_events() -> void:
 	var plain_k := Kitchen.new()
 	plain_k.with_events = false
 	plain_k.start(2, 11)
-	check(pk.total == plain_k.total + 1 and pk.incoming.size() == plain_k.incoming.size() + 1
+	check(pk.total == plain_k.total and pk.incoming.size() == plain_k.incoming.size()
 		and pk.incoming.filter(func(inc): return inc.ticket.big).size() > plain_k.incoming.filter(func(inc): return inc.ticket.big).size(),
-		"party: one more table, and it's a big one")
+		"party: a big table takes a small one's place")
 	var short: Kitchen = null   # a 2-ticket night that rolls the party: it still lands mid-service, in order
 	for sd in 400:
 		var sk := Kitchen.new()
@@ -1024,3 +1024,60 @@ func test_shop_pushes_back() -> void:
 	check(Upgrades.buy("temp", 100, owned, 1) == 10, "second temp bought for $90")
 	check(Upgrades.load_tickets([]) == 0 and Upgrades.load_tickets(["meal"]) == 0 and Upgrades.load_tickets(["meal", "lamps"]) == 1
 		and Upgrades.load_tickets(["meal", "lamps", "iron", "tray"]) == 2, "one table per two upgrades")
+
+
+## CROSS PREP (Duff, Nov 26): a marked dish can't fire until a cook at its prep station pulls the
+## ingredient (any station, e.g. steak strips from the grill for a salad). Saves and loads intact.
+func test_cross_prep() -> void:
+	var k := Kitchen.new()
+	k.with_events = false
+	k.start(4, 3)
+	for i in k.pans.size():
+		k.pans[i] = {}
+	k.tickets = [{"id": 70, "table": 7, "items": [{"dish": "SALAD", "state": "wait", "needs": 0}], "time": 8, "big": false, "t0": 8}]
+	k.crew[0].at = 3
+	k.crew[0].ap = 3
+	check(k.action_here(0) == "" and not k.fire(0), "a salad waiting on steak strips can't fire at COLD")
+	check(Kitchen.prep_name(k.tickets[0].items[0]) == "STEAK STRIPS", "the salad needs steak strips")
+	k.crew[0].at = 0
+	check(k.action_here(0) == "PREP" and k.act_here(0), "the grill preps it")
+	check(not k.tickets[0].items[0].has("needs") and k.crew[0].ap == 2, "prepped for one move")
+	k.crew[0].at = 3
+	check(k.action_here(0) == "FIRE" and k.fire(0), "then COLD fires it")
+	var d := k.to_dict()
+	var k2 := Kitchen.new()
+	k.tickets[0].items.append({"dish": "PASTA", "state": "wait", "needs": 3})
+	d = JSON.parse_string(JSON.stringify(k.to_dict()))
+	check(k2.from_dict(d) and int(k2.tickets[0].items[1].needs) == 3, "the prep mark survives a save")
+	var m := _event_kitchen("prep")
+	var marked := 0
+	var dishes := 0
+	for inc in m.incoming:
+		for it in inc.ticket.items:
+			dishes += 1
+			if it.has("needs"):
+				marked += 1
+				check(int(it.needs) != Kitchen.DISHES[it.dish].st, "prepped somewhere else")
+	check(marked > 0 and marked <= (dishes + 2) / 3, "about one dish in three (%d of %d)" % [marked, dishes])
+
+
+## DOUBLE BURNERS (shop): one FIRE cooks the same dish for two tables; PLATE sends both up; a
+## burn refires both.
+func test_double_burners() -> void:
+	var k := Kitchen.new()
+	k.with_events = false
+	k.batch = 2
+	k.start(2, 3)
+	for i in k.pans.size():
+		k.pans[i] = {}
+	k.tickets = [{"id": 81, "table": 1, "items": [{"dish": "FRIES", "state": "wait"}], "time": 5, "big": false, "t0": 5},
+		{"id": 82, "table": 2, "items": [{"dish": "FRIES", "state": "wait"}, {"dish": "WINGS", "state": "wait"}], "time": 7, "big": false, "t0": 7}]
+	k.crew[0].at = 1
+	k.crew[0].ap = 3
+	check(k.fire(0) and k.pans[1].get("more", []) == [82], "one FIRE, fries for two tables")
+	check(k.tickets[1].items[1].state == "wait", "the wings wait their turn")
+	k.end_turn()
+	k.crew[0].at = 1
+	check(k.plate(0) and k.window.size() == 2, "PLATE puts both up")
+	var u := Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, ["burners"])
+	check(u.batch == 2 and Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, []).batch == 1, "the shop sets it")

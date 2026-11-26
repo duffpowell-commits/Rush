@@ -9,11 +9,12 @@ version: where we are, what's next, how to check it.
 Last updated: 2026-11-26 17:00 UTC (Claude).
 
 ## Where it is right now
-- main = `c56d586` (PR #32, plan #3), build 89. 8.5 plan #4 is on the working branch (see below). Live builds:
+- main = `9414b64` (PR #33, plan #4), build 92. CROSS PREP + DOUBLE BURNERS + difficulty review are on
+  the working branch (see "Cross prep" below). Live builds:
   - Web: https://duffpowell-commits.github.io/Rush/ (gh-pages, pushed by CI on every main push;
     the gh-pages commit message reads "web build <sha7>").
   - APK: Releases -> `dev` -> `Rush.apk`; `version.json` on the same release shows `{"code", "sha"}`.
-    Build 89 = c56d586.
+    Build 89 = c56d586, build 92 = 9414b64.
 - Open PRs: none. Working branch for Claude sessions: `claude/project-thread-qt0oe2` (reset from
   main at the start of each PR; nothing unmerged on it).
 - Side test window: Nov 24 to Dec 1, 2026. Duff decides keep or park on Dec 1 (kill criteria in
@@ -45,7 +46,8 @@ builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
   show table numbers, cooks walk, steam, red-ticket shake, critic stamp, RETRY SERVICE on game over.
 - Build 81 (PR #28): TEMP COOK price doubles per hire tonight ($45, $90, $180; `temp_buys` in the
   save); every 2 upgrades add +1 table a service (`Upgrades.load_tickets`); twists HEAT WAVE
-  (working cooks +1 stress on odd turns) and PARTY OF 12 (one extra big table); spent cooks grey
+  (working cooks +1 stress on odd turns; every 4th turn since the Nov 26 difficulty review) and
+  PARTY OF 12 (one extra big table; since Nov 26 it takes a small table's place); spent cooks grey
   with DONE, others show a blue moves-left number; hint "TAP FACE, THEN STATION" after turn 1.
 
 ## 8.5 plan #3 (Duff: "Build all of it", Nov 26, after the build-84 review)
@@ -86,6 +88,23 @@ builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
 - Bot (no perks, greedy, 200 seeds): s1 7%, s2 22%, s3 37%, s4 50%, s5 73% lost. Perks make a real
   night easier as it goes; the bot never earns any.
 - Checks: LEVELUP, UNDO PASS; TWIST PASS expects a VIP/critic twist in service 2; test_cook_perks.
+
+## Cross prep, double burners, difficulty review (Duff, Nov 26, in chat)
+- CROSS PREP twist (`Kitchen.EVENTS.prep`, from service 4): every `prep_every`-th dish (TUNE, 3)
+  needs an ingredient pulled at another station first (`PREP_FROM`: grill <- blue cheese from COLD,
+  fry <- garlic butter from SAUTE, saute <- blue cheese from COLD, cold <- steak strips from GRILL).
+  The item carries `needs` (station index) until a cook there taps PREP (1 move, no pan); then it
+  fires as normal. Ticket rows say "PREP X at STATION"; `waiting_at` counts it where it's prepped.
+  Marked tables get +1 minute. PREP PASS, test_cross_prep.
+- DOUBLE BURNERS (shop, $100, a kitchen upgrade, not a cook perk, so it survives a walkout):
+  `Kitchen.batch` 2, one FIRE also cooks the same dish for the next most urgent table
+  (`pans[s].more`); PLATE sends both up; a burn refires both. BURNERS PASS, test_double_burners.
+- Difficulty review (greedy bot, 300 seeds, random twists, no perks/shop): before s1 7, s2 24, s3 41,
+  s4 57, s5 70, s6 91. Spikes were HEAT WAVE (+30 at s4) and PARTY OF 12 (+42) and the rail growing
+  every service. Now: HEAT every 4th turn, the party takes a small table's place (+3 min), past
+  service 5 the rail grows every other service (`count_for`). After: s1 7, s2 24, s3 41, s4 48,
+  s5 67, s6 67, s7 88, s8 88; every twist within +13 of a plain s4; CROSS PREP +2. With DOUBLE
+  BURNERS: s4 23, s5 41. Bot script lives only in scratch (never commit `tools/_bal_tmp.gd`).
 
 ## Next, step by step
 1. Duff's call on Nov 26: blind reviews are paused to save usage; build fixes and merge on green

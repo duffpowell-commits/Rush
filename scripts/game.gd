@@ -36,12 +36,13 @@ const LIVES := 3             # tables you can walk in one service
 ## Live sliders (DEV MENU -> TUNE). Applied when a service starts.
 const TUNE := {"ticket_time": [4.0, 16.0], "crew_ap": [1.0, 5.0], "stress_cap": [2.0, 12.0],
 	"service_turns": [8.0, 40.0], "first_tickets": [2.0, 14.0], "more_tickets": [0.0, 4.0],
-	"rush_stress": [0.0, 3.0], "breaks": [0.0, 3.0]}
+	"rush_stress": [0.0, 3.0], "breaks": [0.0, 3.0], "prep_every": [1.0, 8.0]}
 var ticket_time := 9.0
 var crew_ap := 3.0
 var stress_cap := 6.0
 var service_turns := 20.0
 var first_tickets := 7.0
+var prep_every := 3.0        # CROSS PREP twist: every Nth dish needs an ingredient from another station
 var breaks := 1.0            # second winds a service: the first cook who'd quit takes five instead
 var more_tickets := 1.0
 var rush_stress := 1.0
@@ -269,6 +270,9 @@ func _refresh_hud() -> void:
 			act_btn.text = "FIRE %s" % fp.item.dish   # the tapped dish, by name
 		if k.cook_time_by(sel, fp.item.dish) > fp.t.time:   # it can't be up before the table walks: say so first
 			act_btn.text += ": TOO LATE"
+	elif a == "PREP":   # what it pulls, and for which table
+		var pp := k.prep_pick(k.crew[sel].at, pick_tid)
+		act_btn.text = "PREP %s T%d" % [Kitchen.prep_name(pp.item), pp.t.table]
 	elif a == "RUSH":   # warn when this rush would send the cook over the edge
 		var cr: Dictionary = k.crew[sel]
 		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
@@ -368,6 +372,8 @@ func _new_service() -> void:
 	k.tray = u.tray
 	k.hires = u.hires
 	k.breaks = int(breaks)
+	k.prep_every = int(prep_every)
+	k.batch = u.batch
 	k.cook_perks = cook_perks.duplicate(true)
 	k.gone = gone.duplicate()
 	k.start(level, rng.randi() if level > 1 else 0)
@@ -394,7 +400,7 @@ func act() -> void:
 	var before := _snap()
 	if k.act_here(sel, pick_tid, true, pick_ix):
 		_undo = before
-		var snd: String = {"FIRE": "fire", "RUSH": "rush", "PLATE": "plate", "RUN": "bell"}.get(what, "good")
+		var snd: String = {"FIRE": "fire", "RUSH": "rush", "PLATE": "plate", "RUN": "bell", "PREP": "click"}.get(what, "good")
 		get_node("/root/Audio").sfx(snd, 1.12 if what == "RUN" and k.served > served_before else randf_range(0.95, 1.05))
 		if what == "RUSH":
 			get_node("/root/Subs").cue("[sizzle: rushed]")
@@ -411,6 +417,9 @@ func act() -> void:
 			"PLATE":
 				_fx_ring(c, UI.key("good"))
 				_fx_text(top, "UP!", UI.key("good"))
+			"PREP":
+				_fx_ring(c, UI.key("info"))
+				_fx_text(top, "PREPPED!", UI.key("info"))
 			"RUN":
 				score = k.served + _night_before
 				_fx_text(top, "+$%d" % (k.tips - tips_before) if k.tips > tips_before else "RAN", UI.key("good"))
@@ -747,6 +756,8 @@ func open_shop() -> void:
 	var big_text: bool = float(_settings.text_scale()) > 1.2
 	if big_text:
 		scroll.custom_minimum_size.y = 470
+	elif Upgrades.shown(perks).size() > 6:   # DOUBLE BURNERS made seven rows: DONE fell off a phone at normal text
+		scroll.custom_minimum_size.y = 560
 	else:
 		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED   # fits as is: no scroll
 	for id in Upgrades.shown(perks):
@@ -1446,8 +1457,8 @@ func waiting_at(i: int) -> int:
 	var n := 0
 	for t in k.tickets:
 		for it in t.items:
-			if it.state == "wait" and Kitchen.DISHES[it.dish].st == i:
-				n += 1
+			if it.state == "wait" and (int(it.get("needs", -1)) == i if it.has("needs") else Kitchen.DISHES[it.dish].st == i):
+				n += 1   # a dish waiting on an ingredient counts where it's prepped, not where it cooks
 	return n
 
 
@@ -1520,6 +1531,8 @@ func _draw_field(f: Control) -> void:
 				f.draw_line(Vector2(r.position.x + 8, iy - 6), Vector2(r.position.x + 8 + dw, iy - 6), UI.DIM, 2.0)
 			# Its state in words on a small line under it (no symbol to learn): where it cooks while it waits.
 			var sub: String = {"wait": "at " + Kitchen.station_of(it.dish), "cooking": "cooking", "carried": "on the pass", "served": "served"}[it.state]
+			if it.state == "wait" and it.has("needs"):   # CROSS PREP: say what to prep and where, first
+				sub = "PREP AT " + Kitchen.STATIONS[int(it.needs)]   # the button names the ingredient
 			var sc: Color = UI.key("warn") if it.state == "wait" else (UI.key("info") if it.state != "served" else UI.DIM)
 			f.draw_string(font, Vector2(r.position.x + 8, iy + 14), sub,
 				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(14), sc)
@@ -1621,9 +1634,10 @@ func _draw_field(f: Control) -> void:
 				_plate(f, Rect2(r.position.x + 4, r.get_center().y - 14, r.size.x - 8, 32))
 				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), _fit(font, "%d WAITING" % waiting, "%d WAIT" % waiting, r.size.x - 8, 17),
 					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(17), UI.key("bad"))
-			elif waiting > 0:   # work waiting here: what to FIRE, and how much
+			elif waiting > 0:   # work waiting here: what to FIRE (or PREP), and how much
+				var verb := "PREP" if k.prep_pick(i).size() > 0 and k._waiting_for(i, 0).is_empty() else "FIRE"
 				_plate(f, Rect2(r.position.x + 4, r.get_center().y - 14, r.size.x - 8, 32))
-				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), _fit(font, "%d TO FIRE" % waiting, "FIRE %d" % waiting, r.size.x - 8, 17),
+				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), _fit(font, "%d TO %s" % [waiting, verb], "%s %d" % [verb, waiting], r.size.x - 8, 17),
 					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(17), UI.key("warn"))
 		elif i == Kitchen.PASS_IX:
 			for w in mini(k.window.size(), 3):   # plates up on the window, waiting for a runner, with their table
