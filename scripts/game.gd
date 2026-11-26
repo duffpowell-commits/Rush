@@ -1211,7 +1211,7 @@ func _draw_field(f: Control) -> void:
 		var after := stress_after(c)
 		for b in cap:
 			var box := Rect2(pos.x - sw / 2 + b * seg, pos.y + COOK_R + 6, seg - 2, 10)
-			f.draw_rect(box, UI.key(tone) if b < mini(cr.stress, after) else Color("2b3448"))
+			f.draw_rect(box, UI.key(tone) if b < cr.stress else Color("2b3448"))   # real stress stays filled; a rest only outlines
 			if b >= cr.stress and b < after:
 				f.draw_rect(box, UI.key("bad"), false, 2.0)
 			elif b >= after and b < cr.stress:
