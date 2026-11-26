@@ -588,8 +588,12 @@ func end_turn() -> void:
 			get_node("/root/Audio").sfx("door")
 			get_node("/root/Subs").cue("[door slams: cook walked out]")
 			var qn: String = e.trim_suffix(" WALKED OUT")
-			if not Kitchen.TEMPS.has(qn) and not gone.has(qn) and not get_node("/root/DebugMenu").god_mode:
-				gone.append(qn)   # gone for the rest of the night, not just this service (RETRY brings them back)
+			var house_left := 0
+			for hn in ["DEV", "MO"]:
+				if hn != qn and not gone.has(hn):
+					house_left += 1
+			if not Kitchen.TEMPS.has(qn) and not gone.has(qn) and house_left > 0 and not get_node("/root/DebugMenu").god_mode:
+				gone.append(qn)   # the last house cook always comes back next service (no empty line)   # gone for the rest of the night, not just this service (RETRY brings them back)
 	if lives <= 0 or k.crew.all(func(c): return c.out):
 		game_over()
 		return
@@ -1239,8 +1243,8 @@ func tap(p: Vector2) -> void:
 					note.text = "%s OPENS IN SERVICE %d" % [Kitchen.STATIONS[i], Kitchen.OPENS[i]]
 				return
 			if pf.get("st", -1) == i and int(pf.prev) != sel and not k.crew[int(pf.prev)].out:
+				var before := _snap()   # before sel changes, so UNDO gives back the cook you had selected
 				sel = int(pf.prev)   # tapped the same station again: the cook you had picked goes there after all
-				var before := _snap()
 				var went := k.move(sel, i)
 				if went:
 					_undo = before
@@ -1647,7 +1651,7 @@ func _draw_field(f: Control) -> void:
 			# The chip takes over the name row while a cook is picked (name + cost): above it a coach hint
 			# hid it, at the foot it hid UP! / PLATE NOW (fresh-eyes PR #30).
 			var nm: String = Kitchen.STATIONS[i]
-			var wl := _fit(font, "TOO FAR" if far else "WALK %d" % cost, "FAR" if far else "W%d" % cost, r.size.x - 8, 13)
+			var wl := _fit(font, "TOO FAR" if far else ("FREE STEP" if cost == 0 else "WALK %d" % cost), "FAR" if far else ("FREE" if cost == 0 else "W%d" % cost), r.size.x - 8, 13)
 			var chip := Rect2(r.position.x + 3, r.position.y + 3, r.size.x - 6, 36)   # two lines: the name, then the cost
 			var tone_c: Color = UI.key("bad") if far else UI.key("info")
 			f.draw_rect(chip, Color(0.03, 0.04, 0.06, 0.92))

@@ -124,6 +124,10 @@ func start(n: int, seed_value: int = 0) -> void:
 		var hc := _cook(nm)
 		hc.at = 0 if nm == "DEV" else (2 if is_open(2) else 1)
 		crew.append(hc)
+	if crew.is_empty() and hires <= 0:   # never start a service with nobody on the line
+		var back := _cook("DEV")
+		back.at = 0
+		crew.append(back)
 	for h in hires:   # a temp starts at the pass, where plates pile up
 		var tc := _cook(TEMPS[h % TEMPS.size()])
 		tc.at = PASS_IX
@@ -584,7 +588,7 @@ func _drop_hand(cr: Dictionary) -> void:
 
 
 ## The service's score out of 100 and where it came from (Nov 25: the old letter only landed A/C/F).
-## Tickets out 60, speed 25 (how much clock was left when each table went out; full at 70%, none
+## Tickets out 60, speed 25 (how much clock was left when each table went out; full at 75%, none
 ## under 30%: a clean service served with half the clock left is an A), clean pans 15,
 ## minus 10 per table walked (on top of the ticket it lost), critic +-8.
 ## 8.5 plan #4 (IGN: A came too easy): speed is full at 75% of the clock left (was 70%), A needs 90 (was 87).

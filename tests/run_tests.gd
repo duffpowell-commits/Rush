@@ -597,6 +597,10 @@ func test_gone_for_the_night() -> void:
 		k2.end_turn()
 		guard += 1
 	check(guard < 60, "a short-handed service still plays out")
+	var k3 := Kitchen.new()
+	k3.gone = ["DEV", "MO"]
+	k3.start(3, 5)
+	check(k3.crew.size() == 1 and k3.crew[0].name == "DEV", "both gone, no temp: DEV comes back so the line is never empty")
 
 
 ## The game screen's save carries the service in progress, and score only counts finished services.
