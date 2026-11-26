@@ -79,6 +79,13 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   (`Subs.lift`) in a softer style; the shop lists OWNED. POLISH PASS.
 - Nov 25 hints from that review (Duff: "Yes"): TAP FIRE TO COOK (was "tap grill"), DOTS ARE MOVES LEFT
   after the first END TURN, PASS: RUN SERVES IT. test_coach_hints_short checks the last two.
+- Nov 25 blind review #2 (7/10) fixes: a coach hint the player ignores retires after `COACH_TURNS` (3)
+  turns (`Coach.retire`); END TURN names a cook who would quit ("END TURN / MO QUITS", `cooks_quitting`
+  mirrors Kitchen.end_turn's stress sums); TIRED under a cook 2 from the cap; new hint IDLE COOKS LOSE
+  STRESS; a spent cook's button says "DEV: NO MOVES"; events joined with " | "; a quit cook shows
+  QUIT at their spot (the WALKED OUT line is gone); GAME OVER buttons wait 1 s; HOW TO PLAY says
+  SCROLL FOR MORE until the end. POLISH PASS checks the quit warning and spent button, GAMEOVER PASS
+  the tap guard, test_quit_warning_matches_end_turn the prediction against end_turn on random states.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

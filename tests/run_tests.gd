@@ -479,6 +479,39 @@ func test_kitchen_save_resumes_same_service() -> void:
 		"plays out identically (served %d/%d, walked %d/%d)" % [a.served, b.served, a.walked, b.walked])
 
 
+## END TURN's quit warning predicts exactly who Kitchen.end_turn walks out, on random states.
+func test_quit_warning_matches_end_turn() -> void:
+	var g = load("res://scripts/game.gd").new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var bad := 0
+	for i in 300:
+		var k := Kitchen.new()
+		k.start(1 + i % 3, i)
+		for t in k.tickets:
+			t.time = rng.randi_range(1, 6)
+		for c in k.crew:
+			c.stress = rng.randi_range(0, k.stress_cap - 1)
+			c.acted = rng.randf() < 0.6
+			c.at = rng.randi_range(0, Kitchen.PASS_IX)
+		if rng.randf() < 0.5:
+			k.pans[0] = {"tid": k.tickets[0].id, "dish": k.tickets[0].items[0].dish, "left": 0,
+				"sat": rng.randi_range(0, k.burn_after), "rushed": false, "by": 0}
+			k.tickets[0].items[0].state = "cooking"
+		g.k = k
+		var said: Array = g.cooks_quitting()
+		var was_out: Array = k.crew.map(func(c): return c.out)
+		k.end_turn()
+		var walked: Array = []
+		for c in k.crew.size():
+			if k.crew[c].out and not was_out[c]:
+				walked.append(k.crew[c].name)
+		if said != walked:
+			bad += 1
+	check(bad == 0, "quit warning matched end_turn on 300 random states (%d mismatches)" % bad)
+	g.free()
+
+
 ## The game screen's save carries the service in progress, and score only counts finished services.
 func test_rush_save_no_double_count() -> void:
 	var g = load("res://scripts/game.gd").new()

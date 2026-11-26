@@ -451,10 +451,12 @@ func _run() -> void:
 		await _frames(1)
 		waited += 1
 	await _frames(10)
+	var guarded: bool = game.over and game.find_child("Reason", true, false) != null and _find("TRY AGAIN") == null   # a beat before it takes taps (stray board taps restarted the night)
+	await get_tree().create_timer(1.2).timeout
 	_shot("gameover")
 	var reason: Node = game.find_child("Reason", true, false)
-	_check(game.over and _find("TRY AGAIN") != null and not get_node("/root/Save").exists() and reason != null and "WALKED" in reason.text,
-		"GAMEOVER PASS (game over screen says why, save cleared)")
+	_check(guarded and game.over and _find("TRY AGAIN") != null and not get_node("/root/Save").exists() and reason != null and "WALKED" in reason.text,
+		"GAMEOVER PASS (game over screen says why, TRY AGAIN waits a beat, save cleared)")
 	await _click("TITLE")
 	await _wait_scene("Title")
 	await _frames(5)
@@ -964,6 +966,16 @@ func _polish_checks(game: Node) -> void:
 	game.field.queue_redraw()
 	await _frames(3)
 	var warn: String = game.end_btn.text
+	kk.crew[1].stress = kk.stress_cap - 1   # MO is one away and worked this turn: END TURN names her
+	kk.crew[1].acted = true
+	kk.crew[0].ap = 0
+	game.sel = 0
+	game._refresh_hud()
+	var quit_warn: String = game.end_btn.text
+	var spent: String = game.act_btn.text
+	game.field.queue_redraw()
+	await _frames(2)
+	await _shot("polish_tired")
 	var nx: String = game.next_line(ThemeDB.fallback_font, 2000.0)
 	await _shot("polish_board")
 	kk.from_dict(JSON.parse_string(JSON.stringify(keep)))
@@ -984,9 +996,9 @@ func _polish_checks(game: Node) -> void:
 	game.between = true
 	game._refresh_hud()
 	await _frames(2)
-	_check(warn == "END TURN\nGRILL BURNS" and calm == "END TURN" and nx.begins_with("NEXT: ") and nx.contains("1 dish in 2 min") and nx.contains("2 dishes in 3 min")
+	_check(warn == "END TURN\nGRILL BURNS" and calm == "END TURN" and quit_warn == "END TURN\nMO QUITS" and spent == "DEV: NO MOVES" and nx.begins_with("NEXT: ") and nx.contains("1 dish in 2 min") and nx.contains("2 dishes in 3 min")
 		and owned_ok,
-		"POLISH PASS (END TURN warns '%s', NEXT bar '%s', shop says '%s')" % [warn.replace("\n", " / "), nx, owned_txt])
+		"POLISH PASS (END TURN warns '%s' and '%s', spent cook '%s', NEXT bar '%s', shop says '%s')" % [warn.replace("\n", " / "), quit_warn.replace("\n", " / "), spent, nx, owned_txt])
 
 
 func _tray_checks(game: Node, pst: Node) -> void:

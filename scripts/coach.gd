@@ -50,8 +50,23 @@ static func teach(parent: Node, hint_id: String, text: String, check: Callable) 
 	return c
 
 
+## Give up on a hint the player never acted on (it would sit over the play for good): saved as seen.
+func retire() -> void:
+	if learned:
+		return
+	learned = true
+	var cfg := ConfigFile.new()
+	cfg.load(PATH)
+	cfg.set_value("seen", id, true)
+	cfg.save(PATH)
+	var tw := create_tween()
+	tw.tween_property(self, "modulate:a", 0.0, 0.3)
+	tw.tween_callback(queue_free)
+
+
 func _process(_dt: float) -> void:
-	modulate.a = 0.85 + 0.15 * sin(Time.get_ticks_msec() * 0.006)   # a gentle pulse: the band stays readable
+	if not learned:   # once learned or retired the fade tween owns the alpha
+		modulate.a = 0.85 + 0.15 * sin(Time.get_ticks_msec() * 0.006)   # a gentle pulse: the band stays readable
 	if not learned and done_when.is_valid() and done_when.call():
 		learned = true
 		var cfg := ConfigFile.new()
