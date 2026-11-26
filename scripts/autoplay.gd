@@ -342,6 +342,7 @@ func _run() -> void:
 	# Tips carry over: they're banked, the SHOP spends them, the upgrade shapes service 2 and is saved.
 	var tips1: int = game.k.tips
 	var banked: bool = game.cash == tips1 and tips1 >= 25
+	var shop_new: bool = _find("SHOP") != null and _find("SHOP").text.contains("NEW")   # NEW! before the first visit
 	await _click("SHOP")
 	await _frames(3)
 	await _shot("shop")
@@ -349,6 +350,9 @@ func _run() -> void:
 	await _frames(3)
 	var bought: bool = game.perks.has("meal") and game.cash == tips1 - 25 and _find("FAMILY MEAL") == null
 	await _click("DONE")
+	var shop_b: Button = _find("SHOP")
+	var new_gone: bool = shop_new and shop_b != null and not shop_b.text.contains("NEW")   # looked once: no more NEW!
+	_check(new_gone, "SHOP NEW PASS (NEW! before the visit, then '%s')" % (shop_b.text if shop_b != null else "-"))
 	await _tray_checks(game, pst)
 	await _polish_checks(game)
 	await _click("NEXT SERVICE")
@@ -451,12 +455,13 @@ func _run() -> void:
 		await _frames(1)
 		waited += 1
 	await _frames(10)
-	var guarded: bool = game.over and game.find_child("Reason", true, false) != null and _find("TRY AGAIN") == null   # a beat before it takes taps (stray board taps restarted the night)
+	var guarded: bool = game.over and game.find_child("Reason", true, false) != null and _find("NEW NIGHT") == null   # a beat before it takes taps (stray board taps restarted the night)
 	await get_tree().create_timer(1.2).timeout
 	_shot("gameover")
 	var reason: Node = game.find_child("Reason", true, false)
-	_check(guarded and game.over and _find("TRY AGAIN") != null and not get_node("/root/Save").exists() and reason != null and "WALKED" in reason.text,
-		"GAMEOVER PASS (game over screen says why, TRY AGAIN waits a beat, save cleared)")
+	var fresh: Node = game.find_child("Fresh", true, false)
+	_check(fresh != null and "service 1" in fresh.text and guarded and game.over and _find("NEW NIGHT") != null and not get_node("/root/Save").exists() and reason != null and "WALKED" in reason.text,
+		"GAMEOVER PASS (game over screen says why, NEW NIGHT waits a beat and says it starts at service 1, save cleared)")
 	await _click("TITLE")
 	await _wait_scene("Title")
 	await _frames(5)
@@ -966,6 +971,17 @@ func _polish_checks(game: Node) -> void:
 	game.field.queue_redraw()
 	await _frames(3)
 	var warn: String = game.end_btn.text
+	# The +N MORE badge pages the rail: a tap shows the 5th ticket first, BACK returns.
+	var first_id: int = game.rail_tickets()[0].id
+	var fifth_id: int = game.rail_tickets()[4].id
+	await _tap_at(game.field.get_global_transform() * game._more_rect.get_center())
+	var paged: bool = game.rail_off == 4 and game.rail_tickets()[0].id == fifth_id
+	game.field.queue_redraw()
+	await _frames(2)
+	await _shot("polish_rail_page")
+	await _tap_at(game.field.get_global_transform() * game._more_rect.get_center())
+	var back: bool = game.rail_off == 0 and game.rail_tickets()[0].id == first_id
+	_check(paged and back, "RAIL PAGE PASS (+2 MORE showed tickets 5-6, BACK returned to the most urgent)")
 	kk.crew[1].stress = kk.stress_cap - 1   # MO is one away and worked this turn: END TURN names her
 	kk.crew[1].acted = true
 	kk.crew[0].ap = 0

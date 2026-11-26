@@ -104,7 +104,7 @@ static func open_controls(parent: Node) -> VBoxContainer:
 	box.add_child(UI.label("CONTROLS", 28, UI.ACCENT))
 	var hint := UI.label("Tap an action, then press a key or pad button", 18, UI.DIM)
 	box.add_child(hint)
-	for a in c.ACTIONS:
+	for a in c.SHOWN:
 		var b := UI.button(c.ACTIONS[a] + ": " + c.describe(a), Callable(), 64)
 		b.name = a
 		b.pressed.connect(func():

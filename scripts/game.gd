@@ -280,6 +280,7 @@ func _house_reads(g: String, lost: bool = false) -> String:
 
 func _new_service() -> void:
 	_pick_from = {}   # a station handoff only counts on the very next field tap
+	rail_off = 0
 	for ch in get_children():   # the new service's clock restarts at turn 0: so does a hint's wait
 		if ch.name.begins_with("Coach_"):
 			ch.set_meta("turn", 0)
@@ -426,6 +427,7 @@ func end_turn() -> void:
 	_pick_from = {}   # a station handoff only counts on the very next field tap
 	if paused or over or between:
 		return
+	rail_off = 0   # a new turn opens on the most urgent tickets
 	var walked_before := k.walked
 	var critic_before := k.critic
 	var tickets_before: Array = k.tickets.map(func(t): return t.id)
@@ -490,6 +492,7 @@ func _service_done() -> void:
 	var parts := k.score_parts()
 	var read := _house_reads(g)
 	_grade_sheet(g, parts, read, {"service": k.service, "served": k.served, "total": k.total, "walked": k.walked, "tips": k.tips})
+	_shop_opened = false
 	var shop := UI.button("", func(): open_shop())
 	shop.name = "ShopButton"
 	sheet_box.add_child(shop)
@@ -537,11 +540,15 @@ func _shop_label() -> void:
 	var b: Button = sheet_box.get_node_or_null("ShopButton") if sheet_box != null else null
 	if b != null:
 		var can := Upgrades.ORDER.any(func(id): return Upgrades.can_buy(id, cash, perks))
-		b.text = "SHOP ($%d)%s" % [cash, " NEW!" if can else ""]
+		b.text = "SHOP ($%d)%s" % [cash, " NEW!" if can and not _shop_opened else ""]   # NEW until you've looked
+
+
+var _shop_opened := false   # the SHOP button says NEW! until it's opened after a service
 
 
 ## Spend banked tips on upgrades for the rest of tonight. Each one is bought once.
 func open_shop() -> void:
+	_shop_opened = true
 	var box := UI.sheet(self, 500)
 	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
 	box.add_child(UI.label("Bank: $%d. Upgrades last all night." % cash, 20, UI.DIM))
@@ -795,7 +802,13 @@ func _coach_next() -> void:
 func rail_tickets() -> Array:
 	var shown: Array = k.tickets.duplicate()
 	shown.sort_custom(func(a, b): return a.time < b.time)
-	return shown
+	if rail_off >= shown.size():
+		rail_off = 0   # the page emptied out: back to the most urgent
+	return shown.slice(rail_off) if rail_off > 0 else shown
+
+
+var rail_off := 0         # first rail card shown: tap the +N MORE badge to page past the first four
+var _more_rect := Rect2()  # where that badge was drawn, for the tap
 
 
 func ticket_rect(i: int) -> Rect2:
@@ -866,6 +879,11 @@ func _field_input(e: InputEvent) -> void:
 func tap(p: Vector2) -> void:
 	var pf := _pick_from   # only the very next tap can use it
 	_pick_from = {}
+	if _more_rect.has_area() and _more_rect.has_point(p):   # page the rail
+		rail_off = rail_off + 4 if rail_tickets().size() > 4 else 0
+		get_node("/root/Audio").sfx("click")
+		_after_move()
+		return
 	var rail := rail_tickets()
 	for i in mini(rail.size(), 4):
 		if ticket_rect(i).has_point(p):   # pick this table to cook first; tap again to unpick
@@ -1048,17 +1066,23 @@ func _draw_field(f: Control) -> void:
 			var sub: String = {"wait": "at " + Kitchen.station_of(it.dish), "cooking": "cooking", "carried": "on the pass", "served": "served"}[it.state]
 			var sc: Color = UI.key("warn") if it.state == "wait" else (UI.key("info") if it.state != "served" else UI.DIM)
 			f.draw_string(font, Vector2(r.position.x + 8, iy + 14), sub,
-				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(13), sc)
+				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(14), sc)
 			iy += DISH_ROW
 	_plate(f, Rect2(pad - 6, y0 + 218, f.size.x - 2 * pad + 12, 30))
 	var more_w := 0.0
-	if shown.size() > 4:   # tickets past the fourth card: a badge on the NEXT bar, red when one of them is red
-		var hid: Array = shown.slice(4)
-		var hot := hid.any(func(t): return t.time <= 2)
-		var mt := ("+%d MORE!" if hot else "+%d MORE") % hid.size()   # hot: a "!" as well as red
+	_more_rect = Rect2()
+	if shown.size() > 4 or rail_off > 0:   # a tappable badge: page on to the hidden tickets, or back to the first ones
+		var all_t: Array = k.tickets.duplicate()
+		all_t.sort_custom(func(a, b): return a.time < b.time)
+		var hid: Array = shown.slice(4) if shown.size() > 4 else all_t.slice(0, rail_off)
+		var hot := hid.any(func(t): return t.time <= 2)   # red when a ticket off screen is about to walk
+		var mt := ("+%d MORE" % hid.size()) if shown.size() > 4 else "BACK"
+		if hot:
+			mt += "!"   # hot: a "!" as well as red
 		more_w = font.get_string_size(mt, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(16)).x + 16
 		var mr := Rect2(f.size.x - pad - more_w, y0 + 220, more_w, 26)
 		f.draw_rect(mr, UI.key("bad") if hot else UI.key("warn"))
+		_more_rect = mr.grow(8.0)   # a bit of slack for a thumb
 		f.draw_string(font, mr.position + Vector2(0, 19), mt, HORIZONTAL_ALIGNMENT_CENTER, more_w, UI.font_size(16), UI.BG)
 	_plate(f, Rect2(pad - 6, y0 - 36, f.size.x - 2 * pad + 12, 30))   # busy kitchen wall behind: text sits on plates
 	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [score, k.walked, lives_max, k.tips],
@@ -1118,8 +1142,8 @@ func _draw_field(f: Control) -> void:
 						waiting += 1
 			if waiting > 0:   # work waiting here: what to FIRE, and how much
 				_plate(f, Rect2(r.position.x + 4, r.get_center().y - 14, r.size.x - 8, 32))
-				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), _fit(font, "%d TO FIRE" % waiting, "FIRE %d" % waiting, r.size.x - 8, 15),
-					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(15), UI.key("warn"))
+				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), _fit(font, "%d TO FIRE" % waiting, "FIRE %d" % waiting, r.size.x - 8, 17),
+					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(17), UI.key("warn"))
 		elif i == Kitchen.PASS_IX:
 			for w in mini(k.window.size(), 3):   # plates up on the window, waiting for a runner
 				_draw_fit(f, ART_DISHES[k.window[w].dish], Rect2(r.position.x + 4 + w * 28, r.position.y + 34, 34, 34))
@@ -1131,7 +1155,9 @@ func _draw_field(f: Control) -> void:
 	for c in k.crew.size():
 		var cr: Dictionary = k.crew[c]
 		var pos := cook_pos(c)
-		if cr.out:   # an empty spot where they stood: name + WALKED OUT, right where you'd look for them
+		if cr.out:   # an empty spot where they stood: name + QUIT, right where you'd look for them
+			if k.crew.any(func(o): return not o.out and cook_pos(k.crew.find(o)).distance_to(pos) < COOK_R * 2.0):
+				continue   # a working cook stands here now: never cover them (blind review #3)
 			f.draw_circle(pos, COOK_R, Color(0.08, 0.09, 0.12, 0.85))
 			f.draw_arc(pos, COOK_R, 0.0, TAU, 32, UI.key("bad"), 2.0)
 			f.draw_string(font, pos + Vector2(-COOK_R - 20, -2), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2 + 40, UI.font_size(15), UI.DIM)
@@ -1148,13 +1174,21 @@ func _draw_field(f: Control) -> void:
 			f.draw_string(font, pos + Vector2(-COOK_R, 7), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(18), ink)
 		for a in cr.ap:   # action pips
 			f.draw_circle(pos + Vector2(-16 + a * 16, -COOK_R - 12), 6.0, UI.key("info"))
-		var sw := 64.0
-		var frac := float(cr.stress) / k.stress_cap
-		f.draw_rect(Rect2(pos.x - sw / 2, pos.y + COOK_R + 8, sw, 8), Color("2b3448"))
-		f.draw_rect(Rect2(pos.x - sw / 2, pos.y + COOK_R + 8, sw * frac, 8), UI.key("bad" if frac >= 0.6 else "warn"))
-		if cr.stress >= k.stress_cap - 2 and cr.hand.is_empty():   # close to quitting: in words, under the bar
-			_plate(f, Rect2(pos.x - 40, pos.y + COOK_R + 18, 80, 22))
-			f.draw_string(font, Vector2(pos.x - 40, pos.y + COOK_R + 35), "TIRED", HORIZONTAL_ALIGNMENT_CENTER, 80, UI.font_size(15), UI.key("bad"))
+		# Stress: one box per point up to the cap (full = they quit), and the count in words under it.
+		# Blind review #3: the thin bar went unseen, and stress is what loses most first nights.
+		var cap: int = maxi(1, k.stress_cap)
+		var sw := 76.0
+		var seg := sw / cap
+		var tired: bool = cr.stress >= k.stress_cap - 2
+		var tone := "bad" if tired else ("warn" if cr.stress > 0 else "good")
+		for b in cap:
+			var box := Rect2(pos.x - sw / 2 + b * seg, pos.y + COOK_R + 6, seg - 2, 10)
+			f.draw_rect(box, UI.key(tone) if b < cr.stress else Color("2b3448"))
+		if cr.hand.is_empty() and (note == null or note.text == ""):   # (a carried plate's name, or the event line, sits here instead)
+			_plate(f, Rect2(pos.x - 50, pos.y + COOK_R + 18, 100, 22))
+			var sl := ("TIRED %d/%d" if tired else "STRESS %d/%d") % [cr.stress, cap]
+			f.draw_string(font, Vector2(pos.x - 50, pos.y + COOK_R + 35), sl, HORIZONTAL_ALIGNMENT_CENTER, 100,
+				UI.font_size(14), UI.key(tone) if cr.stress > 0 else ink)
 		if not cr.hand.is_empty():   # the plate in hand, on the cook's shoulder, plus its name
 			_draw_fit(f, ART_DISHES[cr.hand.dish], Rect2(pos + Vector2(COOK_R - 18, -COOK_R - 6), Vector2(40, 40)))
 			_plate(f, Rect2(pos + Vector2(-50, COOK_R + 22), Vector2(100, 24)))
@@ -1213,7 +1247,10 @@ func game_over() -> void:
 	reason.name = "Reason"
 	sheet_box.add_child(reason)
 	sheet_box.add_child(UI.label("Service %d, %d tickets out tonight" % [level, score], 22))
-	var again := MenuArt.primary(UI.button("TRY AGAIN", func(): get_node("/root/Loader").go("res://scenes/game.tscn"), 88))
+	var fresh := UI.label("A new night starts back at service 1.", 20, UI.DIM)   # say it: the lost night's progress is gone
+	fresh.name = "Fresh"
+	sheet_box.add_child(fresh)
+	var again := MenuArt.primary(UI.button("NEW NIGHT", func(): get_node("/root/Loader").go("res://scenes/game.tscn"), 88))
 	var title := UI.button("TITLE", quit_to_title)
 	sheet_box.add_child(again)
 	sheet_box.add_child(title)
