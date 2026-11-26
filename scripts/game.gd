@@ -267,7 +267,7 @@ func _refresh_hud() -> void:
 			act_btn.text += "\n(%s QUITS)" % k.crew[sel].name
 		elif then > k.crew[sel].stress:
 			act_btn.text += "\n+%d STRESS" % (then - k.crew[sel].stress)
-		elif stress_after(sel) < k.crew[sel].stress:   # no cost, but a tired cook gives up the rest they'd get
+		elif k.crew[sel].stress >= k.stress_cap - 3 and stress_after(sel) < k.crew[sel].stress:   # no cost, but a tired cook gives up their rest
 			act_btn.text += "\nSKIPS REST"
 	act_btn.disabled = a == ""
 	if note != null:
@@ -1344,12 +1344,16 @@ func _draw_field(f: Control) -> void:
 			var r := station_rect(i)
 			var cost: int = k.walk_cost(me.at, i)
 			var far: bool = cost > me.ap
-			var wl := "TOO FAR" if far else "WALK %d" % cost
-			wl = _fit(font, wl, "FAR" if far else "W%d" % cost, r.size.x - 12, 12)
-			var chip := Rect2(r.position.x + 6, r.end.y - 21, r.size.x - 12, 17)   # along the station foot: clear of its name, and of a coach hint above
-			f.draw_rect(chip, Color(0, 0, 0, 0.75))
-			f.draw_string(font, chip.position + Vector2(0, 13), wl, HORIZONTAL_ALIGNMENT_CENTER, chip.size.x,
-				UI.font_size(12), UI.key("bad") if far else UI.key("info"))
+			# The chip takes over the name row while a cook is picked (name + cost): above it a coach hint
+			# hid it, at the foot it hid UP! / PLATE NOW (fresh-eyes PR #30).
+			var nm: String = Kitchen.STATIONS[i]
+			var wl := _fit(font, "TOO FAR" if far else "WALK %d" % cost, "FAR" if far else "W%d" % cost, r.size.x - 8, 13)
+			var chip := Rect2(r.position.x + 3, r.position.y + 3, r.size.x - 6, 36)   # two lines: the name, then the cost
+			var tone_c: Color = UI.key("bad") if far else UI.key("info")
+			f.draw_rect(chip, Color(0.03, 0.04, 0.06, 0.92))
+			f.draw_rect(chip, tone_c, false, 2.0)
+			f.draw_string(font, chip.position + Vector2(0, 15), nm, HORIZONTAL_ALIGNMENT_CENTER, chip.size.x, UI.font_size(13), ink)
+			f.draw_string(font, chip.position + Vector2(0, 31), wl, HORIZONTAL_ALIGNMENT_CENTER, chip.size.x, UI.font_size(13), tone_c)
 	# --- crew
 	for c in k.crew.size():
 		var cr: Dictionary = k.crew[c]

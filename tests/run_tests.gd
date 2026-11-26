@@ -805,12 +805,17 @@ func test_kitchen_events() -> void:
 	check(pk.total == plain_k.total + 1 and pk.incoming.size() == plain_k.incoming.size() + 1
 		and pk.incoming.filter(func(inc): return inc.ticket.big).size() > plain_k.incoming.filter(func(inc): return inc.ticket.big).size(),
 		"party: one more table, and it's a big one")
-	var short := Kitchen.new()   # a 2-ticket night: the twelve-top still lands mid-service, in order
-	short.with_events = false
-	short.first_tickets = 2
-	short.start(2, 11)
-	short.event = "party"
-	short._set_up_event()
+	var short: Kitchen = null   # a 2-ticket night that rolls the party: it still lands mid-service, in order
+	for sd in 400:
+		var sk := Kitchen.new()
+		sk.first_tickets = 1
+		sk.start(2, sd + 1)
+		if sk.event == "party":
+			short = sk
+			break
+	check(short != null, "a short night rolls PARTY OF 12 within 400 seeds")
+	if short == null:
+		return
 	var arr: Array = short.incoming.map(func(inc): return int(inc.arrive))
 	var sorted_arr := arr.duplicate()
 	sorted_arr.sort()

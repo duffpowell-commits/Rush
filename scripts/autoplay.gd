@@ -1152,11 +1152,12 @@ func _polish_checks(game: Node) -> void:
 	# A tired cook who'd rest: the move costs nothing new, but the button says the rest is gone.
 	var tickets_was: Array = kk.tickets.duplicate(true)
 	kk.tickets = [{"id": 994, "table": 54, "items": [{"dish": "STEAK", "state": "wait"}], "time": 9, "big": false}]
-	kk.crew[0].stress = 3
+	var stress_was: int = kk.crew[0].stress
+	kk.crew[0].stress = kk.stress_cap - 3   # tired enough that the rest matters
 	game.pick_tid = 0
 	game._refresh_hud()
 	var rest_lbl: String = game.act_btn.text
-	kk.crew[0].stress = 0
+	kk.crew[0].stress = stress_was
 	kk.tickets = tickets_was
 	game.pick_tid = 0
 	game.sel = 0

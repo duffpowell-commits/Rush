@@ -51,7 +51,7 @@ builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
    CI plus a fresh-eyes check. Other games are paused; Rush continues.
 2. Done Nov 26 after build 81: grade sheet "Next: N tickets" refreshes after a shop buy; PARTY OF 12
    lands mid-service on short nights; "SKIPS REST" on a move that costs a tired cook their rest;
-   walk chips moved to the station foot. Bot loss rates (greedy bot, 200 seeds, all twists):
+   walk chips now take over the station's name row (FRY / WALK 1). Bot loss rates (greedy bot, 200 seeds, all twists):
    s1 7%, s2 36%, s3 50%, s4 50%, s5 73%.
 3. When reviews resume: run the blind first-timer review on the newest build, save it in
    `docs/reviews/`, add the score to the table above. Under 8.5: write the next 8.5 plan, get
