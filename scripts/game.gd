@@ -239,7 +239,7 @@ func _refresh_hud() -> void:
 		var cr: Dictionary = k.crew[sel]
 		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
 		var red := 1 if k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2) else 0
-		act_btn.text = "RUSH (FREE)" if k.rush_stress <= 0 else ("RUSH (QUITS!)" if cr.stress + k.rush_stress + red >= k.stress_cap else "RUSH +%d STRESS" % k.rush_stress)
+		act_btn.text = "RUSH (QUITS!)" if cr.stress + k.rush_stress + red >= k.stress_cap else ("RUSH (FREE)" if k.rush_stress <= 0 else "RUSH +%d STRESS" % k.rush_stress)
 	elif a == "RUN" and k.tray > 1:   # a tray: say how many plates go out on this one action
 		var n := mini(k.tray, k.window.size() + (0 if k.crew[sel].hand.is_empty() else 1))
 		if n > 1:
@@ -293,6 +293,7 @@ func _house_reads(g: String, lost: bool = false) -> String:
 
 
 func _new_service() -> void:
+	_portrait_pick = false
 	_pick_from = {}   # a station handoff only counts on the very next field tap
 	rail_off = 0
 	for ch in get_children():   # the new service's clock restarts at turn 0: so does a hint's wait
@@ -320,6 +321,7 @@ func _new_service() -> void:
 
 ## Selected cook acts where they stand (the big button, or tapping their own station).
 func act() -> void:
+	_portrait_pick = false   # a button press ends a face pick, like a station handoff
 	_pick_from = {}   # a station handoff only counts on the very next field tap
 	if paused or over or between:
 		return
