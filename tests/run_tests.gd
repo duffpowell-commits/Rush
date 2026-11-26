@@ -552,6 +552,53 @@ func test_second_wind_and_ramp() -> void:
 		and Kitchen.count_for(7, 1, 4) == 9 and Kitchen.count_for(7, 1, 5) == 10, "ramp: 7, 8, 9, 9, 10")
 
 
+## 8.5 plan #4 (Duff: "make the perks earn able like a level up system"): perks ride on the cook,
+## each pays off as written, and they survive a save.
+func test_cook_perks() -> void:
+	var k := Kitchen.new()
+	k.all_open = true
+	k.cook_perks = {"DEV": ["fast_0", "walk"], "MO": ["run", "plate"]}
+	k.start(1)
+	check(k.has_perk(0, "fast_0") and not k.has_perk(1, "fast_0") and k.crew[0].perks.size() == 2, "perks ride on the cook")
+	check(k.cook_time_by(0, "STEAK") == 2 and k.cook_time_by(1, "STEAK") == 3 and k.cook_time_by(0, "FRIES") == 1, "GRILL HAND: a minute off grill dishes only")
+	k.crew[0].at = 0
+	check(k.move_cost(0, 2) == 1 and k.move(0, 2) and k.crew[0].ap == k.ap - 1, "LIGHT FEET: first step free (2 stops for 1)")
+	check(k.move_cost(0, 0) == 2, "only the first step each turn")
+	k.tickets = [{"id": 97, "table": 7, "items": [{"dish": "FRIES", "state": "carried"}, {"dish": "WINGS", "state": "carried"}], "time": 9, "big": false}]
+	k.window = [{"tid": 97, "dish": "FRIES"}]
+	k.crew[1].at = Kitchen.PASS_IX
+	check(k.is_free(1, "RUN") and k.run(1) and k.crew[1].ap == k.ap, "RUNNER: first RUN free")
+	k.window = [{"tid": 97, "dish": "WINGS"}]
+	check(not k.is_free(1, "RUN") and k.run(1) and k.crew[1].ap == k.ap - 1, "the second RUN costs a move")
+	var back := Kitchen.new()
+	check(back.from_dict(JSON.parse_string(JSON.stringify(k.to_dict()))) and back.has_perk(1, "plate") and back.crew[1].used.has("run")
+		and back.crew[0].acts == k.crew[0].acts, "perks, used freebies and work done survive a save")
+	k.end_turn()
+	check(k.is_free(1, "RUN") and k.move_cost(0, 0) == 1, "freebies come back each turn")
+	var plain := Kitchen.new()
+	plain.start(1)
+	check(plain.crew.all(func(c): return c.perks.is_empty()), "cooks start a night with no perks")
+
+
+## Duff, Nov 26 ("Gone for the whole night"): a house cook who walked out sits out the rest of the night.
+func test_gone_for_the_night() -> void:
+	var k := Kitchen.new()
+	k.gone = ["MO"]
+	k.start(2, 5)
+	check(k.crew.size() == 1 and k.crew[0].name == "DEV" and k.crew[0].at == 0, "MO gone: DEV runs the line alone")
+	var k2 := Kitchen.new()
+	k2.gone = ["DEV"]
+	k2.hires = 1
+	k2.start(2, 5)
+	check(k2.crew.size() == 2 and k2.crew[0].name == "MO" and k2.crew[0].at == 2 and k2.crew[1].name == Kitchen.TEMPS[0], "DEV gone: MO plus the temp")
+	var guard := 0
+	while not k2.done and guard < 60:
+		k2.bot_turn()
+		k2.end_turn()
+		guard += 1
+	check(guard < 60, "a short-handed service still plays out")
+
+
 ## The game screen's save carries the service in progress, and score only counts finished services.
 func test_rush_save_no_double_count() -> void:
 	var g = load("res://scripts/game.gd").new()
@@ -668,7 +715,10 @@ func test_kitchen_grade() -> void:
 	k.speed = 6 * 0.8
 	check(k.grade() == "A+" and k.score_parts().total == 100, "6/6 fast and clean = A+ (%s)" % k.score_parts())
 	k.speed = 6 * 0.55
-	check(k.grade() == "A", "6/6 clean, middling speed = A (%d)" % k.score_parts().total)
+	check(k.grade() == "B", "6/6 clean, middling speed = B now (8.5 plan #4: A needs 90; %d)" % k.score_parts().total)
+	k.speed = 6 * 0.6
+	check(k.grade() == "A", "6/6 clean, a bit quicker = A (%d)" % k.score_parts().total)
+	check(Kitchen.GRADE_BONUS.A > Kitchen.GRADE_BONUS.B and Kitchen.GRADE_BONUS.F > 0, "every grade pays a bonus, better grades more")
 	k.burns = 2
 	check(k.grade() == "B", "two burns drop it to B (%d)" % k.score_parts().total)
 	k.burns = 0
@@ -788,12 +838,19 @@ func test_kitchen_events() -> void:
 	var seen := {}
 	for sd in 40:
 		var k := Kitchen.new()
-		k.start(3, sd + 1)
+		k.start(4, sd + 1)
 		seen[k.event] = true
-	check(seen.size() == Kitchen.EVENT_IDS.size() and not seen.has(""), "every twist shows up in service 3 (%s)" % [seen.keys()])
-	var two := Kitchen.new()   # 8.5 plan #3: service 2 opens saute; its twist waits for service 3
-	two.start(2, 5)
-	check(two.event == "", "service 2 is plain")
+	check(seen.size() == Kitchen.EVENT_IDS.size() and not seen.has(""), "every twist shows up in service 4 (%s)" % [seen.keys()])
+	# 8.5 plan #4: service 2 rolls a gentle twist (VIP or critic), service 3 none (cold opens).
+	var mild := {}
+	for sd in 30:
+		var two := Kitchen.new()
+		two.start(2, sd + 1)
+		mild[two.event] = true
+		var three := Kitchen.new()
+		three.start(3, sd + 1)
+		mild["s3:" + three.event] = true
+	check(mild.has("vip") and mild.has("critic") and mild.size() == 3 and mild.has("s3:"), "service 2: VIP or critic only; service 3: none (%s)" % [mild.keys()])
 	var one := Kitchen.new()
 	one.start(1, 5)
 	check(one.event == "", "service 1 is plain")
@@ -846,7 +903,7 @@ func test_kitchen_events() -> void:
 	for sd in 400:
 		var sk := Kitchen.new()
 		sk.first_tickets = 1
-		sk.start(3, sd + 1)
+		sk.start(4, sd + 1)
 		if sk.event == "party":
 			short = sk
 			break

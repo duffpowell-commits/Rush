@@ -140,6 +140,13 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   cook who'd quit in a service takes five instead (BREAK, "DEV TAKES 5"); bigger moves badge, DONE hint,
   COMP CARDS -> SECOND CHANCE. `Kitchen.count_for` holds the ticket curve. Bot: s1 7%, s2 22%, s3 50%,
   s4 50%, s5 73%. WIND, URGENT, NUDGE PASS. Details: docs/HANDOFF.md.
+- Nov 26 build-89 IGN-style review: 7.0 (fiddly taps, early services easy then a service-3 spike,
+  identical cooks). 8.5 plan #4 (Duff: "Build all of it", plus: pay every grade more, perks earned by
+  level-up): narrow closed stations + whole-column tap zones; UNDO once a turn; service 2 gentle twist
+  (VIP/critic), 3 none, all from 4; A at 90, speed full at 75%; `GRADE_BONUS` $10-$30 every service;
+  LEVEL UP after each service (hardest worker picks 1 of 3 perks: station hands, RUNNER, QUICK PLATE,
+  LIGHT FEET); a cook who walks out is gone for the rest of the night (`gone`, RETRY brings them back);
+  cooks bob and flinch. LEVELUP, UNDO PASS; test_cook_perks. Details: docs/HANDOFF.md.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

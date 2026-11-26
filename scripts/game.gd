@@ -54,10 +54,18 @@ var cash := 0                # tips banked tonight, spent in the SHOP between se
 var twist_box: VBoxContainer   # the TONIGHT card while it's up
 var perks: Array = []        # upgrades owned tonight (upgrades.gd)
 var temp_buys := 0           # temp cooks hired tonight: each one costs double the last
+var cook_perks := {}         # cook name -> perk ids earned tonight (8.5 plan #4: level-ups, Duff's pick)
+var _undo := {}               # the state before the last move this turn (8.5 plan #4: one UNDO a turn)
+var _undo_used := false
+var undo_btn: Button
+var _lvl_box: VBoxContainer   # the LEVEL UP sheet while it's up
+var gone: Array = []         # cooks who walked out tonight: gone for the rest of the night (Duff's pick, Nov 26)
+var levelup := ""            # a cook waiting to pick a perk before the next service ("" = none)
 var k: Kitchen
 var sel := 0                 # selected cook
 var _fresh_turn := false     # END TURN's news is on the status line until the first move of the turn
 var _steam_t := 0.0          # time since the last steam redraw
+var _flinch := {}            # cook -> msec until their burn flinch ends
 var _cook_draw := {}         # cook -> where they're drawn: they walk there instead of jumping (8.5 pass)
 var _portrait_pick := false  # the last field tap picked a cook by face: the next station tap sends them
 var _pick_from := {}         # last station tap that switched cooks: {st, prev}; a 2nd tap there sends prev
@@ -92,6 +100,12 @@ func _ready() -> void:
 		cash = int(d.get("cash", 0))
 		perks = (d.get("perks", []) as Array).filter(func(p): return Upgrades.ALL.has(p))
 		temp_buys = int(d.get("temp_buys", 0))
+		var cp: Variant = d.get("cook_perks", {})
+		if cp is Dictionary:
+			for nm in cp:
+				cook_perks[str(nm)] = (cp[nm] as Array).map(func(x): return str(x)).filter(func(x): return Kitchen.PERKS.has(x))
+		levelup = str(d.get("levelup", ""))
+		gone = (d.get("gone", []) as Array).map(func(x): return str(x))
 	add_to_group("tunable")
 	get_node("/root/DebugMenu").apply_tune(self)
 	_new_service()
@@ -104,6 +118,9 @@ func _ready() -> void:
 			lives = lives_max - k.walked
 			score = _night_before + k.served
 	_build()
+	if levelup != "":   # quit on the grade sheet with a pick owed: it comes first, then the service
+		between = true
+		next_service()
 	checkpoint()
 	get_node("/root/Audio").music_layers("music_loop", "music_busy")   # the kitchen gets louder as tickets go red
 	_music_heat()
@@ -114,7 +131,8 @@ func _ready() -> void:
 ## score = finished services only; the service in progress rides along in "kitchen" (its own
 ## served count), so a reload can't count tickets twice.
 func state() -> Dictionary:
-	var d := {"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(), "temp_buys": temp_buys}
+	var d := {"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(), "temp_buys": temp_buys,
+		"cook_perks": cook_perks.duplicate(true), "levelup": levelup, "gone": gone.duplicate()}
 	if k != null and not between and not over and not k.done:
 		d["kitchen"] = k.to_dict()
 	return d
@@ -165,6 +183,9 @@ func _build() -> void:
 	var left: bool = _settings.get_value("left_handed")
 	pause_btn = UI.button("PAUSE", pause)
 	_corner(pause_btn, left, true, 150)
+	undo_btn = UI.button("UNDO", undo)
+	undo_btn.name = "UndoButton"
+	_corner(undo_btn, not left, true, 150)
 	end_btn = UI.button("END TURN", end_turn, 96)
 	end_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # the two-line burn warning at big text sizes
 	end_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -246,7 +267,7 @@ func _refresh_hud() -> void:
 		act_btn.text = "FIRE T%d" % fp.t.table
 		if pick_ix >= 0 and fp.t.id == pick_tid and fp.item == k.ticket(pick_tid).items[pick_ix]:
 			act_btn.text = "FIRE %s" % fp.item.dish   # the tapped dish, by name
-		if k.cook_time(fp.item.dish) > fp.t.time:   # it can't be up before the table walks: say so first
+		if k.cook_time_by(sel, fp.item.dish) > fp.t.time:   # it can't be up before the table walks: say so first
 			act_btn.text += ": TOO LATE"
 	elif a == "RUSH":   # warn when this rush would send the cook over the edge
 		var cr: Dictionary = k.crew[sel]
@@ -257,6 +278,8 @@ func _refresh_hud() -> void:
 		var n := mini(k.tray, k.window.size() + (0 if k.crew[sel].hand.is_empty() else 1))
 		if n > 1:
 			act_btn.text = "RUN %d PLATES" % n
+	if (a == "RUN" or a == "PLATE") and k.is_free(sel, a):   # the cook's knack: this one costs no move (8.5 plan #4)
+		act_btn.text += " (FREE)"
 	if a != "":   # whose move this is, on the button (stress pass: taps moved the wrong cook)
 		var named := "%s: %s" % [k.crew[sel].name, act_btn.text]
 		var bf := act_btn.get_theme_font("font")
@@ -274,6 +297,8 @@ func _refresh_hud() -> void:
 		elif k.crew[sel].stress >= k.stress_cap - 3 and stress_after(sel) < k.crew[sel].stress:   # no cost, but a tired cook gives up their rest
 			act_btn.text += "\nSKIPS REST"
 	act_btn.disabled = a == ""
+	if undo_btn != null:   # only while there's a move to take back this turn
+		undo_btn.visible = not _undo.is_empty() and not _undo_used and not k.done and not between and not over
 	if note != null:
 		note.text = " | ".join(k.events)   # a bar between events: they ran together as one sentence
 
@@ -326,6 +351,8 @@ func _new_service() -> void:
 	for ch in get_children():   # the new service's clock restarts at turn 0: so does a hint's wait
 		if ch.name.begins_with("Coach_"):
 			ch.set_meta("turn", 0)
+	_undo = {}
+	_undo_used = false
 	k = Kitchen.new()
 	var u := Upgrades.apply({"ticket_time": int(ticket_time), "stress_cap": int(stress_cap),
 		"rush_stress": int(rush_stress), "lives": LIVES}, perks)
@@ -341,6 +368,8 @@ func _new_service() -> void:
 	k.tray = u.tray
 	k.hires = u.hires
 	k.breaks = int(breaks)
+	k.cook_perks = cook_perks.duplicate(true)
+	k.gone = gone.duplicate()
 	k.start(level, rng.randi() if level > 1 else 0)
 	lives_max = u.lives
 	lives = lives_max
@@ -362,7 +391,9 @@ func act() -> void:
 	var at: int = k.crew[sel].at
 	var tips_before := k.tips
 	var served_before := k.served
+	var before := _snap()
 	if k.act_here(sel, pick_tid, true, pick_ix):
+		_undo = before
 		var snd: String = {"FIRE": "fire", "RUSH": "rush", "PLATE": "plate", "RUN": "bell"}.get(what, "good")
 		get_node("/root/Audio").sfx(snd, 1.12 if what == "RUN" and k.served > served_before else randf_range(0.95, 1.05))
 		if what == "RUSH":
@@ -440,8 +471,17 @@ func _tick_fx(dt: float) -> void:
 				_cook_draw[c] = at.move_toward(to, maxf(900.0 * dt, at.distance_to(to) * 12.0 * dt))
 				walking = true
 		_steam_t += dt
-		if walking:
-			field.queue_redraw()   # a walk in progress: every frame, it's short
+		var moving := false
+		if not _settings.get_value("low_graphics") and not (over or between):
+			var now := Time.get_ticks_msec()
+			for fc in k.crew.size():
+				var cr: Dictionary = k.crew[fc]
+				if (cr.acted and cr.ap > 0 and not cr.out) or now < int(_flinch.get(fc, 0)):
+					moving = true
+		if walking or (moving and _steam_t >= 1.0 / 30.0):
+			if not walking:
+				_steam_t = 0.0
+			field.queue_redraw()   # a walk in progress: every frame, it's short; a bob or flinch: 30 a second
 		elif _steam_t >= 1.0 / 15.0 and not _settings.get_value("low_graphics") and k.pans.any(func(p): return not p.is_empty()):
 			_steam_t = 0.0
 			field.queue_redraw()   # steam over a pan: 15 a second is plenty, and spares the battery
@@ -489,6 +529,9 @@ func _draw_fx(f: Control) -> void:
 
 ## One minute of service passes.
 func end_turn() -> void:
+	if not (paused or over or between):
+		_undo = {}   # a new turn: the last one is final, and the undo comes back
+		_undo_used = false
 	_pick_from = {}   # a station handoff only counts on the very next field tap
 	_portrait_pick = false
 	if paused or over or between:
@@ -536,11 +579,17 @@ func end_turn() -> void:
 				_fx_burst(station_rect(bs).get_center(), MenuArt.EMBER, 16)
 				_fx_ring(station_rect(bs).get_center(), UI.key("bad"), 90.0)
 				_fx_text(Vector2(station_rect(bs).get_center().x, station_rect(bs).position.y - 6), "BURNED! REFIRE", UI.key("bad"), 34)
+				for fc in k.crew.size():
+					if k.crew[fc].at == bs and not k.crew[fc].out:
+						_flinch[fc] = Time.get_ticks_msec() + 450
 				_shake(10.0)
 				UI.buzz(60)
 		elif e.ends_with("WALKED OUT"):
 			get_node("/root/Audio").sfx("door")
 			get_node("/root/Subs").cue("[door slams: cook walked out]")
+			var qn: String = e.trim_suffix(" WALKED OUT")
+			if not Kitchen.TEMPS.has(qn) and not gone.has(qn) and not get_node("/root/DebugMenu").god_mode:
+				gone.append(qn)   # gone for the rest of the night, not just this service (RETRY brings them back)
 	if lives <= 0 or k.crew.all(func(c): return c.out):
 		game_over()
 		return
@@ -563,7 +612,9 @@ func _service_done() -> void:
 	perks.erase("temp")   # the temp cook worked this service only: the shop sells another
 	_night_before += k.served
 	score = _night_before
-	cash += k.tips
+	var bonus: int = Kitchen.GRADE_BONUS.get(k.grade(), 10)   # every grade pays something (Duff, Nov 26)
+	levelup = mvp()
+	cash += k.tips + bonus
 	_record_best(level)
 	get_node("/root/Audio").sfx("level")
 	get_node("/root/Subs").cue("[chime: service %d done]" % level)
@@ -576,7 +627,7 @@ func _service_done() -> void:
 	var g := k.grade()
 	var parts := k.score_parts()
 	var read := _house_reads(g)
-	_grade_sheet(g, parts, read, {"service": k.service, "served": k.served, "total": k.total, "walked": k.walked, "tips": k.tips})
+	_grade_sheet(g, parts, read, {"service": k.service, "served": k.served, "total": k.total, "walked": k.walked, "tips": k.tips, "bonus": bonus})
 	_shop_opened = false
 	var shop := UI.button("", func(): open_shop())
 	shop.name = "ShopButton"
@@ -596,7 +647,10 @@ func _grade_sheet(g: String, parts: Dictionary, read: String, st: Dictionary) ->
 	grade.name = "Grade"
 	sheet_box.add_child(grade)
 	_stamp(grade)
-	sheet_box.add_child(UI.label("%d of %d out, %d walk%s\nTips $%d" % [st.served, st.total, st.walked, "" if st.walked == 1 else "s", st.tips], 24))
+	var tl := UI.label("%d of %d out, %d walk%s\nTips $%d + $%d %s bonus" % [st.served, st.total, st.walked, "" if st.walked == 1 else "s",
+		st.tips, st.get("bonus", 0), g], 24)
+	tl.name = "TipsLine"
+	sheet_box.add_child(tl)
 	_points_head = "%d POINTS: out %d, speed %d, pans %d%s%s" % [parts.total, parts.out, parts.speed, parts.pans,
 		", walks %d" % parts.walks if parts.walks != 0 else "", ", critic %+d" % parts.critic if parts.critic != 0 else ""]
 	_points_read = read
@@ -604,6 +658,10 @@ func _grade_sheet(g: String, parts: Dictionary, read: String, st: Dictionary) ->
 	why.name = "Points"
 	sheet_box.add_child(why)
 	_refresh_points()
+	if not gone.is_empty():   # who walked out stays out tonight: say it where the night is summed up
+		var gl := UI.label("%s WALKED OUT: GONE FOR TONIGHT" % " + ".join(gone), 20, UI.key("bad"))
+		gl.name = "Gone"
+		sheet_box.add_child(gl)
 	if k.critic != "":   # the critic gets their own stamp, not a number in the small print (8.5 pass)
 		var cl := UI.label("CRITIC LOVED IT  +8" if k.critic == "served" else "CRITIC WALKED  -8", 28,
 			UI.key("good") if k.critic == "served" else UI.key("bad"))
@@ -659,7 +717,8 @@ func open_shop() -> void:
 	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
 	var bank := UI.label("Bank: $%d. Every 2 upgrades bring +1 table." % cash, 20, UI.DIM)
 	if not perks.has("temp"):   # build-84 review: nothing said a third cook was the answer to a busier night
-		bank.text += "\nNext: %d tickets, 2 cooks. TEMP COOK helps." % tickets_for(level)
+		var left := 2 - gone.size()
+		bank.text += "\nNext: %d tickets, %d cook%s. TEMP COOK helps." % [tickets_for(level), left, "" if left == 1 else "s"]
 	bank.name = "Bank"
 	bank.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(bank)
@@ -729,9 +788,89 @@ func _record_best(services_cleared: int) -> void:
 		_settings.set_value("best_tickets", score)
 
 
+## The cook who did the most this service (actions taken; the house cooks only, temps move on).
+## Ties go to the one with fewer perks, so both cooks grow.
+func mvp() -> String:
+	var best := ""
+	var best_acts := -1
+	for cr in k.crew:
+		if Kitchen.TEMPS.has(cr.name) or gone.has(cr.name):
+			continue
+		var a: int = int(cr.get("acts", 0))
+		var fewer: bool = best != "" and (cook_perks.get(cr.name, []) as Array).size() < (cook_perks.get(best, []) as Array).size()
+		if a > best_acts or (a == best_acts and fewer):
+			best = cr.name
+			best_acts = a
+	return best
+
+
+## Three perks to choose from for a cook, the same three after a reload (seeded by night + cook).
+func perk_offer(nm: String) -> Array:
+	var have: Array = cook_perks.get(nm, [])
+	var pool: Array = []
+	for id in Kitchen.PERK_IDS:   # not owned, and a station hand only for a station open by now
+		if not have.has(id) and (not id.begins_with("fast_") or Kitchen.OPENS[int(id.trim_prefix("fast_"))] <= level):
+			pool.append(id)
+	var r := RandomNumberGenerator.new()
+	r.seed = hash("%s:%d:%d" % [nm, level, have.size()])
+	for i in range(pool.size() - 1, 0, -1):
+		var j := r.randi_range(0, i)
+		var t = pool[i]
+		pool[i] = pool[j]
+		pool[j] = t
+	return pool.slice(0, 3)
+
+
+## LEVEL UP: pick one of three perks for the service's hardest worker, then the service starts.
+func open_levelup() -> void:
+	var nm := levelup
+	var box := UI.sheet(self)
+	_lvl_box = box   # its own handle: a pause on top swaps sheet_box (like the twist card)
+	var head := UI.label("LEVEL UP: %s" % nm, 34, UI.ACCENT)
+	head.name = "LevelUp"
+	box.add_child(head)
+	var have: Array = cook_perks.get(nm, [])
+	var sub := UI.label("Worked hardest last service. Pick a perk%s" % (
+		(". Has: " + ", ".join(have.map(func(id): return Kitchen.PERKS[id][0]))) if not have.is_empty() else "."), 20, UI.DIM)
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(sub)
+	for id in perk_offer(nm):
+		var b := UI.button("%s\n%s" % [Kitchen.PERKS[id][0], Kitchen.PERKS[id][1]], func(): pick_perk(id), 88)
+		b.name = "Perk_" + id
+		b.add_theme_font_size_override("font_size", UI.font_size(20))
+		box.add_child(b)
+	_stamp(head)
+
+
+func pick_perk(id: String) -> void:
+	if levelup == "":
+		return
+	var have: Array = cook_perks.get(levelup, [])
+	if not have.has(id):
+		have.append(id)
+	cook_perks[levelup] = have
+	get_node("/root/Subs").cue("[cheer: %s learns %s]" % [levelup.to_lower(), Kitchen.PERKS[id][0].to_lower()])
+	get_node("/root/Audio").sfx("level", 1.2)
+	UI.buzz(30)
+	levelup = ""
+	if is_instance_valid(_lvl_box):
+		UI.close_sheet(_lvl_box)
+	_lvl_box = null
+	checkpoint()
+	next_service()
+
+
 func next_service() -> void:
 	if not between:
 		return
+	if levelup != "" and k.crew.any(func(cr): return cr.name == levelup) and not perk_offer(levelup).is_empty():
+		if not is_instance_valid(_lvl_box):
+			if sheet_box != null:
+				UI.close_sheet(sheet_box)   # the grade sheet makes way for the pick
+				sheet_box = null
+			open_levelup()
+		return
+	levelup = ""
 	UI.close_sheet(sheet_box)
 	sheet_box = null
 	between = false
@@ -790,7 +929,8 @@ func tonight() -> void:
 
 
 func debug_skip_level() -> void:
-	if between:   # the grade sheet already banked this service: just move on
+	if between:   # the grade sheet already banked this service: just move on (a dev skip skips the pick too)
+		levelup = ""
 		next_service()
 		return
 	_night_before += k.served
@@ -882,8 +1022,8 @@ func _coach_steps() -> Array:
 		["end_turn", "TAP END TURN: COOK", func(): return k.pans.any(func(p): return not p.is_empty()),
 			func(): return k.turn > 0],
 		# 8.5 plan #2: taught on turn 2, not after the first table is out ("face vs station" confused service 1).
-		["switch", "TAP FACE, THEN STATION", func(): return k.turn >= 1 and not k.crew[1].out,
-			func(): return sel != 0 or k.crew[1].out],
+		["switch", "TAP FACE, THEN STATION", func(): return k.turn >= 1 and k.crew.size() > 1 and not k.crew[1].out,
+			func(): return sel != 0 or k.crew.size() < 2 or k.crew[1].out],
 		# Fresh-player review: the action dots over each cook were never noticed. After the first END TURN.
 		["dots", "NUMBER = MOVES LEFT", func(): return k.turn >= 1,
 			func(): return k.turn >= 2 or k.crew.any(func(c): return not c.out and c.ap <= 0)],
@@ -986,13 +1126,34 @@ func _rail_y() -> float:
 	return 30.0 + UI.MIN_TOUCH + 70.0
 
 
+## Open stations share the width; a closed one is a narrow slot (8.5 plan #4, IGN build 89: 75 px
+## stations were fiddly to hit, and in service 1 two closed stations took two fifths of the line).
+const CLOSED_W := 0.42   # a closed station's share of an open one's width
+
+
 func station_rect(i: int) -> Rect2:
 	var w := field.size.x
-	var n := float(Kitchen.STATIONS.size())
+	var n := Kitchen.STATIONS.size()
 	var pad := 8.0
-	var bw := (w - pad * (n + 1.0)) / n
+	var shares: Array = []
+	var total := 0.0
+	for j in n:
+		var sh := 1.0 if k == null or k.is_open(j) else CLOSED_W
+		shares.append(sh)
+		total += sh
+	var unit := (w - pad * (n + 1.0)) / total
+	var x := pad
+	for j in i:
+		x += shares[j] * unit + pad
 	var y := _rail_y() + 300.0
-	return Rect2(pad + i * (bw + pad), y, bw, 170.0)
+	return Rect2(x, y, shares[i] * unit, 170.0)
+
+
+## Where a tap counts as this station: its whole column, gaps split with the neighbours, plus a
+## little above (8.5 plan #4: bigger, gap-free tap zones).
+func station_hit(i: int) -> Rect2:
+	var r := station_rect(i)
+	return Rect2(r.position.x - 4.0, r.position.y - 16.0, r.size.x + 8.0, r.size.y + 16.0)
 
 
 func cook_pos(c: int) -> Vector2:
@@ -1072,14 +1233,17 @@ func tap(p: Vector2) -> void:
 	var portrait := _portrait_pick
 	_portrait_pick = false
 	for i in Kitchen.STATIONS.size():
-		if station_rect(i).grow(4.0).has_point(p):
+		if station_hit(i).has_point(p):
 			if not k.is_open(i):
 				if note != null:
 					note.text = "%s OPENS IN SERVICE %d" % [Kitchen.STATIONS[i], Kitchen.OPENS[i]]
 				return
 			if pf.get("st", -1) == i and int(pf.prev) != sel and not k.crew[int(pf.prev)].out:
 				sel = int(pf.prev)   # tapped the same station again: the cook you had picked goes there after all
+				var before := _snap()
 				var went := k.move(sel, i)
+				if went:
+					_undo = before
 				if went:
 					get_node("/root/Audio").sfx("click")
 				_after_move()
@@ -1099,7 +1263,7 @@ func tap(p: Vector2) -> void:
 				sel = owner
 				get_node("/root/Audio").sfx("click")
 				_after_move()
-			elif k.move(sel, i):
+			elif _move_undoable(sel, i):
 				get_node("/root/Audio").sfx("click")
 				_after_move()
 			else:
@@ -1107,12 +1271,48 @@ func tap(p: Vector2) -> void:
 			return
 
 
+func _move_undoable(c: int, i: int) -> bool:
+	var before := _snap()
+	if k.move(c, i):
+		_undo = before
+		return true
+	return false
+
+
+func _snap() -> Dictionary:
+	return {"k": k.to_dict(), "sel": sel, "pick_tid": pick_tid, "pick_ix": pick_ix}
+
+
+## Take back the last move of this turn, once a turn (8.5 plan #4, IGN build 89: a mis-tap cost a move
+## with no way back). END TURN can't be taken back: that's the turn's real commitment.
+func undo() -> void:
+	if _undo.is_empty() or _undo_used or paused or over or between:
+		return
+	var back := Kitchen.new()
+	if not back.from_dict(_undo.k):
+		return
+	k = back
+	sel = int(_undo.sel)
+	pick_tid = int(_undo.pick_tid)
+	pick_ix = int(_undo.pick_ix)
+	score = _night_before + k.served
+	_undo = {}
+	_undo_used = true
+	_cook_draw = {}
+	_pick_from = {}
+	_portrait_pick = false
+	get_node("/root/Audio").sfx("click", 0.8)
+	get_node("/root/Subs").cue("[undo]")
+	UI.buzz(15)
+	_after_move()
+
+
 ## A walk that can't happen says why, on the station and in the status line (it used to do nothing).
 func _too_far(i: int) -> void:
 	var cr: Dictionary = k.crew[sel]
 	if cr.out:
 		return
-	var need: int = k.walk_cost(cr.at, i)
+	var need: int = k.move_cost(sel, i)
 	var why := "%s: NO MOVES LEFT" % cr.name if cr.ap <= 0 else "TOO FAR: %s NEEDS %d MOVES, HAS %d" % [cr.name, need, cr.ap]
 	if note != null:
 		note.text = why
@@ -1344,6 +1544,15 @@ func _draw_field(f: Control) -> void:
 	for i in Kitchen.STATIONS.size():
 		var r := station_rect(i)
 		var here: bool = k.crew[sel].at == i
+		if not k.is_open(i) and r.size.x < 60.0:   # a narrow closed slot: dim, with the service it opens in
+			f.draw_rect(r, Color(UI.panel_color(), 0.45))
+			f.draw_rect(r, Color("4a5878"), false, 2.0)
+			_plate(f, Rect2(r.position.x + 1, r.get_center().y - 24, r.size.x - 2, 48))
+			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, -4), "OPENS", HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
+				UI.font_size(10), UI.DIM)
+			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 16), "S%d" % Kitchen.OPENS[i], HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
+				UI.font_size(16), ink)
+			continue
 		if not k.is_open(i):   # not open yet tonight: dimmed, with when it opens (word, not colour alone)
 			f.draw_rect(r, Color(UI.panel_color(), 0.6))
 			f.draw_rect(r, Color("4a5878"), false, 2.0)
@@ -1433,7 +1642,7 @@ func _draw_field(f: Control) -> void:
 			if i == me.at or not k.is_open(i):
 				continue
 			var r := station_rect(i)
-			var cost: int = k.walk_cost(me.at, i)
+			var cost: int = k.move_cost(sel, i)
 			var far: bool = cost > me.ap
 			# The chip takes over the name row while a cook is picked (name + cost): above it a coach hint
 			# hid it, at the foot it hid UP! / PLATE NOW (fresh-eyes PR #30).
@@ -1449,6 +1658,12 @@ func _draw_field(f: Control) -> void:
 	for c in k.crew.size():
 		var cr: Dictionary = k.crew[c]
 		var pos: Vector2 = _cook_draw.get(c, cook_pos(c))   # mid-walk: drawn on the way, tapped at the spot
+		if not low and not cr.out:   # 8.5 plan #4 (IGN: cooks were badges): a working cook bobs, a burned one flinches
+			var tt := Time.get_ticks_msec() / 1000.0
+			if cr.acted and cr.ap > 0:
+				pos.y += sin(tt * 7.0 + c * 1.7) * 3.0
+			if Time.get_ticks_msec() < int(_flinch.get(c, 0)):
+				pos.x += sin(tt * 70.0) * 5.0
 		if cr.out:   # an empty spot where they stood: name + QUIT, right where you'd look for them
 			if k.crew.any(func(o): return not o.out and cook_pos(k.crew.find(o)).distance_to(pos) < COOK_R * 2.0):
 				continue   # a working cook stands here now: never cover them (blind review #3)
@@ -1597,7 +1812,8 @@ func game_over() -> void:
 
 ## Replay the service that was lost: same night, same bank and upgrades, fresh tickets.
 func retry_service() -> void:
-	_save.write({"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(), "temp_buys": temp_buys})
+	_save.write({"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(), "temp_buys": temp_buys,
+		"cook_perks": cook_perks.duplicate(true)})   # earned perks stay; a pending pick was for the service you beat; a walked-out cook comes back
 	get_node("/root/Loader").go("res://scenes/game.tscn")
 
 
