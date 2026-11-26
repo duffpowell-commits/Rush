@@ -6,7 +6,7 @@ every chunk of work, not only at the end of a session. Rules for every agent: AG
 first). Dated history of every change: CLAUDE.md "Where things stand". This file is the short
 version: where we are, what's next, how to check it.
 
-Last updated: 2026-11-26 13:10 UTC (Claude).
+Last updated: 2026-11-26 13:40 UTC (Claude).
 
 ## Where it is right now
 - main = `d3b2210` (PR #28). Live builds:
@@ -47,14 +47,15 @@ builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
   with DONE, others show a blue moves-left number; hint "TAP FACE, THEN STATION" after turn 1.
 
 ## Next, step by step
-1. Run the blind first-timer review on build 81 (it was cut off on Nov 26 by a usage limit).
-   Save it as `docs/reviews/firsttimer_rush_build81.md` and add the score to the table above.
-2. If it is under 8.5: write 8.5 plan #3 from that review, put it to Duff as one tappable choice,
-   build it in one PR after his OK, then one more blind review.
-3. Known small leftovers (not yet asked for): the grade sheet's "Next: N tickets" doesn't refresh
-   after buying in the shop; the PARTY table lands at the opening when a service has only 2-3
-   tickets; the bot loss rates in CLAUDE.md predate the two new twists (re-measure with a
-   throwaway script that loops `Kitchen.start` + the game's bot, delete it after).
+1. Duff's call on Nov 26: blind reviews are paused to save usage; build fixes and merge on green
+   CI plus a fresh-eyes check. Other games are paused; Rush continues.
+2. Done Nov 26 after build 81: grade sheet "Next: N tickets" refreshes after a shop buy; PARTY OF 12
+   lands mid-service on short nights; "SKIPS REST" on a move that costs a tired cook their rest;
+   walk chips now take over the station's name row (FRY / WALK 1). Bot loss rates (greedy bot, 200 seeds, all twists):
+   s1 7%, s2 36%, s3 50%, s4 50%, s5 73%.
+3. When reviews resume: run the blind first-timer review on the newest build, save it in
+   `docs/reviews/`, add the score to the table above. Under 8.5: write the next 8.5 plan, get
+   Duff's OK once, build it in one PR.
 4. After Dec 1: Duff's keep/park call. If kept, QUEUE.md NEXT (M2 week of services, M3 content).
 
 ## How to build and check (cloud sandbox, Linux)

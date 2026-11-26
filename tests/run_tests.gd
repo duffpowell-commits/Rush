@@ -805,6 +805,22 @@ func test_kitchen_events() -> void:
 	check(pk.total == plain_k.total + 1 and pk.incoming.size() == plain_k.incoming.size() + 1
 		and pk.incoming.filter(func(inc): return inc.ticket.big).size() > plain_k.incoming.filter(func(inc): return inc.ticket.big).size(),
 		"party: one more table, and it's a big one")
+	var short: Kitchen = null   # a 2-ticket night that rolls the party: it still lands mid-service, in order
+	for sd in 400:
+		var sk := Kitchen.new()
+		sk.first_tickets = 1
+		sk.start(2, sd + 1)
+		if sk.event == "party":
+			short = sk
+			break
+	check(short != null, "a short night rolls PARTY OF 12 within 400 seeds")
+	if short == null:
+		return
+	var arr: Array = short.incoming.map(func(inc): return int(inc.arrive))
+	var sorted_arr := arr.duplicate()
+	sorted_arr.sort()
+	check(short.incoming.any(func(inc): return inc.ticket.big and int(inc.arrive) >= short.turns / 3) and arr == sorted_arr,
+		"party: mid-service on a short night, arrivals in order (%s)" % [arr])
 	var back := Kitchen.new()
 	var vk := _event_kitchen("vip")
 	check(back.from_dict(JSON.parse_string(JSON.stringify(vk.to_dict()))) and back.event == "vip"
