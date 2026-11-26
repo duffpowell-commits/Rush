@@ -92,6 +92,13 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   (button NEW NIGHT); tap +N MORE to page the rail (`rail_off`, `_more_rect`; BACK returns);
   bigger ticket/station text; Settings CONTROLS lists only `Controls.SHOWN` (pause); SHOP NEW! only
   until opened. RAIL PAGE, SHOP NEW, GAMEOVER PASS.
+- Nov 26 build-70 reviews (first-timer 7, IGN-style 7, Claude 7; all three: stress reads too late).
+  Duff: "Yes" to the stress pass. The meter previews END TURN (`stress_after(c)`, same sums as
+  Kitchen.end_turn: boxes it adds outlined red, rest outlined green, "+1"/"-2" on the plate) and floats
+  "+N STRESS" after; END TURN warns a turn early ("MO NEAR QUIT", after QUITS and BURNS); the rest hint
+  shows at cap-3; the action button names the cook ("DEV: PLATE"); no two tickets share a table
+  number (`_make_ticket`); pan labels shrink before cutting words; stress plates narrow to the gap
+  between cooks. STRESS PASS, test_table_numbers_unique, test_quit_warning_matches_end_turn.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
