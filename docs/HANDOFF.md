@@ -6,14 +6,14 @@ every chunk of work, not only at the end of a session. Rules for every agent: AG
 first). Dated history of every change: CLAUDE.md "Where things stand". This file is the short
 version: where we are, what's next, how to check it.
 
-Last updated: 2026-11-26 16:00 UTC (Claude).
+Last updated: 2026-11-26 17:00 UTC (Claude).
 
 ## Where it is right now
-- main = `1fa3837` (PR #30), build 84. 8.5 plan #3 is on the working branch (see below). Live builds:
+- main = `c56d586` (PR #32, plan #3), build 89. 8.5 plan #4 is on the working branch (see below). Live builds:
   - Web: https://duffpowell-commits.github.io/Rush/ (gh-pages, pushed by CI on every main push;
     the gh-pages commit message reads "web build <sha7>").
   - APK: Releases -> `dev` -> `Rush.apk`; `version.json` on the same release shows `{"code", "sha"}`.
-    Build 84 = 1fa3837.
+    Build 89 = c56d586.
 - Open PRs: none. Working branch for Claude sessions: `claude/project-thread-qt0oe2` (reset from
   main at the start of each PR; nothing unmerged on it).
 - Side test window: Nov 24 to Dec 1, 2026. Duff decides keep or park on Dec 1 (kill criteria in
@@ -34,6 +34,7 @@ Score history (first-timer / IGN-style / Claude):
 | 79 | 7 | - | - | too easy once upgraded (Temp Cook x2 + Cast Iron, stress 0) |
 | 81 | not run | - | - | - |
 | 84 | 7 | - | - | s1 too easy, s2 a wall (new station + twist + more tickets), busy rail hard to read, stress spikes late, losing snowballs |
+| 89 | - | 7.0 | - | fiddly taps, s1-2 easy then s3 spike, cooks identical, thin animation |
 Reviews: `docs/reviews/` (copies of the ones saved so far; earlier first-timer reviews 1-3 and
 builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
 
@@ -63,6 +64,28 @@ builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
 - Bot (greedy, 200 seeds, twists on): s1 7%, s2 22%, s3 50%, s4 50%, s5 73% lost (s2 was 36%).
   The bot never reaches the cap (it rests at cap-2), so the second wind doesn't move its numbers.
 - Checks: WIND, URGENT, NUDGE PASS; TWIST PASS now expects no twist in service 2; test_second_wind_and_ramp.
+
+## 8.5 plan #4 (Duff: "Build all of it" + three adds in chat, Nov 26, after the build-89 IGN review)
+- Taps: open stations share the width and a closed one is a narrow "OPENS S2" slot (`station_rect`,
+  `CLOSED_W`); a station's tap zone is its whole column plus a strip above (`station_hit`).
+- UNDO (top corner opposite PAUSE): takes back the last move or action, once a turn (`_snap`, `undo`).
+- Curve: service 2 rolls a gentle twist (`Kitchen.MILD_EVENTS`: VIP or critic), service 3 none (cold
+  opens), the full set from 4. A needs 90 (was 87); speed points full at 75% of the clock left.
+- Payout (Duff: "a higher rate for all grades so that if you cant make one session it doesnt
+  automatically ruin the next"): `Kitchen.GRADE_BONUS` A+ $30, A $25, B $20, C $15, D/F $10 on top of tips.
+- Cook perks, earned (Duff: "make the perks earn able like a level up system"): cooks start bare; after
+  each service the cook with the most actions (`crew.acts`, `game.mvp()`) levels up and the player
+  picks 1 of 3 (`perk_offer`, seeded so a reload offers the same three) on a LEVEL UP sheet before the
+  next service. Perks: GRILL/FRY/SAUTE/COLD HAND (that station's dishes 1 min faster), RUNNER (first
+  RUN each turn free), QUICK PLATE (first PLATE free), LIGHT FEET (first step free). `Kitchen.PERKS`,
+  `crew.perks/used`, `game.cook_perks` + `levelup` in the save, kept by RETRY. No downsides yet.
+- Quitting hurts (Duff's pick, Nov 26: "Gone for the whole night"): a house cook who walks out sits out
+  every later service tonight (`game.gone`, saved; `Kitchen.gone` skips them in `start`). RETRY brings
+  them back. The grade sheet says "MO WALKED OUT: GONE FOR TONIGHT"; the shop counts the cooks left.
+- Feel: a working cook bobs, a cook at a burned station flinches.
+- Bot (no perks, greedy, 200 seeds): s1 7%, s2 22%, s3 37%, s4 50%, s5 73% lost. Perks make a real
+  night easier as it goes; the bot never earns any.
+- Checks: LEVELUP, UNDO PASS; TWIST PASS expects a VIP/critic twist in service 2; test_cook_perks.
 
 ## Next, step by step
 1. Duff's call on Nov 26: blind reviews are paused to save usage; build fixes and merge on green

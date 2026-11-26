@@ -381,14 +381,16 @@ func _run() -> void:
 	var graded: bool = game.between and grade_node != null and _find("NEXT SERVICE") != null
 	# Tips carry over: they're banked, the SHOP spends them, the upgrade shapes service 2 and is saved.
 	var tips1: int = game.k.tips
-	var banked: bool = game.cash == tips1 and tips1 >= 25
+	var bonus1: int = Kitchen.GRADE_BONUS.get(game.k.grade(), 10)
+	var tips_line: Node = game.find_child("TipsLine", true, false)
+	var banked: bool = game.cash == tips1 + bonus1 and tips1 >= 25 and tips_line != null and ("$%d" % bonus1) in tips_line.text
 	var shop_new: bool = _find("SHOP") != null and _find("SHOP").text.contains("NEW")   # NEW! before the first visit
 	await _click("SHOP")
 	await _frames(3)
 	await _shot("shop")
 	await _click("FAMILY MEAL")
 	await _frames(3)
-	var bought: bool = game.perks.has("meal") and game.cash == tips1 - 25 and _find("FAMILY MEAL") == null
+	var bought: bool = game.perks.has("meal") and game.cash == tips1 + bonus1 - 25 and _find("FAMILY MEAL") == null
 	await _click("DONE")
 	var shop_b: Button = _find("SHOP")
 	var new_gone: bool = shop_new and shop_b != null and not shop_b.text.contains("NEW")   # looked once: no more NEW!
@@ -397,6 +399,25 @@ func _run() -> void:
 	await _polish_checks(game)
 	await _click("NEXT SERVICE")
 	await _frames(5)
+	# 8.5 plan #4 (Duff: perks earned "like a level up system"): the hardest worker picks one of three.
+	var lvl_head: String = ""   # the sheet's title, read off the perk buttons' sheet
+	var perk_probe: Array = game.find_children("Perk_*", "", true, false)
+	if not perk_probe.is_empty():
+		for ch in perk_probe[0].get_parent().get_children():
+			if ch is Label and String(ch.text).begins_with("LEVEL UP"):
+				lvl_head = ch.text
+	var who: String = game.levelup
+	var perk_bs: Array = game.find_children("Perk_*", "", true, false)
+	var pid: String = String(perk_bs[0].name).trim_prefix("Perk_") if not perk_bs.is_empty() else "-"
+	var lv_saved: bool = str(get_node("/root/Save").read().get("levelup", "")) == who
+	await _shot("levelup")
+	if not perk_bs.is_empty():
+		await _click_node(perk_bs[0])
+	await _frames(5)
+	_check(lvl_head == "LEVEL UP: " + who and who != "" and perk_bs.size() == 3 and lv_saved and (game.cook_perks.get(who, []) as Array).has(pid)
+		and game.k.crew.any(func(cr): return cr.name == who and (cr.perks as Array).has(pid)) and game.levelup == "",
+		"LEVELUP PASS (%s levelled up, picked %s of %d, it rides into service 2, the pick was saved) [%s %s %s %s %s]" % [who, pid, perk_bs.size(),
+			lvl_head, lv_saved, str(game.cook_perks), game.k.crew.map(func(cr): return cr.perks), game.levelup])
 	var sv: Dictionary = get_node("/root/Save").read()
 	_check(banked and bought and game.k.stress_cap == int(game.stress_cap) + 1 and (sv.get("perks", []) as Array).has("meal")
 		and int(get_node("/root/Settings").get_value("best_service")) >= 1,
@@ -426,10 +447,30 @@ func _run() -> void:
 	await _click("HEARD!")
 	await _frames(3)
 	var sheets_left: int = get_tree().get_nodes_in_group("sheet").filter(func(n): return not n.is_queued_for_deletion()).size()
-	# 8.5 plan #3: service 2's step up is the new station alone; twists start in service 3.
-	_check(game.k.event == "" and twist == null and _find("HEARD!") == null and sheets_left == 0
+	# 8.5 plan #4: service 2 rolls a gentle twist (VIP or critic); service 3 none; the full set from 4.
+	_check(Kitchen.MILD_EVENTS.has(game.k.event) and twist_name == game.k.EVENTS[game.k.event][0] and _find("HEARD!") == null and sheets_left == 0
 		and back_paused and back_resumed and not game.paused,
-		"TWIST PASS (service 2: new station, no twist (%s); pause + back on top resume cleanly, HEARD! still closes the card)" % twist_name)
+		"TWIST PASS (service 2 twist %s shown; pause + back on top resume cleanly, HEARD! still closes it)" % twist_name)
+	# 8.5 plan #4 (IGN: fiddly taps): open stations are wider than closed slots; one UNDO a turn.
+	var w_open: float = game.station_rect(0).size.x
+	var w_closed: float = game.station_rect(3).size.x
+	var u_at: int = game.k.crew[0].at
+	var u_ap: int = game.k.crew[0].ap
+	var u_to: int = u_at + 1 if game.k.is_open(u_at + 1) else Kitchen.PASS_IX
+	game.sel = 0
+	game._portrait_pick = true
+	game.tap(game.station_rect(u_to).get_center())
+	await _frames(2)
+	var u_moved: bool = game.k.crew[0].at == u_to and game.undo_btn.visible
+	await _click("UNDO")
+	await _frames(2)
+	var u_back: bool = game.k.crew[0].at == u_at and game.k.crew[0].ap == u_ap and not game.undo_btn.visible
+	game._portrait_pick = true
+	game.tap(game.station_rect(u_to).get_center())
+	await _frames(2)
+	var u_once: bool = not game.undo_btn.visible   # used this turn: no second undo
+	_check(w_open > w_closed * 1.8 and w_open > 100.0 and u_moved and u_back and u_once,
+		"UNDO PASS (open stations %d px vs closed %d; a walk undone, then no second undo this turn)" % [w_open, w_closed])
 	var saved: Dictionary = get_node("/root/Save").read()
 	_check(int(saved.get("level", 0)) == 2, "AUTOSAVE PASS (level 2 saved)")
 	# A few minutes into service 2, so CONTINUE has a service in progress to pick back up.
@@ -558,6 +599,13 @@ func _run() -> void:
 	await _frames(5)
 	_check(three and jo_pick and not game.perks.has("temp"),
 		"TEMP PASS (TEMP COOK adds %s at the pass, a tap under PASS picks them: %s, gone after the service)" % [game.k.crew[2].name if game.k.crew.size() > 2 else "-", jo_pick])
+	# Duff, Nov 26 ("Gone for the whole night"): a cook who walked out sits out the next services.
+	game.gone = ["MO"]
+	game._new_service()
+	var gone_ok: bool = game.k.crew.size() == 1 and game.k.crew[0].name == "DEV" and game.state().get("gone", []) == ["MO"]
+	game.gone = []
+	game._new_service()
+	_check(gone_ok and game.k.crew.size() == 2, "GONE PASS (MO walked out: the next service is DEV alone, saved; cleared, both back)")
 	get_node("/root/Save").clear()
 	game.over = true   # leave without a checkpoint, so the title has no CONTINUE
 	game.quit_to_title()
