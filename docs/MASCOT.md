@@ -15,7 +15,7 @@ For any coding AI (Claude, Grok, Codex, ChatGPT...) or person working on a 3 Eye
 - The example Duff gave (Rush): on a quiet service a fox gets loose in the kitchen and costs a turn.
 
 ## Exceptions (Duff's calls)
-- **The Devil You Owe (Hunter):** the fox is **Cain's pet**, not a cameo (Duff, Nov 26).
+- **Hunter:** the fox is the **main character's pet**, not a cameo (Duff, Nov 26).
 - **DuffQuest:** besides its cameo, the fox also joins the overworld animals, with the raccoons.
 
 ## How to build one
@@ -26,5 +26,5 @@ For any coding AI (Claude, Grok, Codex, ChatGPT...) or person working on a 3 Eye
 
 ## This game: Rush
 - **Duff's example (the template for every game):** on a quiet service, a fox gets loose in the kitchen and costs a turn. Only on a quiet service, never on a rush or a party night, at most once a night.
-- It goes in after the fox art is approved (QUEUE/HANDOFF next steps already list "fox cameo (art approval first)").
+- It goes in after the fox art is approved.
 - Before building: Duff OKs the fox art on a card.

@@ -9,7 +9,7 @@ version: where we are, what's next, how to check it.
 Last updated: 2026-11-26 17:00 UTC (Claude).
 
 ## Studio mascot (Duff, Nov 26)
-- **the three-eyed fox is in every game as a rare cameo, not a pal**: a small event
+- **The three-eyed fox is in every game as a rare cameo, not a pal**: a small event
   that matters but never ruins a run. Duff OKs the fox art on a card before it's built. Rule + this game's idea: `docs/MASCOT.md`.
 
 ## Where it is right now
