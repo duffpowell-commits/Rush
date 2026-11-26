@@ -252,7 +252,7 @@ func _refresh_hud() -> void:
 		var cr: Dictionary = k.crew[sel]
 		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
 		var red := 1 if k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2) else 0
-		act_btn.text = ("RUSH (TAKES 5)" if k.breaks > 0 else "RUSH (QUITS!)") if cr.stress + k.rush_stress + red >= k.stress_cap else ("RUSH (FREE)" if k.rush_stress <= 0 else "RUSH +%d STRESS" % k.rush_stress)
+		act_btn.text = ("RUSH (TAKES 5)" if _wind_for(sel) else "RUSH (QUITS!)") if cr.stress + k.rush_stress + red >= k.stress_cap else ("RUSH (FREE)" if k.rush_stress <= 0 else "RUSH +%d STRESS" % k.rush_stress)
 	elif a == "RUN" and k.tray > 1:   # a tray: say how many plates go out on this one action
 		var n := mini(k.tray, k.window.size() + (0 if k.crew[sel].hand.is_empty() else 1))
 		if n > 1:
@@ -268,7 +268,7 @@ func _refresh_hud() -> void:
 		# PLATE empties the pan here, so its burn never lands on this cook (fresh-eyes PR #27)
 		var then := stress_after(sel, true, k.crew[sel].at if a == "PLATE" else -1)
 		if then >= k.stress_cap:
-			act_btn.text += "\n(%s %s)" % [k.crew[sel].name, "TAKES 5" if k.breaks > 0 else "QUITS"]
+			act_btn.text += "\n(%s %s)" % [k.crew[sel].name, "TAKES 5" if _wind_for(sel) else "QUITS"]
 		elif then > k.crew[sel].stress:
 			act_btn.text += "\n+%d STRESS" % (then - k.crew[sel].stress)
 		elif k.crew[sel].stress >= k.stress_cap - 3 and stress_after(sel) < k.crew[sel].stress:   # no cost, but a tired cook gives up their rest
@@ -1166,6 +1166,17 @@ func cooks_quitting() -> Array:
 	return out
 
 
+## The second wind would land on cook c if they hit the cap now: one is left and no cook before
+## them in crew order (end_turn's order) hits the cap first (fresh-eyes PR #32).
+func _wind_for(c: int) -> bool:
+	if k.breaks <= 0:
+		return false
+	for i in c:
+		if not k.crew[i].out and stress_after(i) >= k.stress_cap:
+			return false
+	return true
+
+
 ## Cooks who'd hit the cap but take five instead (second wind), in end_turn's order.
 func cooks_breaking() -> Array:
 	var out: Array = []
@@ -1268,9 +1279,14 @@ func _draw_field(f: Control) -> void:
 			f.draw_string(font, Vector2(r.position.x, r.end.y - 7), "COOK FIRST", HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
 				UI.font_size(13), UI.BG)
 		if t.id == urgent and t.id != pick_tid and not t.get("vip", false) and not t.get("critic", false):
-			f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), UI.key("bad"))   # a band, in words: not colour alone
-			f.draw_string(font, Vector2(r.position.x, r.end.y - 7), "URGENT", HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
-				UI.font_size(13), UI.BG)
+			if t.items.size() >= 4:   # a big table's 4th dish sits where the band would: a tab over the card's top edge instead
+				f.draw_rect(Rect2(r.get_center().x - 34, r.position.y - 9, 68, 16), UI.key("bad"))
+				f.draw_string(font, Vector2(r.get_center().x - 34, r.position.y + 4), "URGENT", HORIZONTAL_ALIGNMENT_CENTER, 68,
+					UI.font_size(11), UI.BG)
+			else:
+				f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), UI.key("bad"))   # a band, in words: not colour alone
+				f.draw_string(font, Vector2(r.position.x, r.end.y - 7), "URGENT", HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
+					UI.font_size(13), UI.BG)
 		f.draw_string(font, r.position + Vector2(8, 26), "T%d" % t.table,
 			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 56, UI.font_size(18), ink)
 		if t.big:   # small, between the table number and the clock, so it never runs into either
