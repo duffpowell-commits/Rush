@@ -427,6 +427,7 @@ func end_turn() -> void:
 	_pick_from = {}   # a station handoff only counts on the very next field tap
 	if paused or over or between:
 		return
+	rail_off = 0   # a new turn opens on the most urgent tickets
 	var walked_before := k.walked
 	var critic_before := k.critic
 	var tickets_before: Array = k.tickets.map(func(t): return t.id)
@@ -1183,7 +1184,7 @@ func _draw_field(f: Control) -> void:
 		for b in cap:
 			var box := Rect2(pos.x - sw / 2 + b * seg, pos.y + COOK_R + 6, seg - 2, 10)
 			f.draw_rect(box, UI.key(tone) if b < cr.stress else Color("2b3448"))
-		if cr.hand.is_empty():   # (a carried plate's name sits here instead)
+		if cr.hand.is_empty() and (note == null or note.text == ""):   # (a carried plate's name, or the event line, sits here instead)
 			_plate(f, Rect2(pos.x - 50, pos.y + COOK_R + 18, 100, 22))
 			var sl := ("TIRED %d/%d" if tired else "STRESS %d/%d") % [cr.stress, cap]
 			f.draw_string(font, Vector2(pos.x - 50, pos.y + COOK_R + 35), sl, HORIZONTAL_ALIGNMENT_CENTER, 100,

@@ -342,6 +342,7 @@ func _run() -> void:
 	# Tips carry over: they're banked, the SHOP spends them, the upgrade shapes service 2 and is saved.
 	var tips1: int = game.k.tips
 	var banked: bool = game.cash == tips1 and tips1 >= 25
+	var shop_new: bool = _find("SHOP") != null and _find("SHOP").text.contains("NEW")   # NEW! before the first visit
 	await _click("SHOP")
 	await _frames(3)
 	await _shot("shop")
@@ -350,8 +351,8 @@ func _run() -> void:
 	var bought: bool = game.perks.has("meal") and game.cash == tips1 - 25 and _find("FAMILY MEAL") == null
 	await _click("DONE")
 	var shop_b: Button = _find("SHOP")
-	var new_gone: bool = shop_b != null and not shop_b.text.contains("NEW")   # looked once: no more NEW!
-	_check(new_gone, "SHOP NEW PASS (after a visit the button reads '%s')" % (shop_b.text if shop_b != null else "-"))
+	var new_gone: bool = shop_new and shop_b != null and not shop_b.text.contains("NEW")   # looked once: no more NEW!
+	_check(new_gone, "SHOP NEW PASS (NEW! before the visit, then '%s')" % (shop_b.text if shop_b != null else "-"))
 	await _tray_checks(game, pst)
 	await _polish_checks(game)
 	await _click("NEXT SERVICE")
