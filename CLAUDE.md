@@ -147,6 +147,11 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   LEVEL UP after each service (hardest worker picks 1 of 3 perks: station hands, RUNNER, QUICK PLATE,
   LIGHT FEET); a cook who walks out is gone for the rest of the night (`gone`, RETRY brings them back);
   cooks bob and flinch. LEVELUP, UNDO PASS; test_cook_perks. Details: docs/HANDOFF.md.
+- Nov 26 (Duff in chat): CROSS PREP twist from service 4 (a dish needs an ingredient PREPped at
+  another station: blue cheese from COLD, steak strips from GRILL...; `Kitchen.PREP_FROM`,
+  `prep_every` TUNE), DOUBLE BURNERS shop upgrade ($100: one FIRE cooks a dish for two tables), and a
+  difficulty review: HEAT every 4th turn, PARTY swaps in for a small table, the rail grows every other
+  service past 5. Bot: s1 7%, s2 24%, s3 41%, s4 48%, s5 67%, s6 67%. PREP, BURNERS PASS. docs/HANDOFF.md.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

@@ -1289,6 +1289,41 @@ func _polish_checks(game: Node) -> void:
 	await _frames(3)
 	await _shot("heat_spent")
 	_check(heat_prev == 1, "HEAT PASS (a worked cook on a heat turn previews +%d stress; spent DEV drawn grey with DONE)" % heat_prev)
+	# CROSS PREP (Duff, Nov 26): a salad needs steak strips from the grill. The ticket says where,
+	# the grill's button says PREP, and after it COLD can fire the salad.
+	kk.event = "prep"
+	kk.tickets = [{"id": 992, "table": 52, "items": [{"dish": "SALAD", "state": "wait", "needs": 0}], "time": 9, "big": false, "t0": 9}]
+	for i in kk.pans.size():
+		kk.pans[i] = {}
+	kk.crew[0].at = 0
+	kk.crew[0].ap = kk.ap
+	kk.crew[0].acted = false
+	kk.crew[0].stress = 0
+	game.sel = 0
+	game.pick_tid = 0
+	game.pick_ix = -1
+	game._refresh_hud()
+	game.field.queue_redraw()
+	await _frames(3)
+	await _shot("cross_prep")
+	var prep_btn: String = game.act_btn.text
+	kk.act_here(0)   # the rule directly: game.act() here would act on the screen mid grade sheet
+	await _frames(2)
+	var prepped: bool = not kk.tickets[0].items[0].has("needs") and kk.tickets[0].items[0].get("prepped", false)
+	kk.crew[0].at = 3
+	_check(prep_btn.contains("PREP STEAK STRIPS T52") and prepped and kk.action_here(0) == "FIRE",
+		"PREP PASS (grill button '%s', strips pulled, then COLD fires the salad)" % prep_btn.replace("\n", " "))
+	# DOUBLE BURNERS (shop): one FIRE cooks fries for two tables.
+	kk.event = ""
+	kk.batch = 2
+	kk.tickets = [{"id": 990, "table": 50, "items": [{"dish": "FRIES", "state": "wait"}], "time": 5, "big": false, "t0": 5},
+		{"id": 991, "table": 51, "items": [{"dish": "FRIES", "state": "wait"}], "time": 8, "big": false, "t0": 8}]
+	kk.crew[0].at = 1
+	kk.crew[0].ap = kk.ap
+	kk.act_here(0)
+	var both: Array = kk.pans[1].get("more", [])
+	kk.batch = 1
+	_check(both == [991] and kk.tickets[1].items[0].state == "cooking", "BURNERS PASS (one FIRE: T50 + T51 fries in one pan)")
 	kk.from_dict(JSON.parse_string(JSON.stringify(keep)))
 	game._refresh_hud()
 	var calm: String = game.end_btn.text

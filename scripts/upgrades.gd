@@ -17,8 +17,11 @@ const ALL := {
 	"tray2": {"name": "ENTREE TRAY", "cost": 90, "says": "RUN 4 PLATES AT ONCE", "needs": "tray"},
 	# 8.5 pass: a third pair of hands for one service (service 4 was a wall for two cooks).
 	"temp": {"name": "TEMP COOK", "cost": 45, "says": "+1 COOK NEXT SERVICE"},
+	# Duff, Nov 26: "make the stations upgradable later on so that you can fire multiple dishes".
+	# A kitchen upgrade, not a cook perk: it stays when a cook walks out.
+	"burners": {"name": "DOUBLE BURNERS", "cost": 100, "says": "FIRE COOKS 2 OF A DISH"},
 }
-const ORDER := ["meal", "lamps", "tray", "tray2", "temp", "iron", "comps"]
+const ORDER := ["meal", "lamps", "tray", "tray2", "temp", "burners", "iron", "comps"]
 const MAX_TRAY := 4
 
 
@@ -67,4 +70,5 @@ static func apply(base: Dictionary, owned: Array) -> Dictionary:
 		out.lives += 1
 	out["tray"] = 4 if owned.has("tray2") else (2 if owned.has("tray") else 1)
 	out["hires"] = 1 if owned.has("temp") else 0
+	out["batch"] = 2 if owned.has("burners") else 1
 	return out

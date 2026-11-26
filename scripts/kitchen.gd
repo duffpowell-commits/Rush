@@ -22,10 +22,14 @@ const EVENTS := {
 	"vip": ["VIP TABLE", "Gold ticket: triple tips. Walk it and it counts as two."],
 	"critic": ["FOOD CRITIC", "Serve the critic: grade up. Walk them: grade down."],
 	# 8.5 plan #2 (blind review: only two twists in four services, and stress never moved).
-	"heat": ["HEAT WAVE", "The line is an oven: working cooks take +1 stress every other turn."],
-	"party": ["PARTY OF 12", "A twelve-top books in: one extra big table mid-service."],
+	"heat": ["HEAT WAVE", "The line is an oven: working cooks take +1 stress every fourth turn."],
+	"party": ["PARTY OF 12", "A twelve-top books in mid-service and takes a small table's place."],
+	# Duff, Nov 26: "you need ingredients from different stations to fire new dishes ... blue cheese
+	# from salad bar for saute", then "you can do it from each station. Steak for a salad from grill".
+	# From service 4 only (every station is open). Balance: only every PREP_EVERY-th dish needs it.
+	"prep": ["CROSS PREP", "Some dishes need an ingredient from another station: PREP it there first."],
 }
-const EVENT_IDS := ["tour", "fritz", "vip", "critic", "heat", "party"]
+const EVENT_IDS := ["tour", "fritz", "vip", "critic", "heat", "party", "prep"]
 ## 8.5 plan #4 (IGN build 89: service 2 had no choice in it, service 3 stacked everything): service 2
 ## rolls a gentle twist (a table worth chasing), service 3 opens cold with none, the full set from 4.
 const MILD_EVENTS := ["vip", "critic"]
@@ -53,6 +57,10 @@ const PASS_IX := 4
 ## A closed station is walked past for free and takes no tickets.
 const OPENS := [1, 1, 2, 3]
 const TEMPS := ["JO", "KAI"]
+## CROSS PREP: what a dish at each station needs, and where it's prepped ([from station, name]).
+## Grill burger takes blue cheese (cold), fry wings take garlic butter (saute), saute takes blue
+## cheese (cold), a cold salad takes steak strips (grill).
+const PREP_FROM := {0: [3, "BLUE CHEESE"], 1: [2, "GARLIC BUTTER"], 2: [3, "BLUE CHEESE"], 3: [0, "STEAK STRIPS"]}
 
 ## Dish: station it cooks at, minutes on the heat.
 const DISHES := {
@@ -73,6 +81,8 @@ var stress_cap := 6
 var burn_after := 1      # a finished pan burns at the end of the turn its wait passes this (2 turns to plate at 1)
 var rush_stress := 1     # stress a RUSH costs the cook
 var tray := 1            # plates one RUN carries (shop trays: 2, then 4)
+var batch := 1           # dishes one FIRE cooks: 2 with the shop's DOUBLE BURNERS (same dish, any table)
+var prep_every := 3      # CROSS PREP: every Nth dish needs an ingredient prepped at another station (TUNE)
 var first_tickets := 7   # tickets in service 1 (8.5 plan #3 tried 8: the bot lost s1 26% vs 8%, so it stays 7) (Nov 25 stations: bot s1 ~8%, s2 ~32%, s3 ~48%, s4 ~71% game over, twists on)
 var more_tickets := 1    # extra tickets each later service (greedy bot with the pass window, 200 seeds: s2 ~41% game over, s3 ~69%; was 6+1 before the window)
 
@@ -162,7 +172,10 @@ func start(n: int, seed_value: int = 0) -> void:
 ## Tickets service n deals: first, then +more a service, and from service 4 (the full line) one fewer.
 ## game.gd's tickets_for() uses the same sum (8.5 plan #3 put it in one place).
 static func count_for(first: int, more: int, n: int) -> int:
-	return maxi(1, first + more * (n - 1) - (1 if n >= 4 else 0))
+	# Difficulty review (Nov 26, Duff: "ramps up at a bearable rate"): past service 5 the rail grows
+	# every other service, not every one (the bot lost 91% of service 6).
+	var steps := mini(n, 5) - 1 + maxi(n - 5, 0) / 2
+	return maxi(1, first + more * steps - (1 if n >= 4 else 0))
 
 
 func _set_up_event() -> void:
@@ -181,6 +194,18 @@ func _set_up_event() -> void:
 			_mark(1 if count > 1 else 0, "vip")
 		"critic":
 			_mark(count / 3, "critic")
+		"prep":   # every prep_every-th dish needs an ingredient from another station; its table gets a minute's grace
+			var n := 0
+			for inc in incoming:
+				var marked := false
+				for it in inc.ticket.items:
+					n += 1
+					if n % maxi(prep_every, 1) == 1 or prep_every <= 1:
+						it["needs"] = int(PREP_FROM[DISHES[it.dish].st][0])
+						marked = true
+				if marked:
+					inc.ticket.time += 1
+					inc.ticket.t0 = inc.ticket.time
 		"party":   # one more big table, landing mid-service (never at the opening, even on a short night)
 			var mid := count / 2
 			var at := maxi(incoming[mid].arrive if count > 0 else 0, turns / 3)
@@ -189,8 +214,17 @@ func _set_up_event() -> void:
 				if incoming[i].arrive > at:
 					ix = i
 					break
-			incoming.insert(ix, {"arrive": at, "ticket": _make_ticket(true)})
-			total += 1
+			var party := _make_ticket(true)
+			party.time += 3   # a booked table: the floor seats them slow (difficulty review: it was 40 points over a plain service)
+			party.t0 = party.time
+			incoming.insert(ix, {"arrive": at, "ticket": party})
+			# The twelve-top takes the room: the next small table after it doesn't come (difficulty
+			# review, Nov 26: as an extra table it lost the bot 74% of service 4, vs 41% plain).
+			for j in range(ix + 1, incoming.size()):
+				if not incoming[j].ticket.big:
+					incoming.remove_at(j)
+					break
+			total = incoming.size() + tickets.size()
 
 
 func _mark(i: int, key: String) -> void:
@@ -339,6 +373,16 @@ func fire(c: int, tid: int = 0, ix: int = -1) -> bool:
 	pick.item.state = "cooking"
 	pans[s] = {"tid": pick.t.id, "dish": pick.item.dish, "left": cook_time_by(c, pick.item.dish), "sat": 0, "rushed": false,
 		"by": c}   # who fired it: tapping the station picks that cook (Duff, Nov 25)
+	if batch > 1:   # DOUBLE BURNERS: the same dish for the next most urgent table rides in this pan
+		var more: Array = []
+		while more.size() < batch - 1:
+			var also := _same_dish(s, pick.item.dish)
+			if also.is_empty():
+				break
+			also.item.state = "cooking"
+			more.append(also.t.id)
+		if not more.is_empty():
+			pans[s]["more"] = more
 	crew[c].ap -= 1
 	_did(c)
 	return true
@@ -357,12 +401,55 @@ func fire_pick(c: int, tid: int = 0, ix: int = -1) -> Dictionary:
 		var t := ticket(tid)
 		if not t.is_empty() and ix < t.items.size():
 			var it: Dictionary = t.items[ix]
-			if it.state == "wait" and DISHES[it.dish].st == s:
+			if it.state == "wait" and DISHES[it.dish].st == s and not it.has("needs"):
 				return {"t": t, "item": it}
 	var pick := _waiting_for(s, tid)
 	if pick.is_empty() and tid != 0:
 		pick = _waiting_for(s, 0)
 	return pick
+
+
+## A waiting copy of this dish at station s on the most urgent ticket (DOUBLE BURNERS).
+func _same_dish(s: int, dish: String) -> Dictionary:
+	var order := tickets.duplicate()
+	order.sort_custom(func(a, b): return a.time < b.time)
+	for t in order:
+		for it in t.items:
+			if it.state == "wait" and it.dish == dish and DISHES[it.dish].st == s and not it.has("needs"):
+				return {"t": t, "item": it}
+	return {}
+
+
+## CROSS PREP: the most urgent waiting dish whose ingredient is prepped at station s ({t, item} or {}).
+func prep_pick(s: int, tid: int = 0) -> Dictionary:
+	var order := tickets.duplicate()
+	order.sort_custom(func(a, b): return a.time < b.time)
+	for t in order:
+		if tid != 0 and t.id != tid:
+			continue
+		for it in t.items:
+			if it.state == "wait" and int(it.get("needs", -1)) == s:
+				return {"t": t, "item": it}
+	return {} if tid == 0 else prep_pick(s, 0)
+
+
+## What a dish needs prepped ("BLUE CHEESE"), "" when nothing.
+static func prep_name(item: Dictionary) -> String:
+	return str(PREP_FROM[DISHES[item.dish].st][1]) if item.has("needs") else ""
+
+
+## PREP: pull the ingredient here for a dish at another station (1 move, no pan). Then it can fire.
+func prep(c: int, tid: int = 0) -> bool:
+	if not can_act(c) or crew[c].at == PASS_IX:
+		return false
+	var pick := prep_pick(crew[c].at, tid)
+	if pick.is_empty():
+		return false
+	pick.item.erase("needs")
+	pick.item["prepped"] = true
+	crew[c].ap -= 1
+	_did(c)
+	return true
 
 
 func _waiting_for(s: int, tid: int) -> Dictionary:
@@ -372,7 +459,7 @@ func _waiting_for(s: int, tid: int) -> Dictionary:
 		if tid != 0 and t.id != tid:
 			continue
 		for it in t.items:
-			if it.state == "wait" and DISHES[it.dish].st == s:
+			if it.state == "wait" and DISHES[it.dish].st == s and not it.has("needs"):
 				return {"t": t, "item": it}
 	return {}
 
@@ -385,16 +472,16 @@ func plate(c: int) -> bool:
 	if s == PASS_IX or pans[s].is_empty() or pans[s].left > 0:
 		return false
 	var p: Dictionary = pans[s]
-	var t := ticket(p.tid)
 	pans[s] = {}
-	if t.is_empty():   # its ticket was walked while it cooked: the plate is wasted
-		_pay(c, "PLATE")
-		return true
-	for it in t.items:
-		if it.state == "cooking" and it.dish == p.dish:
-			it.state = "carried"
-			break
-	window.append({"tid": p.tid, "dish": p.dish})
+	for tid in [p.tid] + p.get("more", []):   # DOUBLE BURNERS: every plate in the pan goes up
+		var t := ticket(tid)
+		if t.is_empty():   # its ticket was walked while it cooked: the plate is wasted
+			continue
+		for it in t.items:
+			if it.state == "cooking" and it.dish == p.dish:
+				it.state = "carried"
+				break
+		window.append({"tid": tid, "dish": p.dish})
 	_pay(c, "PLATE")
 	return true
 
@@ -475,6 +562,12 @@ func action_here(c: int, allow_rush: bool = true) -> String:
 	if not p.is_empty() and p.left <= 0:
 		return "PLATE"
 	if p.is_empty() and not _waiting_for(s, 0).is_empty():
+		var cp := prep_pick(s)
+		if cp.is_empty() or _waiting_for(s, 0).t.time <= cp.t.time:
+			return "FIRE"
+	if not prep_pick(s).is_empty():
+		return "PREP"
+	if p.is_empty() and not _waiting_for(s, 0).is_empty():
 		return "FIRE"
 	if allow_rush and not p.is_empty() and p.left > 0 and not p.get("rushed", false):
 		return "RUSH"
@@ -491,14 +584,16 @@ func act_here(c: int, tid: int = 0, allow_rush: bool = true, ix: int = -1) -> bo
 			return fire(c, tid, ix)
 		"RUSH":
 			return rush(c)
+		"PREP":
+			return prep(c, tid)
 	return false
 
 
 # ---------------------------------------------------------------- end of turn
 
-## HEAT WAVE: this turn's end adds a point to every cook who worked (odd turns: every other one).
+## HEAT WAVE: this turn's end adds a point to every cook who worked (turns 1, 5, 9...: every fourth).
 func heat_turn() -> bool:
-	return event == "heat" and turn % 2 == 1
+	return event == "heat" and turn % 4 == 1   # difficulty review (Nov 26): every fourth turn; every other was a 30-point spike
 
 
 func end_turn() -> void:
@@ -517,11 +612,12 @@ func end_turn() -> void:
 			p.sat += 1
 			if p.sat > burn_after:
 				pans[s] = {}
-				var t := ticket(p.tid)
-				for it in t.get("items", []):
-					if it.state == "cooking" and it.dish == p.dish:
-						it.state = "wait"   # refire
-						break
+				for tid in [p.tid] + p.get("more", []):
+					var t := ticket(tid)
+					for it in t.get("items", []):
+						if it.state == "cooking" and it.dish == p.dish:
+							it.state = "wait"   # refire
+							break
 				burns += 1
 				_say("BURN ON %s, REFIRE" % STATIONS[s])
 				for cr in crew:
@@ -538,8 +634,20 @@ func end_turn() -> void:
 				critic = "walked"
 			_say("TABLE %d WALKED" % t.table)
 			for s in pans.size():
-				if not pans[s].is_empty() and pans[s].tid == t.id:
-					pans[s] = {}
+				if pans[s].is_empty():
+					continue
+				var more: Array = pans[s].get("more", [])
+				more.erase(t.id)   # DOUBLE BURNERS: a walked rider just drops out of the pan
+				if pans[s].tid == t.id:
+					if more.is_empty():
+						pans[s] = {}
+					else:   # the other table's dish keeps cooking in this pan
+						pans[s].tid = more.pop_front()
+				if not pans[s].is_empty():
+					if more.is_empty():
+						pans[s].erase("more")
+					else:
+						pans[s]["more"] = more
 			window = window.filter(func(w): return w.tid != t.id)   # its plates on the pass are binned
 			for cr in crew:   # a plate for a walked table is binned, so the cook's hands are free
 				if not cr.hand.is_empty() and cr.hand.tid == t.id:
@@ -637,7 +745,7 @@ func to_dict() -> Dictionary:
 		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
 		"stress_cap": stress_cap, "burn_after": burn_after,
 		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic, "all_open": all_open,
-		"burns": burns, "speed": speed, "tray": tray, "breaks": breaks}
+		"burns": burns, "speed": speed, "tray": tray, "breaks": breaks, "batch": batch}
 
 
 ## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
@@ -668,6 +776,7 @@ func from_dict(d: Dictionary) -> bool:
 	tray = clampi(int(d.get("tray", 1)), 1, 4)
 	critic = str(d.get("critic", ""))
 	breaks = int(d.get("breaks", 1))
+	batch = clampi(int(d.get("batch", 1)), 1, 2)
 	window = []
 	for w in d.window:
 		window.append({"tid": int(w.tid), "dish": str(w.dish)})
@@ -683,6 +792,8 @@ func from_dict(d: Dictionary) -> bool:
 	for p in d.pans:
 		pans.append({} if p.is_empty() else {"tid": int(p.tid), "dish": str(p.dish), "left": int(p.left), "sat": int(p.sat),
 			"rushed": bool(p.get("rushed", false)), "by": int(p.get("by", -1))})
+		if not pans[-1].is_empty() and p.has("more"):
+			pans[-1]["more"] = (p.more as Array).map(func(x): return int(x))
 	tickets = []
 	for t in d.tickets:
 		tickets.append(_ticket_from(t))
@@ -696,7 +807,12 @@ func from_dict(d: Dictionary) -> bool:
 func _ticket_from(t: Dictionary) -> Dictionary:
 	var items: Array = []
 	for it in t.items:
-		items.append({"dish": str(it.dish), "state": str(it.state)})
+		var item := {"dish": str(it.dish), "state": str(it.state)}
+		if it.has("needs"):
+			item["needs"] = int(it.needs)
+		if it.get("prepped", false):
+			item["prepped"] = true
+		items.append(item)
 	var out := {"id": int(t.id), "table": int(t.table), "items": items, "time": int(t.time), "big": bool(t.big)}
 	for key in ["vip", "critic"]:
 		if t.get(key, false):
@@ -752,7 +868,10 @@ func _bot_goal(c: int) -> int:
 	# An empty station with work waiting, nearest first.
 	var best := -1
 	for s in pans.size():
-		if pans[s].is_empty() and not _waiting_for(s, 0).is_empty() and not _other_at(c, s):
+		var work: bool = pans[s].is_empty() and not _waiting_for(s, 0).is_empty()
+		if not prep_pick(s).is_empty():
+			work = true
+		if work and not _other_at(c, s):
 			if best < 0 or walk_cost(crew[c].at, s) < walk_cost(crew[c].at, best):
 				best = s
 	return best
