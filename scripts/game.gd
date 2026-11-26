@@ -36,19 +36,20 @@ const LIVES := 3             # tables you can walk in one service
 ## Live sliders (DEV MENU -> TUNE). Applied when a service starts.
 const TUNE := {"ticket_time": [4.0, 16.0], "crew_ap": [1.0, 5.0], "stress_cap": [2.0, 12.0],
 	"service_turns": [8.0, 40.0], "first_tickets": [2.0, 14.0], "more_tickets": [0.0, 4.0],
-	"rush_stress": [0.0, 3.0]}
+	"rush_stress": [0.0, 3.0], "breaks": [0.0, 3.0]}
 var ticket_time := 9.0
 var crew_ap := 3.0
 var stress_cap := 6.0
 var service_turns := 20.0
 var first_tickets := 7.0
+var breaks := 1.0            # second winds a service: the first cook who'd quit takes five instead
 var more_tickets := 1.0
 var rush_stress := 1.0
 
 var level := 1               # service number
 var score := 0               # tickets out, whole night
 var lives := LIVES
-var lives_max := LIVES     # LIVES, +1 with COMP CARDS
+var lives_max := LIVES     # LIVES, +1 with SECOND CHANCE
 var cash := 0                # tips banked tonight, spent in the SHOP between services
 var twist_box: VBoxContainer   # the TONIGHT card while it's up
 var perks: Array = []        # upgrades owned tonight (upgrades.gd)
@@ -220,8 +221,11 @@ func _refresh_hud() -> void:
 	var quits := cooks_quitting()
 	if not quits.is_empty():   # the worst news first: everyone who walks out if the turn ends now
 		end_btn.text = "END TURN\n%s QUIT%s" % [" + ".join(quits), "S" if quits.size() == 1 else ""]
+	var brk := cooks_breaking()
+	if quits.is_empty() and not brk.is_empty():   # second wind: they'd quit, but sit out a turn instead
+		end_btn.text = "END TURN\n%s TAKES 5" % brk[0]
 	var burns: Array[String] = []   # every pan that burns, not just the first (8.5 pass)
-	for i in (k.pans.size() if quits.is_empty() else 0):
+	for i in (k.pans.size() if quits.is_empty() and brk.is_empty() else 0):
 		var p: Dictionary = k.pans[i]
 		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after:
 			burns.append(Kitchen.STATIONS[i])
@@ -236,7 +240,7 @@ func _refresh_hud() -> void:
 				break
 	act_btn.text = a if a != "" else "TAP A STATION"   # nothing to do here: say how to move
 	if a == "" and not k.crew[sel].out and k.crew[sel].ap <= 0:   # say why: this cook is spent till END TURN
-		act_btn.text = "%s: NO MOVES" % k.crew[sel].name   # short: HUGE text wraps it over the status line
+		act_btn.text = "%s: %s" % [k.crew[sel].name, "ON BREAK" if k.crew[sel].get("brk", false) else "NO MOVES"]   # short: HUGE text wraps it over the status line
 	if a == "FIRE":   # say which table it cooks for, picked or not
 		var fp := k.fire_pick(sel, pick_tid, pick_ix)
 		act_btn.text = "FIRE T%d" % fp.t.table
@@ -248,7 +252,7 @@ func _refresh_hud() -> void:
 		var cr: Dictionary = k.crew[sel]
 		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
 		var red := 1 if k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2) else 0
-		act_btn.text = "RUSH (QUITS!)" if cr.stress + k.rush_stress + red >= k.stress_cap else ("RUSH (FREE)" if k.rush_stress <= 0 else "RUSH +%d STRESS" % k.rush_stress)
+		act_btn.text = ("RUSH (TAKES 5)" if k.breaks > 0 else "RUSH (QUITS!)") if cr.stress + k.rush_stress + red >= k.stress_cap else ("RUSH (FREE)" if k.rush_stress <= 0 else "RUSH +%d STRESS" % k.rush_stress)
 	elif a == "RUN" and k.tray > 1:   # a tray: say how many plates go out on this one action
 		var n := mini(k.tray, k.window.size() + (0 if k.crew[sel].hand.is_empty() else 1))
 		if n > 1:
@@ -264,7 +268,7 @@ func _refresh_hud() -> void:
 		# PLATE empties the pan here, so its burn never lands on this cook (fresh-eyes PR #27)
 		var then := stress_after(sel, true, k.crew[sel].at if a == "PLATE" else -1)
 		if then >= k.stress_cap:
-			act_btn.text += "\n(%s QUITS)" % k.crew[sel].name
+			act_btn.text += "\n(%s %s)" % [k.crew[sel].name, "TAKES 5" if k.breaks > 0 else "QUITS"]
 		elif then > k.crew[sel].stress:
 			act_btn.text += "\n+%d STRESS" % (then - k.crew[sel].stress)
 		elif k.crew[sel].stress >= k.stress_cap - 3 and stress_after(sel) < k.crew[sel].stress:   # no cost, but a tired cook gives up their rest
@@ -293,8 +297,8 @@ func pace_adjust() -> Dictionary:
 ## Tickets the given service brings, after pace and the house's read.
 func tickets_for(n: int) -> int:
 	var base := int(first_tickets)
-	return maxi(1, maxi(mini(3, base), base + pace_adjust().tickets) + Upgrades.load_tickets(perks)
-		+ int(more_tickets) * (n - 1) - (1 if n >= 4 else 0))
+	return Kitchen.count_for(maxi(mini(3, base), base + pace_adjust().tickets) + Upgrades.load_tickets(perks),
+		int(more_tickets), n)
 
 
 ## After a service (or a lost night), the house reads you: a rough one eases the next, an aced one pushes it.
@@ -304,7 +308,7 @@ func _house_reads(g: String, lost: bool = false) -> String:
 	var was := ease
 	if lost or g in ["D", "F"]:
 		ease = mini(ease + 1, 2)
-	elif g in ["A+", "A"]:
+	elif g in ["A+", "A"] and (k == null or k.service >= 2):   # service 1 is the lesson: acing it doesn't stack service 2 (8.5 plan #3)
 		ease = maxi(ease - 1, -2)
 	if ease == was:
 		return ""
@@ -317,6 +321,8 @@ func _new_service() -> void:
 	_cook_draw = {}   # a new service starts with everyone at their spot, not sliding from last service's
 	_pick_from = {}   # a station handoff only counts on the very next field tap
 	rail_off = 0
+	_stress_turn = -1   # hint timers count this service's turns
+	_spent_turn = -1
 	for ch in get_children():   # the new service's clock restarts at turn 0: so does a hint's wait
 		if ch.name.begins_with("Coach_"):
 			ch.set_meta("turn", 0)
@@ -334,6 +340,7 @@ func _new_service() -> void:
 	k.rush_stress = u.rush_stress
 	k.tray = u.tray
 	k.hires = u.hires
+	k.breaks = int(breaks)
 	k.start(level, rng.randi() if level > 1 else 0)
 	lives_max = u.lives
 	lives = lives_max
@@ -651,6 +658,8 @@ func open_shop() -> void:
 	var box := UI.sheet(self, 500)
 	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
 	var bank := UI.label("Bank: $%d. Every 2 upgrades bring +1 table." % cash, 20, UI.DIM)
+	if not perks.has("temp"):   # build-84 review: nothing said a third cook was the answer to a busier night
+		bank.text += "\nNext: %d tickets, 2 cooks. TEMP COOK helps." % tickets_for(level)
 	bank.name = "Bank"
 	bank.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(bank)
@@ -861,6 +870,8 @@ func _process(dt: float) -> void:
 ## Teach by doing, one hint at a time, in the order a first ticket needs them. Each shows only
 ## once its moment comes and goes for good once done.
 var _coached := {}
+var _stress_turn := -1   # turn stress first showed (its hint stays two turns)
+var _spent_turn := -1    # turn a cook first ran out of moves (its hint stays till END TURN)
 const COACH_TURNS := 3   # turns a hint waits for the player before it retires
 
 
@@ -880,6 +891,11 @@ func _coach_steps() -> Array:
 			func(): return not k.window.is_empty() or k.served > 0],
 		["run", "PASS: RUN SERVES IT", func(): return not k.window.is_empty(),
 			func(): return k.served > 0],
+		# 8.5 plan #3 (build-84 review: stress went 2/6 to QUITS before it was explained).
+		["stress", "FULL STRESS = QUITS", func(): return _stress_seen(),
+			func(): return _stress_turn >= 0 and k.turn > _stress_turn + 1],
+		["done", "DONE = NO MOVES", func(): return _spent_seen(),
+			func(): return _spent_turn >= 0 and k.turn > _spent_turn],
 		["pick", "TAP TICKET: COOK FIRST", func(): return k.tickets.size() >= 2,
 			func(): return pick_tid != 0],
 		["rest", "IDLE COOKS LOSE STRESS", func(): return k.crew.any(func(c): return not c.out and c.stress >= k.stress_cap - 3),
@@ -887,6 +903,18 @@ func _coach_steps() -> Array:
 		["rush", "RUSH IT: +STRESS", func(): return k.action_here(sel) == "RUSH",
 			func(): return k.pans.any(func(p): return p.get("rushed", false))],
 	]
+
+
+func _stress_seen() -> bool:
+	if _stress_turn < 0 and k.crew.any(func(c): return not c.out and c.stress > 0):
+		_stress_turn = k.turn
+	return _stress_turn >= 0
+
+
+func _spent_seen() -> bool:
+	if _spent_turn < 0 and k.crew.any(func(c): return not c.out and c.ap <= 0):
+		_spent_turn = k.turn
+	return _spent_turn >= 0
 
 
 func _coach_next() -> void:
@@ -1128,8 +1156,21 @@ func _draw_cover(f: Control, tex: Texture2D, box: Rect2) -> void:
 ## their station +2, a worked cook +1 while a ticket will be red, an idle one rests).
 func cooks_quitting() -> Array:
 	var out: Array = []
+	var wind: int = k.breaks
 	for c in k.crew.size():
 		if not k.crew[c].out and stress_after(c) >= k.stress_cap:
+			if wind > 0:   # second wind: end_turn spends it on the first cook (crew order) who'd quit
+				wind -= 1
+				continue
+			out.append(k.crew[c].name)
+	return out
+
+
+## Cooks who'd hit the cap but take five instead (second wind), in end_turn's order.
+func cooks_breaking() -> Array:
+	var out: Array = []
+	for c in k.crew.size():
+		if out.size() < k.breaks and not k.crew[c].out and stress_after(c) >= k.stress_cap:
 			out.append(k.crew[c].name)
 	return out
 
@@ -1173,6 +1214,33 @@ func _plate(f: Control, box: Rect2) -> void:
 	f.draw_rect(box, Color(0, 0, 0, 0.62))
 
 
+## 8.5 plan #3: the one table that walks first wears URGENT (build-84 review: a busy rail was
+## unreadable). Only with two or more tickets on: one ticket is urgent by default. -1 = none.
+func urgent_tid() -> int:
+	if k.tickets.size() < 2:
+		return -1
+	var lo: Dictionary = k.tickets[0]
+	for t in k.tickets:
+		if t.time < lo.time:
+			lo = t
+	return lo.id
+
+
+## Dishes waiting to be fired at station i.
+func waiting_at(i: int) -> int:
+	var n := 0
+	for t in k.tickets:
+		for it in t.items:
+			if it.state == "wait" and Kitchen.DISHES[it.dish].st == i:
+				n += 1
+	return n
+
+
+## Somebody working stands at station i (a station with work and nobody there goes red: N WAITING).
+func manned(i: int) -> bool:
+	return k.crew.any(func(cr): return not cr.out and cr.at == i)
+
+
 func _draw_field(f: Control) -> void:
 	f.draw_rect(Rect2(Vector2.ZERO, f.size), UI.BG)
 	_draw_cover(f, ART_BG, Rect2(Vector2.ZERO, f.size))
@@ -1184,6 +1252,7 @@ func _draw_field(f: Control) -> void:
 	var y0 := _rail_y()
 	var shown: Array = rail_tickets()
 	var pad := 10.0
+	var urgent := urgent_tid()
 	for i in mini(shown.size(), 4):
 		var t: Dictionary = shown[i]
 		var r := ticket_rect(i)
@@ -1197,6 +1266,10 @@ func _draw_field(f: Control) -> void:
 			f.draw_rect(r.grow(4.0), UI.ACCENT, false, 4.0)
 			f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), UI.ACCENT)
 			f.draw_string(font, Vector2(r.position.x, r.end.y - 7), "COOK FIRST", HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
+				UI.font_size(13), UI.BG)
+		if t.id == urgent and t.id != pick_tid and not t.get("vip", false) and not t.get("critic", false):
+			f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), UI.key("bad"))   # a band, in words: not colour alone
+			f.draw_string(font, Vector2(r.position.x, r.end.y - 7), "URGENT", HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
 				UI.font_size(13), UI.BG)
 		f.draw_string(font, r.position + Vector2(8, 26), "T%d" % t.table,
 			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 56, UI.font_size(18), ink)
@@ -1312,12 +1385,14 @@ func _draw_field(f: Control) -> void:
 			f.draw_string(font, r.position + Vector2(0, r.size.y - 16), lbl,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(fs), UI.key(tone))
 		elif i < k.pans.size():
-			var waiting := 0
-			for t in k.tickets:
-				for it in t.items:
-					if it.state == "wait" and Kitchen.DISHES[it.dish].st == i:
-						waiting += 1
-			if waiting > 0:   # work waiting here: what to FIRE, and how much
+			var waiting := waiting_at(i)
+			if waiting > 0 and not manned(i):   # 8.5 plan #3: dishes waiting and no cook here: red, and the frame throbs
+				var th := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 160.0) if not low and not (paused or over or between) else 1.0
+				f.draw_rect(r.grow(2.0), Color(UI.key("bad"), 0.45 + 0.55 * th), false, 4.0)
+				_plate(f, Rect2(r.position.x + 4, r.get_center().y - 14, r.size.x - 8, 32))
+				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), _fit(font, "%d WAITING" % waiting, "%d WAIT" % waiting, r.size.x - 8, 17),
+					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(17), UI.key("bad"))
+			elif waiting > 0:   # work waiting here: what to FIRE, and how much
 				_plate(f, Rect2(r.position.x + 4, r.get_center().y - 14, r.size.x - 8, 32))
 				f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), _fit(font, "%d TO FIRE" % waiting, "FIRE %d" % waiting, r.size.x - 8, 17),
 					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(17), UI.key("warn"))
@@ -1369,27 +1444,37 @@ func _draw_field(f: Control) -> void:
 		if c == sel:
 			f.draw_circle(pos, COOK_R + 7.0, UI.ACCENT)
 		f.draw_circle(pos, COOK_R, Color("2b3448"))
+		var near_cap: bool = cr.stress >= k.stress_cap - 2   # 8.5 plan #3: the face itself warns, not just the meter
 		# 8.5 plan #2: who can still act, at a glance. A spent cook goes grey with DONE across the face;
 		# the rest wear their moves left as a big number (the pips alone went unseen).
 		var spent: bool = cr.ap <= 0
 		if ART_COOKS.has(cr.name):
 			f.draw_texture_rect(ART_COOKS[cr.name], Rect2(pos - Vector2(COOK_R, COOK_R), Vector2(COOK_R, COOK_R) * 2.0), false,
 				Color(0.6, 0.6, 0.6) if spent else Color.WHITE)
-			_plate(f, Rect2(pos.x - 26, pos.y + COOK_R - 22, 52, 22))
-			f.draw_string(font, pos + Vector2(-COOK_R, COOK_R - 5), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(15), UI.DIM if spent else ink)
+			var np := Rect2(pos.x - 26, pos.y + COOK_R - 22, 52, 22)
+			if near_cap:
+				f.draw_rect(np, UI.key("bad"))
+			else:
+				_plate(f, np)
+			f.draw_string(font, pos + Vector2(-COOK_R, COOK_R - 5), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(15),
+				UI.BG if near_cap else (UI.DIM if spent else ink))
 		else:
 			f.draw_string(font, pos + Vector2(-COOK_R, 7), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(18), UI.DIM if spent else ink)
+		if near_cap:   # a red ring round the face, thick: shape as well as colour
+			f.draw_arc(pos, COOK_R + 2.0, 0.0, TAU, 40, UI.key("bad"), 5.0)
 		for a in cr.ap:   # action pips
 			f.draw_circle(pos + Vector2(-16 + a * 16, -COOK_R - 12), 6.0, UI.key("info"))
 		if spent:
 			f.draw_circle(pos, COOK_R, Color(0, 0, 0, 0.2))
-			f.draw_string_outline(font, pos + Vector2(-COOK_R, -2), "DONE", HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(17), 5, Color(0, 0, 0, 0.9))
-			f.draw_string(font, pos + Vector2(-COOK_R, -2), "DONE", HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(17), UI.DIM)
+			var word := "BREAK" if cr.get("brk", false) else "DONE"   # second wind: sitting out this turn
+			f.draw_string_outline(font, pos + Vector2(-COOK_R, -2), word, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(17), 5, Color(0, 0, 0, 0.9))
+			f.draw_string(font, pos + Vector2(-COOK_R, -2), word, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(17),
+				UI.key("warn") if word == "BREAK" else UI.DIM)
 		else:
-			var bc := pos + Vector2(COOK_R - 6, -COOK_R + 10)
-			f.draw_circle(bc, 14.0, UI.key("info"))
-			f.draw_arc(bc, 14.0, 0.0, TAU, 24, Color(0, 0, 0, 0.8), 2.0)
-			f.draw_string(font, bc + Vector2(-14, 7), str(cr.ap), HORIZONTAL_ALIGNMENT_CENTER, 28, UI.font_size(19), Color(0.05, 0.06, 0.09))
+			var bc := pos + Vector2(COOK_R - 4, -COOK_R + 8)   # bigger (build-84 review: the badge was easy to miss)
+			f.draw_circle(bc, 19.0, UI.key("info"))
+			f.draw_arc(bc, 19.0, 0.0, TAU, 28, Color(0, 0, 0, 0.85), 2.5)
+			f.draw_string(font, bc + Vector2(-19, 9), str(cr.ap), HORIZONTAL_ALIGNMENT_CENTER, 38, UI.font_size(25), Color(0.05, 0.06, 0.09))
 		# Stress: one box per point up to the cap (full = they quit), and the count in words under it.
 		# Blind review #3: the thin bar went unseen, and stress is what loses most first nights.
 		var cap: int = maxi(1, k.stress_cap)

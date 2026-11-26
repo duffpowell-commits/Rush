@@ -341,11 +341,17 @@ func _run() -> void:
 	var t_normal: int = game.tickets_for(1)
 	game._house_reads("F")
 	var eased: bool = int(pst.get_value("house_ease")) == 1 and game.tickets_for(1) == t_normal - 1
+	var svc_was: int = game.k.service
+	game.k.service = 1
+	game._house_reads("A+")   # 8.5 plan #3: acing service 1 (the lesson) doesn't stack service 2
+	var s1_kept: bool = int(pst.get_value("house_ease")) == 1
+	game.k.service = 2
 	game._house_reads("A+")
-	var back: bool = int(pst.get_value("house_ease")) == 0
+	game.k.service = svc_was
+	var back: bool = s1_kept and int(pst.get_value("house_ease")) == 0
 	pst.set_value("house_ease", ease_was)
 	_check(points_ok and relaxed.time == 2 and t_relaxed < t_normal and t_slammed > t_normal and eased and back,
-		"PACE PASS (grade %s with its points; tickets relaxed %d / normal %d / slammed %d; an F eases a ticket, an A+ takes it back)" % [letter, t_relaxed, t_normal, t_slammed])
+		"PACE PASS (grade %s with its points; tickets relaxed %d / normal %d / slammed %d; an F eases a ticket, an A+ in service 1 doesn't push, from service 2 it takes it back)" % [letter, t_relaxed, t_normal, t_slammed])
 	# The grade sheet fits at HUGE text with its longest content (walks, critic, the house's read).
 	var real_box: Node = game.sheet_box
 	var ts_was = pst.get_value("text_size")
@@ -420,9 +426,10 @@ func _run() -> void:
 	await _click("HEARD!")
 	await _frames(3)
 	var sheets_left: int = get_tree().get_nodes_in_group("sheet").filter(func(n): return not n.is_queued_for_deletion()).size()
-	_check(game.k.event != "" and twist_name == game.k.EVENTS[game.k.event][0] and _find("HEARD!") == null and sheets_left == 0
+	# 8.5 plan #3: service 2's step up is the new station alone; twists start in service 3.
+	_check(game.k.event == "" and twist == null and _find("HEARD!") == null and sheets_left == 0
 		and back_paused and back_resumed and not game.paused,
-		"TWIST PASS (service 2 twist %s shown; pause + back on top resume cleanly, HEARD! still closes it)" % twist_name)
+		"TWIST PASS (service 2: new station, no twist (%s); pause + back on top resume cleanly, HEARD! still closes the card)" % twist_name)
 	var saved: Dictionary = get_node("/root/Save").read()
 	_check(int(saved.get("level", 0)) == 2, "AUTOSAVE PASS (level 2 saved)")
 	# A few minutes into service 2, so CONTINUE has a service in progress to pick back up.
@@ -518,6 +525,8 @@ func _run() -> void:
 	var t_before: int = game.tickets_for(game.level)
 	game.open_shop()
 	await _frames(4)
+	var bank_n: Label = get_tree().root.find_child("Bank", true, false)
+	var nudge: String = bank_n.text if bank_n != null else "-"
 	await _click("TEMP COOK")
 	await _frames(4)
 	var temp_bought: bool = game.perks.has("temp") and game.temp_buys == 1 and game.cash == 255
@@ -531,6 +540,8 @@ func _run() -> void:
 	await _click("DONE")
 	game.perks.append("temp")
 	var t_after: int = game.tickets_for(game.level)
+	_check(nudge.contains("TEMP COOK helps") and nudge.contains("%d tickets" % t_before),
+		"NUDGE PASS (shop: '%s')" % nudge.get_slice("\n", 1))
 	_check(temp_bought and again_txt.contains("$90") and t_after == t_before + 1,
 		"PUSHBACK PASS (TEMP COOK $45, then '%s'; two upgrades: %d -> %d tickets)" % [again_txt.get_slice("\n", 0), t_before, t_after])
 	game._new_service()
@@ -1090,8 +1101,11 @@ func _polish_checks(game: Node) -> void:
 	kk.crew[1].acted = true
 	kk.crew[0].ap = 0
 	game.sel = 0
+	var wind_was: int = kk.breaks
+	kk.breaks = 0   # second wind spent: she really quits (WIND PASS covers the break)
 	game._refresh_hud()
 	var quit_warn: String = game.end_btn.text
+	kk.breaks = wind_was
 	var spent: String = game.act_btn.text
 	game.field.queue_redraw()
 	await _frames(2)
@@ -1136,11 +1150,22 @@ func _polish_checks(game: Node) -> void:
 	var plate_lbl: String = game.act_btn.text   # plating empties the burning pan: only the red ticket's +1
 	kk.pans[0] = {}
 	kk.pans[1] = {}
+	var breaks_was: int = kk.breaks
+	kk.breaks = 0   # no second wind for this check: both would really quit
 	for c in 2:
 		kk.crew[c].stress = kk.stress_cap - 1
 		kk.crew[c].acted = true
 	game._refresh_hud()
 	var two_quits: String = game.end_btn.text
+	# 8.5 plan #3: with the second wind left, the first of them takes five and only the other quits.
+	kk.breaks = 1
+	game._refresh_hud()
+	var wind_quits: String = game.end_btn.text
+	kk.crew[1].stress = 0
+	kk.crew[1].acted = false
+	game._refresh_hud()
+	var wind_lbl: String = game.end_btn.text
+	kk.breaks = breaks_was
 	for c in 2:
 		kk.crew[c].stress = 0
 		kk.crew[c].acted = false
@@ -1170,6 +1195,37 @@ func _polish_checks(game: Node) -> void:
 	_check(two_burns == "END TURN\nGRILL + FRY BURN" and two_quits == want_q and "TOO LATE" in late and "+1 STRESS" in late and strip_pick
 		and plate_lbl.begins_with("DEV: PLATE") and plate_lbl.ends_with("+1 STRESS") and rest_lbl.ends_with("SKIPS REST"),
 		"WARN PASS ('%s', '%s', '%s', '%s', strip tap picks the cook: %s)" % [two_burns.replace("\n", " / "), two_quits.replace("\n", " / "), late.replace("\n", " / "), rest_lbl.replace("\n", " / "), strip_pick])
+	_check(wind_quits == "END TURN\n%s QUITS" % kk.crew[1].name and wind_lbl == "END TURN\n%s TAKES 5" % kk.crew[0].name,
+		"WIND PASS ('%s', '%s')" % [wind_quits.replace("\n", " / "), wind_lbl.replace("\n", " / ")])
+	# 8.5 plan #3: the first-to-walk table wears URGENT; dishes waiting at a station nobody stands at
+	# go red ("2 WAITING"); a cook 2 from the cap gets a red face ring; a cook on a break reads BREAK.
+	for i in kk.pans.size():
+		kk.pans[i] = {}
+	kk.tickets = [{"id": 995, "table": 55, "items": [{"dish": "STEAK", "state": "wait"}, {"dish": "BURGER", "state": "wait"}], "time": 2, "big": false},
+		{"id": 996, "table": 56, "items": [{"dish": "FRIES", "state": "wait"}], "time": 6, "big": false}]
+	kk.crew[0].at = 1
+	kk.crew[1].at = Kitchen.PASS_IX
+	kk.crew[0].stress = kk.stress_cap - 2
+	kk.crew[0].acted = false
+	kk.crew[1].stress = 0
+	kk.crew[1].ap = 0
+	kk.crew[1].brk = true
+	game.sel = 0
+	game.pick_tid = 0
+	game._refresh_hud()
+	game.field.queue_redraw()
+	await _frames(3)
+	await _shot("urgent_waiting")
+	var brk_btn := ""
+	game.sel = 1
+	game._refresh_hud()
+	brk_btn = game.act_btn.text
+	game.sel = 0
+	kk.crew[1].brk = false
+	kk.crew[1].ap = kk.ap
+	kk.crew[0].stress = 0
+	_check(game.urgent_tid() == 995 and game.waiting_at(0) == 2 and not game.manned(0) and game.manned(1) and brk_btn == "MO: ON BREAK",
+		"URGENT PASS (T55 tagged URGENT, GRILL: %d WAITING with nobody there, break button '%s')" % [game.waiting_at(0), brk_btn])
 	# 8.5 plan #2: HEAT WAVE shows on the stress preview before END TURN; a spent cook goes grey, DONE.
 	kk.event = "heat"
 	kk.turn = 1

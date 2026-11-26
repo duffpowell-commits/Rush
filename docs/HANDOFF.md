@@ -6,14 +6,14 @@ every chunk of work, not only at the end of a session. Rules for every agent: AG
 first). Dated history of every change: CLAUDE.md "Where things stand". This file is the short
 version: where we are, what's next, how to check it.
 
-Last updated: 2026-11-26 13:40 UTC (Claude).
+Last updated: 2026-11-26 16:00 UTC (Claude).
 
 ## Where it is right now
-- main = `d3b2210` (PR #28). Live builds:
+- main = `1fa3837` (PR #30), build 84. 8.5 plan #3 is on the working branch (see below). Live builds:
   - Web: https://duffpowell-commits.github.io/Rush/ (gh-pages, pushed by CI on every main push;
     the gh-pages commit message reads "web build <sha7>").
   - APK: Releases -> `dev` -> `Rush.apk`; `version.json` on the same release shows `{"code", "sha"}`.
-    Build 81 = d3b2210.
+    Build 84 = 1fa3837.
 - Open PRs: none. Working branch for Claude sessions: `claude/project-thread-qt0oe2` (reset from
   main at the start of each PR; nothing unmerged on it).
 - Side test window: Nov 24 to Dec 1, 2026. Duff decides keep or park on Dec 1 (kill criteria in
@@ -32,7 +32,8 @@ Score history (first-timer / IGN-style / Claude):
 | 73 | 7 | 7.5 | 7.5 | moving cooks confusing |
 | 76 | 7.5 | 7.5 | - | warnings, pacing, feel |
 | 79 | 7 | - | - | too easy once upgraded (Temp Cook x2 + Cast Iron, stress 0) |
-| 81 | not run yet | - | - | - |
+| 81 | not run | - | - | - |
+| 84 | 7 | - | - | s1 too easy, s2 a wall (new station + twist + more tickets), busy rail hard to read, stress spikes late, losing snowballs |
 Reviews: `docs/reviews/` (copies of the ones saved so far; earlier first-timer reviews 1-3 and
 builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
 
@@ -45,6 +46,23 @@ builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
   save); every 2 upgrades add +1 table a service (`Upgrades.load_tickets`); twists HEAT WAVE
   (working cooks +1 stress on odd turns) and PARTY OF 12 (one extra big table); spent cooks grey
   with DONE, others show a blue moves-left number; hint "TAP FACE, THEN STATION" after turn 1.
+
+## 8.5 plan #3 (Duff: "Build all of it", Nov 26, after the build-84 review)
+- Ramp: service 2 has no twist (twists from service 3, `n >= 3` in `Kitchen.start`); acing service 1
+  doesn't add a ticket to service 2 (`_house_reads`); the shop says "Next: N tickets, 2 cooks. TEMP COOK
+  helps." until a temp is hired. Ticket counts live in one place: `Kitchen.count_for` (game.gd's
+  `tickets_for` calls it). Tried 8 tickets in service 1: bot loss went 8% -> 26%, so it stays 7.
+- Rail: the table that walks first wears a red URGENT band (`urgent_tid`); a station with waiting dishes
+  and nobody there throbs red with "N WAITING" (`waiting_at`, `manned`).
+- Stress: hint "FULL STRESS = QUITS" the first time stress rises; a cook 2 from the cap gets a red face
+  ring and a red name plate.
+- Second wind: `Kitchen.breaks` (1 a service, TUNE "breaks"): the first cook who'd quit takes five
+  instead (stress to cap-3, no moves next turn, `crew.brk`, drawn BREAK). END TURN says "DEV TAKES 5";
+  `cooks_quitting()` skips them and `cooks_breaking()` names them.
+- Polish: bigger moves-left badge, hint "DONE = NO MOVES", COMP CARDS renamed SECOND CHANCE.
+- Bot (greedy, 200 seeds, twists on): s1 7%, s2 22%, s3 50%, s4 50%, s5 73% lost (s2 was 36%).
+  The bot never reaches the cap (it rests at cap-2), so the second wind doesn't move its numbers.
+- Checks: WIND, URGENT, NUDGE PASS; TWIST PASS now expects no twist in service 2; test_second_wind_and_ramp.
 
 ## Next, step by step
 1. Duff's call on Nov 26: blind reviews are paused to save usage; build fixes and merge on green
