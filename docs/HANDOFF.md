@@ -1,6 +1,7 @@
 # HANDOFF: pick up Rush from here (any coding AI)
 
-Plain log for whoever builds next: Claude, Grok, Codex or anyone else. Update it at the end of
+Plain log for whoever builds next: Claude, Grok, Codex or anyone else. Also read docs/DECISIONS.md
+(dated decisions) and tasks/todo.md (progress) as AGENTS.md says. Update it at the end of
 every chunk of work, not only at the end of a session. Rules for every agent: AGENTS.md (read it
 first). Dated history of every change: CLAUDE.md "Where things stand". This file is the short
 version: where we are, what's next, how to check it.
@@ -32,7 +33,8 @@ Score history (first-timer / IGN-style / Claude):
 | 76 | 7.5 | 7.5 | - | warnings, pacing, feel |
 | 79 | 7 | - | - | too easy once upgraded (Temp Cook x2 + Cast Iron, stress 0) |
 | 81 | not run yet | - | - | - |
-Reviews live in the shared project files `rush-reviews/` (not in this repo).
+Reviews: `docs/reviews/` (copies of the ones saved so far; earlier first-timer reviews 1-3 and
+builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
 
 ## What builds 79 and 81 added (the last two 8.5 rounds)
 - Build 79 (PR #27): TEMP COOK shop item (3rd cook, one service), service 4+ one ticket lighter,
@@ -46,7 +48,7 @@ Reviews live in the shared project files `rush-reviews/` (not in this repo).
 
 ## Next, step by step
 1. Run the blind first-timer review on build 81 (it was cut off on Nov 26 by a usage limit).
-   Save it as `rush-reviews/firsttimer_rush_build81.md` and add the score to the table above.
+   Save it as `docs/reviews/firsttimer_rush_build81.md` and add the score to the table above.
 2. If it is under 8.5: write 8.5 plan #3 from that review, put it to Duff as one tappable choice,
    build it in one PR after his OK, then one more blind review.
 3. Known small leftovers (not yet asked for): the grade sheet's "Next: N tickets" doesn't refresh
