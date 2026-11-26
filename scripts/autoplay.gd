@@ -512,6 +512,22 @@ func _run() -> void:
 	game = get_tree().current_scene
 	_check(retry_ok and game != old_game and game.level == lost_lvl and game.cash == 77 and game.perks == perks_lost and not game.over and game.k.served == 0,
 		"RETRY PASS (RETRY SERVICE %d replays it with $%d and %s kept)" % [game.level, game.cash, str(game.perks)])
+	# TEMP COOK: a third cook at the pass for one service, tappable, drawn, then gone.
+	game.perks.append("temp")
+	game._new_service()
+	game._after_move()
+	await _frames(20)
+	await _shot("temp_cook")
+	var three: bool = game.k.crew.size() == 3 and game.k.crew[2].at == Kitchen.PASS_IX
+	game.sel = 0
+	game._portrait_pick = false
+	var pr3: Rect2 = game.station_rect(Kitchen.PASS_IX)
+	game.tap(Vector2(pr3.get_center().x, pr3.end.y + 120.0))
+	var jo_pick: bool = game.sel == 2
+	game._service_done()
+	await _frames(5)
+	_check(three and jo_pick and not game.perks.has("temp"),
+		"TEMP PASS (TEMP COOK adds %s at the pass, a tap under PASS picks them: %s, gone after the service)" % [game.k.crew[2].name if game.k.crew.size() > 2 else "-", jo_pick])
 	get_node("/root/Save").clear()
 	game.over = true   # leave without a checkpoint, so the title has no CONTINUE
 	game.quit_to_title()
@@ -1095,8 +1111,10 @@ func _polish_checks(game: Node) -> void:
 		{"id": 991, "table": 51, "items": [{"dish": "FRIES", "state": "wait"}], "time": 3, "big": false}]
 	kk.pans[0] = {"tid": 990, "dish": "STEAK", "left": 0, "sat": kk.burn_after, "rushed": false, "by": 0}
 	kk.pans[1] = {"tid": 991, "dish": "FRIES", "left": 0, "sat": kk.burn_after, "rushed": false, "by": 1}
+	game.sel = 0
 	game._refresh_hud()
 	var two_burns: String = game.end_btn.text
+	var plate_lbl: String = game.act_btn.text   # plating empties the burning pan: only the red ticket's +1
 	kk.pans[0] = {}
 	kk.pans[1] = {}
 	for c in 2:
@@ -1120,7 +1138,8 @@ func _polish_checks(game: Node) -> void:
 	var strip_pick: bool = game.sel == 1
 	game._portrait_pick = false
 	var want_q: String = "END TURN\n%s + %s QUIT" % [kk.crew[0].name, kk.crew[1].name]
-	_check(two_burns == "END TURN\nGRILL + FRY BURN" and two_quits == want_q and "TOO LATE" in late and "+1 STRESS" in late and strip_pick,
+	_check(two_burns == "END TURN\nGRILL + FRY BURN" and two_quits == want_q and "TOO LATE" in late and "+1 STRESS" in late and strip_pick
+		and plate_lbl.begins_with("DEV: PLATE") and plate_lbl.ends_with("+1 STRESS"),
 		"WARN PASS ('%s', '%s', '%s', strip tap picks the cook: %s)" % [two_burns.replace("\n", " / "), two_quits.replace("\n", " / "), late.replace("\n", " / "), strip_pick])
 	kk.from_dict(JSON.parse_string(JSON.stringify(keep)))
 	game._refresh_hud()

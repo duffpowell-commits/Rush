@@ -55,6 +55,7 @@ var perks: Array = []        # upgrades owned tonight (upgrades.gd)
 var k: Kitchen
 var sel := 0                 # selected cook
 var _fresh_turn := false     # END TURN's news is on the status line until the first move of the turn
+var _steam_t := 0.0          # time since the last steam redraw
 var _cook_draw := {}         # cook -> where they're drawn: they walk there instead of jumping (8.5 pass)
 var _portrait_pick := false  # the last field tap picked a cook by face: the next station tap sends them
 var _pick_from := {}         # last station tap that switched cooks: {st, prev}; a 2nd tap there sends prev
@@ -239,7 +240,7 @@ func _refresh_hud() -> void:
 		act_btn.text = "FIRE T%d" % fp.t.table
 		if pick_ix >= 0 and fp.t.id == pick_tid and fp.item == k.ticket(pick_tid).items[pick_ix]:
 			act_btn.text = "FIRE %s" % fp.item.dish   # the tapped dish, by name
-		if k.cook_time(fp.item.dish) >= fp.t.time:   # it can't be up before the table walks: say so first
+		if k.cook_time(fp.item.dish) > fp.t.time:   # it can't be up before the table walks: say so first
 			act_btn.text += ": TOO LATE"
 	elif a == "RUSH":   # warn when this rush would send the cook over the edge
 		var cr: Dictionary = k.crew[sel]
@@ -258,8 +259,8 @@ func _refresh_hud() -> void:
 			act_btn.text = named   # up to two lines: the button wraps, and grows up, not off the screen
 	if a != "" and a != "RUSH" and not k.crew[sel].out and not k.crew[sel].acted:
 		# The first move of a turn ends this cook's rest: say what it costs before the tap (8.5 pass).
-		var now := stress_after(sel)
-		var then := stress_after(sel, true)
+		# PLATE empties the pan here, so its burn never lands on this cook (fresh-eyes PR #27)
+		var then := stress_after(sel, true, k.crew[sel].at if a == "PLATE" else -1)
 		if then >= k.stress_cap:
 			act_btn.text += "\n(%s QUITS)" % k.crew[sel].name
 		elif then > k.crew[sel].stress:
@@ -308,6 +309,7 @@ func _house_reads(g: String, lost: bool = false) -> String:
 
 func _new_service() -> void:
 	_portrait_pick = false
+	_cook_draw = {}   # a new service starts with everyone at their spot, not sliding from last service's
 	_pick_from = {}   # a station handoff only counts on the very next field tap
 	rail_off = 0
 	for ch in get_children():   # the new service's clock restarts at turn 0: so does a hint's wait
@@ -424,8 +426,12 @@ func _tick_fx(dt: float) -> void:
 			else:
 				_cook_draw[c] = at.move_toward(to, maxf(900.0 * dt, at.distance_to(to) * 12.0 * dt))
 				walking = true
-		if walking or (not _settings.get_value("low_graphics") and k.pans.any(func(p): return not p.is_empty())):
-			field.queue_redraw()   # a walk in progress, or steam over a pan
+		_steam_t += dt
+		if walking:
+			field.queue_redraw()   # a walk in progress: every frame, it's short
+		elif _steam_t >= 1.0 / 15.0 and not _settings.get_value("low_graphics") and k.pans.any(func(p): return not p.is_empty()):
+			_steam_t = 0.0
+			field.queue_redraw()   # steam over a pan: 15 a second is plenty, and spares the battery
 	if fx.is_empty() and shake_amt <= 0.0:
 		return
 	for e in fx:
@@ -1100,13 +1106,13 @@ func cooks_quitting() -> Array:
 
 
 ## Cook c's stress once the turn ends now (the meter shows the change before END TURN is pressed).
-func stress_after(c: int, as_acted := false) -> int:
+func stress_after(c: int, as_acted := false, emptied := -1) -> int:
 	var cr: Dictionary = k.crew[c]
 	var red := k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2)
 	var s: int = cr.stress
 	for i in k.pans.size():
 		var p: Dictionary = k.pans[i]
-		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after and cr.at == i:
+		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after and cr.at == i and i != emptied:
 			s += 2
 	return s + (1 if red else 0) if (cr.acted or as_acted) else maxi(0, s - 2)
 
@@ -1311,7 +1317,7 @@ func _draw_field(f: Control) -> void:
 			var far: bool = cost > me.ap
 			var wl := "TOO FAR" if far else "WALK %d" % cost
 			wl = _fit(font, wl, "FAR" if far else "W%d" % cost, r.size.x - 12, 12)
-			var chip := Rect2(r.position.x + 6, r.position.y + 2, r.size.x - 12, 16)   # above the name: clear of plates and pans
+			var chip := Rect2(r.position.x + 6, r.position.y - 19, r.size.x - 12, 17)   # just above the station: clear of its name, plates and pans
 			f.draw_rect(chip, Color(0, 0, 0, 0.75))
 			f.draw_string(font, chip.position + Vector2(0, 13), wl, HORIZONTAL_ALIGNMENT_CENTER, chip.size.x,
 				UI.font_size(12), UI.key("bad") if far else UI.key("info"))
