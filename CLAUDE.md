@@ -6,6 +6,8 @@ A dinner service played like XCOM: the tickets are the enemy. Owner: Duff. Read 
 the handoff between sessions. Commands, standing rules, guards and layout: AGENTS.md (imported above).
 
 ## Where things stand
+- **Studio mascot (Duff, Nov 26): the three-eyed fox is in every game as a rare cameo, not a pal**: a small event
+  that matters but never ruins a run. Duff OKs the fox art on a card before it's built. Rule + this game's idea: `docs/MASCOT.md`.
 - Short handoff for any coding AI (state, next steps, how to check): docs/HANDOFF.md. Update it
   after every chunk of work.
 - Side test: one week, Nov 24 to Dec 1, 2026. Lethemoor is the active game. Pitch + kill criteria:
