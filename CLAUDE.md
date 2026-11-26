@@ -10,7 +10,7 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   that matters but never ruins a run. Duff OKs the fox art on a card before it's built. Rule + this game's idea: `docs/MASCOT.md`.
 - Short handoff for any coding AI (state, next steps, how to check): docs/HANDOFF.md. Update it
   after every chunk of work.
-- Side test: one week, Nov 24 to Dec 1, 2026. Lethemoor is the active game. Pitch + kill criteria:
+- **Any AI: start at docs/HANDOFF.md.** Side test: one week, Nov 24 to Dec 1, 2026. Since Nov 26 Rush is the focus (other games paused). Pitch + kill criteria:
   docs/PITCH.md. Queue: QUEUE.md (NOW = M1 slice). Progress: tasks/todo.md.
 - Rules: `scripts/kitchen.gd` (pure logic, no nodes). Screen: `scripts/game.gd` PLAY section.
   Tests: `test_kitchen_*` in tests/run_tests.gd. Autoplay: TAP PASS + PLAY PASS drive a real service.

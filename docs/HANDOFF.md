@@ -6,23 +6,28 @@ every chunk of work, not only at the end of a session. Rules for every agent: AG
 first). Dated history of every change: CLAUDE.md "Where things stand". This file is the short
 version: where we are, what's next, how to check it.
 
-Last updated: 2026-11-26 17:00 UTC (Claude).
+Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
 ## Studio mascot (Duff, Nov 26)
 - **The three-eyed fox is in every game as a rare cameo, not a pal**: a small event
   that matters but never ruins a run. Duff OKs the fox art on a card before it's built. Rule + this game's idea: `docs/MASCOT.md`.
 
 ## Where it is right now
-- main = `0ed06f0` (PR #34, cross prep + double burners), build 95. The fox cameo is on the working
-  branch. Live builds:
+- main = `6e641a5` (PR #36, fox cameo), **build 99 live** (`version.json` = {"code": 99, "sha": "6e641a5"}).
+  Live builds:
   - Web: https://duffpowell-commits.github.io/Rush/ (gh-pages, pushed by CI on every main push;
     the gh-pages commit message reads "web build <sha7>").
   - APK: Releases -> `dev` -> `Rush.apk`; `version.json` on the same release shows `{"code", "sha"}`.
-    Build 89 = c56d586, build 92 = 9414b64.
-- Open PRs: none. Working branch for Claude sessions: `claude/project-thread-qt0oe2` (reset from
-  main at the start of each PR; nothing unmerged on it).
-- Side test window: Nov 24 to Dec 1, 2026. Duff decides keep or park on Dec 1 (kill criteria in
-  docs/PITCH.md). Lethemoor is the active game; Rush must not pull effort from it without Duff.
+  - itch zip: `Rush_web.zip` on the `dev` release (PR #31). If a `BUTLER_API_KEY` secret exists, CI
+    also pushes it to itch `3-eyedfox/rush` (channel `html5`) + the APK (`android`); the page stays a
+    Draft. No secret = the step skips. Nothing goes public without Duff's yes.
+- Recent merges (Nov 26): #33 8.5 plan #4, #34 cross prep + double burners + difficulty review,
+  #35 mascot rule, #31 itch zip, #36 fox cameo (service 3).
+- Open PRs: none. Working branch: whatever `claude/...` branch the session's harness names, reset
+  from main at the start of each PR.
+- Focus: **Rush is the game Duff is pushing now** (Nov 26: "Pause all of them we'll continue on
+  rush"). Side test window Nov 24 to Dec 1, 2026; Duff decides keep or park on Dec 1 (kill criteria
+  in docs/PITCH.md).
 
 ## The bar: 8.5 from a blind first-time player (Duff's rule, Nov 26)
 Before building a round, write an "8.5 plan" (the short list a first-timer needs to score it 8.5),
@@ -115,8 +120,9 @@ builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
   (`fox_cost` TUNE). Art `assets/art/fox_cameo.png` is the real logo head (Duff's pick). FOX PASS.
 
 ## Next, step by step
-1. Duff's call on Nov 26: blind reviews are paused to save usage; build fixes and merge on green
-   CI plus a fresh-eyes check. Other games are paused; Rush continues.
+1. Duff plays build 99 on his phone; his notes outrank the rest. Blind reviews are paused (Duff,
+   Nov 26): build fixes and merge on green CI plus a fresh-eyes check.
+   Next 8.5 round, if any: plan on one card for Duff first, then one PR.
 2. Done Nov 26 after build 81: grade sheet "Next: N tickets" refreshes after a shop buy; PARTY OF 12
    lands mid-service on short nights; "SKIPS REST" on a move that costs a tired cook their rest;
    walk chips now take over the station's name row (FRY / WALK 1). Bot loss rates (greedy bot, 200 seeds, all twists):
