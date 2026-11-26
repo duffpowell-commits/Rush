@@ -144,9 +144,15 @@ func _set_up_event() -> void:
 			_mark(1 if count > 1 else 0, "vip")
 		"critic":
 			_mark(count / 3, "critic")
-		"party":   # one more big table, landing with the middle of the service
+		"party":   # one more big table, landing mid-service (never at the opening, even on a short night)
 			var mid := count / 2
-			incoming.insert(mid, {"arrive": incoming[mid].arrive if count > 0 else 0, "ticket": _make_ticket(true)})
+			var at := maxi(incoming[mid].arrive if count > 0 else 0, turns / 3)
+			var ix := incoming.size()
+			for i in incoming.size():   # keep the list in arrival order (the NEXT bar reads it in order)
+				if incoming[i].arrive > at:
+					ix = i
+					break
+			incoming.insert(ix, {"arrive": at, "ticket": _make_ticket(true)})
 			total += 1
 
 

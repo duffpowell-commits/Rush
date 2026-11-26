@@ -1149,6 +1149,15 @@ func _polish_checks(game: Node) -> void:
 	game.pick_ix = -1
 	game._refresh_hud()
 	var late: String = game.act_btn.text
+	# A tired cook who'd rest: the move costs nothing new, but the button says the rest is gone.
+	var tickets_was: Array = kk.tickets.duplicate(true)
+	kk.tickets = [{"id": 994, "table": 54, "items": [{"dish": "STEAK", "state": "wait"}], "time": 9, "big": false}]
+	kk.crew[0].stress = 3
+	game.pick_tid = 0
+	game._refresh_hud()
+	var rest_lbl: String = game.act_btn.text
+	kk.crew[0].stress = 0
+	kk.tickets = tickets_was
 	game.pick_tid = 0
 	game.sel = 0
 	game._portrait_pick = false
@@ -1158,8 +1167,8 @@ func _polish_checks(game: Node) -> void:
 	game._portrait_pick = false
 	var want_q: String = "END TURN\n%s + %s QUIT" % [kk.crew[0].name, kk.crew[1].name]
 	_check(two_burns == "END TURN\nGRILL + FRY BURN" and two_quits == want_q and "TOO LATE" in late and "+1 STRESS" in late and strip_pick
-		and plate_lbl.begins_with("DEV: PLATE") and plate_lbl.ends_with("+1 STRESS"),
-		"WARN PASS ('%s', '%s', '%s', strip tap picks the cook: %s)" % [two_burns.replace("\n", " / "), two_quits.replace("\n", " / "), late.replace("\n", " / "), strip_pick])
+		and plate_lbl.begins_with("DEV: PLATE") and plate_lbl.ends_with("+1 STRESS") and rest_lbl.ends_with("SKIPS REST"),
+		"WARN PASS ('%s', '%s', '%s', '%s', strip tap picks the cook: %s)" % [two_burns.replace("\n", " / "), two_quits.replace("\n", " / "), late.replace("\n", " / "), rest_lbl.replace("\n", " / "), strip_pick])
 	# 8.5 plan #2: HEAT WAVE shows on the stress preview before END TURN; a spent cook goes grey, DONE.
 	kk.event = "heat"
 	kk.turn = 1
@@ -1253,7 +1262,7 @@ func _tray_checks(game: Node, pst: Node) -> void:
 	game.cash = cash_was
 	game.perks = perks_was
 	game._refresh_hud()
-	_check(one and row1 and row2 and four and pr.position.y >= 0.0 and pr.end.y <= vh and label.ends_with("RUN 2 PLATES") and ran,
+	_check(one and row1 and row2 and four and pr.position.y >= 0.0 and pr.end.y <= vh and label.get_slice("\n", 0).ends_with("RUN 2 PLATES") and ran,
 		"TRAY PASS (one plate a RUN to start; shop row SERVER TRAY -> ENTREE TRAY = 4, fits at HUGE %d px of %d; '%s' sent 2 plates for one action)" % [int(pr.size.y), int(vh), label])
 
 

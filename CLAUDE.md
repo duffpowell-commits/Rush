@@ -126,6 +126,11 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   and PARTY OF 12 (one more big table mid-service); a spent cook is grey with DONE, the rest wear a
   moves-left number; the face-then-station hint ("TAP FACE, THEN STATION") shows after the first
   END TURN, and the dots hint reads "NUMBER = MOVES LEFT". PUSHBACK, HEAT PASS; test_shop_pushes_back.
+- Nov 26 (Duff: build the fixes, skip reviews to save usage): the grade sheet's "Next: N tickets"
+  redoes itself after a shop buy (`_refresh_points`); PARTY OF 12 lands at turn >= turns/3 and keeps
+  `incoming` in arrival order; a move that costs a tired cook their rest says "SKIPS REST"; walk
+  chips sit along the station foot (a coach hint above hid them). Bot loss with all six twists:
+  s1 7%, s2 36%, s3 50%, s4 50%, s5 73%.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

@@ -267,6 +267,8 @@ func _refresh_hud() -> void:
 			act_btn.text += "\n(%s QUITS)" % k.crew[sel].name
 		elif then > k.crew[sel].stress:
 			act_btn.text += "\n+%d STRESS" % (then - k.crew[sel].stress)
+		elif stress_after(sel) < k.crew[sel].stress:   # no cost, but a tired cook gives up the rest they'd get
+			act_btn.text += "\nSKIPS REST"
 	act_btn.disabled = a == ""
 	if note != null:
 		note.text = " | ".join(k.events)   # a bar between events: they ran together as one sentence
@@ -588,17 +590,32 @@ func _grade_sheet(g: String, parts: Dictionary, read: String, st: Dictionary) ->
 	sheet_box.add_child(grade)
 	_stamp(grade)
 	sheet_box.add_child(UI.label("%d of %d out, %d walk%s\nTips $%d" % [st.served, st.total, st.walked, "" if st.walked == 1 else "s", st.tips], 24))
-	var why := UI.label("%d POINTS: out %d, speed %d, pans %d%s%s" % [parts.total, parts.out, parts.speed, parts.pans,
-		", walks %d" % parts.walks if parts.walks != 0 else "", ", critic %+d" % parts.critic if parts.critic != 0 else ""] + 
-		("\n%s Next: %d tickets." % [read, tickets_for(level)] if read != "" else "  Next: %d tickets." % tickets_for(level)), 18, UI.DIM)
+	_points_head = "%d POINTS: out %d, speed %d, pans %d%s%s" % [parts.total, parts.out, parts.speed, parts.pans,
+		", walks %d" % parts.walks if parts.walks != 0 else "", ", critic %+d" % parts.critic if parts.critic != 0 else ""]
+	_points_read = read
+	var why := UI.label("", 18, UI.DIM)
 	why.name = "Points"
 	sheet_box.add_child(why)
+	_refresh_points()
 	if k.critic != "":   # the critic gets their own stamp, not a number in the small print (8.5 pass)
 		var cl := UI.label("CRITIC LOVED IT  +8" if k.critic == "served" else "CRITIC WALKED  -8", 28,
 			UI.key("good") if k.critic == "served" else UI.key("bad"))
 		cl.name = "Critic"
 		sheet_box.add_child(cl)
 		_stamp(cl)
+
+
+var _points_head := ""   # the grade sheet's points line, kept so "Next: N tickets" can be redone
+var _points_read := ""
+
+
+## The points line plus the next service's load. Redone after a shop buy: upgrades bring tables.
+func _refresh_points() -> void:
+	var why: Label = sheet_box.get_node_or_null("Points") if sheet_box != null else null
+	if why == null:
+		return
+	var n := tickets_for(level)
+	why.text = _points_head + ("\n%s Next: %d tickets." % [_points_read, n] if _points_read != "" else "  Next: %d tickets." % n)
 
 
 ## The grade lands like a stamp: big, then slammed down with a thud and a buzz.
@@ -689,6 +706,7 @@ func buy(id: String, box: VBoxContainer) -> void:
 	UI.buzz(25)
 	checkpoint()
 	_shop_label()
+	_refresh_points()   # a bigger kitchen draws more tables: the grade sheet's "Next" says so
 	UI.close_sheet(box)
 	open_shop()
 
@@ -1328,7 +1346,7 @@ func _draw_field(f: Control) -> void:
 			var far: bool = cost > me.ap
 			var wl := "TOO FAR" if far else "WALK %d" % cost
 			wl = _fit(font, wl, "FAR" if far else "W%d" % cost, r.size.x - 12, 12)
-			var chip := Rect2(r.position.x + 6, r.position.y - 19, r.size.x - 12, 17)   # just above the station: clear of its name, plates and pans
+			var chip := Rect2(r.position.x + 6, r.end.y - 21, r.size.x - 12, 17)   # along the station foot: clear of its name, and of a coach hint above
 			f.draw_rect(chip, Color(0, 0, 0, 0.75))
 			f.draw_string(font, chip.position + Vector2(0, 13), wl, HORIZONTAL_ALIGNMENT_CENTER, chip.size.x,
 				UI.font_size(12), UI.key("bad") if far else UI.key("info"))
