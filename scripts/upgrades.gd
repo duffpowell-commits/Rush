@@ -22,8 +22,19 @@ const ORDER := ["meal", "lamps", "tray", "tray2", "temp", "iron", "comps"]
 const MAX_TRAY := 4
 
 
-static func can_buy(id: String, cash: int, owned: Array) -> bool:
-	if not ALL.has(id) or owned.has(id) or cash < int(ALL[id].cost):
+## What it costs now. A temp cook doubles each time one is hired tonight (8.5 plan #2: a first-timer
+## hired one every service and the night went flat).
+static func price(id: String, temp_buys: int = 0) -> int:
+	return int(ALL[id].cost) * (1 << clampi(temp_buys, 0, 8)) if id == "temp" else int(ALL[id].cost)
+
+
+## Extra tables a service brings for the kitchen you've built: one per two upgrades owned.
+static func load_tickets(owned: Array) -> int:
+	return owned.size() / 2
+
+
+static func can_buy(id: String, cash: int, owned: Array, temp_buys: int = 0) -> bool:
+	if not ALL.has(id) or owned.has(id) or cash < price(id, temp_buys):
 		return false
 	return not ALL[id].has("needs") or owned.has(ALL[id].needs)
 
@@ -35,11 +46,11 @@ static func shown(owned: Array) -> Array:
 
 
 ## Returns the cash left, or -1 if it can't be bought (owned array gains the id).
-static func buy(id: String, cash: int, owned: Array) -> int:
-	if not can_buy(id, cash, owned):
+static func buy(id: String, cash: int, owned: Array, temp_buys: int = 0) -> int:
+	if not can_buy(id, cash, owned, temp_buys):
 		return -1
 	owned.append(id)
-	return cash - int(ALL[id].cost)
+	return cash - price(id, temp_buys)
 
 
 ## The service's numbers with the owned upgrades on top.

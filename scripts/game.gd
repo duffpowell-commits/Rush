@@ -52,6 +52,7 @@ var lives_max := LIVES     # LIVES, +1 with COMP CARDS
 var cash := 0                # tips banked tonight, spent in the SHOP between services
 var twist_box: VBoxContainer   # the TONIGHT card while it's up
 var perks: Array = []        # upgrades owned tonight (upgrades.gd)
+var temp_buys := 0           # temp cooks hired tonight: each one costs double the last
 var k: Kitchen
 var sel := 0                 # selected cook
 var _fresh_turn := false     # END TURN's news is on the status line until the first move of the turn
@@ -89,6 +90,7 @@ func _ready() -> void:
 		_night_before = score
 		cash = int(d.get("cash", 0))
 		perks = (d.get("perks", []) as Array).filter(func(p): return Upgrades.ALL.has(p))
+		temp_buys = int(d.get("temp_buys", 0))
 	add_to_group("tunable")
 	get_node("/root/DebugMenu").apply_tune(self)
 	_new_service()
@@ -111,7 +113,7 @@ func _ready() -> void:
 ## score = finished services only; the service in progress rides along in "kitchen" (its own
 ## served count), so a reload can't count tickets twice.
 func state() -> Dictionary:
-	var d := {"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate()}
+	var d := {"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(), "temp_buys": temp_buys}
 	if k != null and not between and not over and not k.done:
 		d["kitchen"] = k.to_dict()
 	return d
@@ -289,7 +291,8 @@ func pace_adjust() -> Dictionary:
 ## Tickets the given service brings, after pace and the house's read.
 func tickets_for(n: int) -> int:
 	var base := int(first_tickets)
-	return maxi(1, maxi(mini(3, base), base + pace_adjust().tickets) + int(more_tickets) * (n - 1) - (1 if n >= 4 else 0))
+	return maxi(1, maxi(mini(3, base), base + pace_adjust().tickets) + Upgrades.load_tickets(perks)
+		+ int(more_tickets) * (n - 1) - (1 if n >= 4 else 0))
 
 
 ## After a service (or a lost night), the house reads you: a rough one eases the next, an aced one pushes it.
@@ -323,7 +326,8 @@ func _new_service() -> void:
 	k.ap = int(crew_ap)
 	k.stress_cap = u.stress_cap
 	k.turns = int(service_turns)
-	k.first_tickets = maxi(mini(3, int(first_tickets)), int(first_tickets) + adj.tickets)
+	# A bigger kitchen draws a bigger crowd: +1 table per two upgrades (8.5 plan #2: the shop made it a cakewalk).
+	k.first_tickets = maxi(mini(3, int(first_tickets)), int(first_tickets) + adj.tickets) + Upgrades.load_tickets(perks)
 	k.more_tickets = int(more_tickets)
 	k.rush_stress = u.rush_stress
 	k.tray = u.tray
@@ -617,7 +621,7 @@ func _stamp(l: Control) -> void:
 func _shop_label() -> void:
 	var b: Button = sheet_box.get_node_or_null("ShopButton") if sheet_box != null else null
 	if b != null:
-		var can := Upgrades.ORDER.any(func(id): return Upgrades.can_buy(id, cash, perks))
+		var can := Upgrades.ORDER.any(func(id): return Upgrades.can_buy(id, cash, perks, temp_buys))
 		b.text = "SHOP ($%d)%s" % [cash, " NEW!" if can and not _shop_opened else ""]   # NEW until you've looked
 
 
@@ -629,7 +633,10 @@ func open_shop() -> void:
 	_shop_opened = true
 	var box := UI.sheet(self, 500)
 	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
-	box.add_child(UI.label("Bank: $%d. Upgrades last all night." % cash, 20, UI.DIM))
+	var bank := UI.label("Bank: $%d. Every 2 upgrades bring +1 table." % cash, 20, UI.DIM)
+	bank.name = "Bank"
+	bank.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(bank)
 	var owned: Array[String] = []
 	var listed: Array = Upgrades.shown(perks)
 	for id in Upgrades.ORDER:
@@ -660,9 +667,10 @@ func open_shop() -> void:
 			b = UI.button("%s: OWNED\n%s" % [u.name, u.says], Callable(), 88)
 			b.disabled = true
 		else:
-			var short := cash < int(u.cost)   # say it in words, not just the disabled colour
-			b = UI.button("%s  %s\n%s" % [u.name, ("NEED $%d" if short else "$%d") % u.cost, u.says], func(): buy(id, box), 88)
-			b.disabled = not Upgrades.can_buy(id, cash, perks)
+			var cost := Upgrades.price(id, temp_buys)
+			var short := cash < cost   # say it in words, not just the disabled colour
+			b = UI.button("%s  %s\n%s" % [u.name, ("NEED $%d" if short else "$%d") % cost, u.says], func(): buy(id, box), 88)
+			b.disabled = not Upgrades.can_buy(id, cash, perks, temp_buys)
 		b.name = "Buy_" + id
 		b.add_theme_font_size_override("font_size", UI.font_size(20))
 		rows.add_child(b)
@@ -670,10 +678,12 @@ func open_shop() -> void:
 
 
 func buy(id: String, box: VBoxContainer) -> void:
-	var left := Upgrades.buy(id, cash, perks)
+	var left := Upgrades.buy(id, cash, perks, temp_buys)
 	if left < 0:
 		return
 	cash = left
+	if id == "temp":
+		temp_buys += 1   # the next one costs double
 	get_node("/root/Audio").sfx("level", 1.3)
 	get_node("/root/Subs").cue("[register: %s bought]" % Upgrades.ALL[id].name.to_lower())
 	UI.buzz(25)
@@ -842,15 +852,16 @@ func _coach_steps() -> Array:
 			func(): return k.turn > 0 or k.pans.any(func(p): return not p.is_empty())],
 		["end_turn", "TAP END TURN: COOK", func(): return k.pans.any(func(p): return not p.is_empty()),
 			func(): return k.turn > 0],
+		# 8.5 plan #2: taught on turn 2, not after the first table is out ("face vs station" confused service 1).
+		["switch", "TAP FACE, THEN STATION", func(): return k.turn >= 1 and not k.crew[1].out,
+			func(): return sel != 0 or k.crew[1].out],
 		# Fresh-player review: the action dots over each cook were never noticed. After the first END TURN.
-		["dots", "DOTS ARE MOVES LEFT", func(): return k.turn >= 1,
+		["dots", "NUMBER = MOVES LEFT", func(): return k.turn >= 1,
 			func(): return k.turn >= 2 or k.crew.any(func(c): return not c.out and c.ap <= 0)],
 		["plate", "UP! TAP PLATE", func(): return k.pans.any(func(p): return not p.is_empty() and p.left <= 0),
 			func(): return not k.window.is_empty() or k.served > 0],
 		["run", "PASS: RUN SERVES IT", func(): return not k.window.is_empty(),
 			func(): return k.served > 0],
-		["switch", "TAP MO TO SWITCH", func(): return k.served > 0 and not k.crew[1].out,
-			func(): return sel != 0 or k.crew[1].out],
 		["pick", "TAP TICKET: COOK FIRST", func(): return k.tickets.size() >= 2,
 			func(): return pick_tid != 0],
 		["rest", "IDLE COOKS LOSE STRESS", func(): return k.crew.any(func(c): return not c.out and c.stress >= k.stress_cap - 3),
@@ -1114,7 +1125,7 @@ func stress_after(c: int, as_acted := false, emptied := -1) -> int:
 		var p: Dictionary = k.pans[i]
 		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after and cr.at == i and i != emptied:
 			s += 2
-	return s + (1 if red else 0) if (cr.acted or as_acted) else maxi(0, s - 2)
+	return s + (1 if red else 0) + (1 if k.heat_turn() else 0) if (cr.acted or as_acted) else maxi(0, s - 2)
 
 
 ## The NEXT bar in plain words ("NEXT: 2 dishes in 3 min"), as many as fit the width.
@@ -1336,14 +1347,27 @@ func _draw_field(f: Control) -> void:
 		if c == sel:
 			f.draw_circle(pos, COOK_R + 7.0, UI.ACCENT)
 		f.draw_circle(pos, COOK_R, Color("2b3448"))
+		# 8.5 plan #2: who can still act, at a glance. A spent cook goes grey with DONE across the face;
+		# the rest wear their moves left as a big number (the pips alone went unseen).
+		var spent: bool = cr.ap <= 0
 		if ART_COOKS.has(cr.name):
-			f.draw_texture_rect(ART_COOKS[cr.name], Rect2(pos - Vector2(COOK_R, COOK_R), Vector2(COOK_R, COOK_R) * 2.0), false)
+			f.draw_texture_rect(ART_COOKS[cr.name], Rect2(pos - Vector2(COOK_R, COOK_R), Vector2(COOK_R, COOK_R) * 2.0), false,
+				Color(0.6, 0.6, 0.6) if spent else Color.WHITE)
 			_plate(f, Rect2(pos.x - 26, pos.y + COOK_R - 22, 52, 22))
-			f.draw_string(font, pos + Vector2(-COOK_R, COOK_R - 5), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(15), ink)
+			f.draw_string(font, pos + Vector2(-COOK_R, COOK_R - 5), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(15), UI.DIM if spent else ink)
 		else:
-			f.draw_string(font, pos + Vector2(-COOK_R, 7), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(18), ink)
+			f.draw_string(font, pos + Vector2(-COOK_R, 7), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(18), UI.DIM if spent else ink)
 		for a in cr.ap:   # action pips
 			f.draw_circle(pos + Vector2(-16 + a * 16, -COOK_R - 12), 6.0, UI.key("info"))
+		if spent:
+			f.draw_circle(pos, COOK_R, Color(0, 0, 0, 0.2))
+			f.draw_string_outline(font, pos + Vector2(-COOK_R, -2), "DONE", HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(17), 5, Color(0, 0, 0, 0.9))
+			f.draw_string(font, pos + Vector2(-COOK_R, -2), "DONE", HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(17), UI.DIM)
+		else:
+			var bc := pos + Vector2(COOK_R - 6, -COOK_R + 10)
+			f.draw_circle(bc, 14.0, UI.key("info"))
+			f.draw_arc(bc, 14.0, 0.0, TAU, 24, Color(0, 0, 0, 0.8), 2.0)
+			f.draw_string(font, bc + Vector2(-14, 7), str(cr.ap), HORIZONTAL_ALIGNMENT_CENTER, 28, UI.font_size(19), Color(0.05, 0.06, 0.09))
 		# Stress: one box per point up to the cap (full = they quit), and the count in words under it.
 		# Blind review #3: the thin bar went unseen, and stress is what loses most first nights.
 		var cap: int = maxi(1, k.stress_cap)
@@ -1450,7 +1474,7 @@ func game_over() -> void:
 
 ## Replay the service that was lost: same night, same bank and upgrades, fresh tickets.
 func retry_service() -> void:
-	_save.write({"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate()})
+	_save.write({"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(), "temp_buys": temp_buys})
 	get_node("/root/Loader").go("res://scenes/game.tscn")
 
 

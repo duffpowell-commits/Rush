@@ -116,6 +116,14 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   chips sit above station names. Feel: cooks walk (`_cook_draw`), steam over pans, red-ticket jolt,
   bigger burns, a CRITIC stamp on the grade sheet. Loss: RETRY SERVICE n keeps bank + upgrades
   (`retry_service`). Bot: s1 ~7%, s2 ~33%, s3 ~41%, s4 ~41% lost. WARN, RETRY PASS; GRADE FIT has the critic.
+- Nov 26 build-79 blind first-timer: 7/10, too easy now (Temp Cook twice + Cast Iron, A+ with stress
+  at 0). 8.5 plan #2 (Duff: "Build all of it"): TEMP COOK doubles each hire tonight
+  (`Upgrades.price`, `temp_buys` in the save, kept by RETRY); every two upgrades bring +1 table
+  (`Upgrades.load_tickets`, in `k.first_tickets` and `tickets_for`; the shop says so); new twists
+  HEAT WAVE (working cooks +1 stress on odd turns, `Kitchen.heat_turn()`, mirrored in `stress_after`)
+  and PARTY OF 12 (one more big table mid-service); a spent cook is grey with DONE, the rest wear a
+  moves-left number; the face-then-station hint ("TAP FACE, THEN STATION") shows after the first
+  END TURN, and the dots hint reads "NUMBER = MOVES LEFT". PUSHBACK, HEAT PASS; test_shop_pushes_back.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

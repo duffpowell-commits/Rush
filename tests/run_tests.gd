@@ -756,7 +756,7 @@ func test_kitchen_events() -> void:
 		var k := Kitchen.new()
 		k.start(2, sd + 1)
 		seen[k.event] = true
-	check(seen.size() == 4 and not seen.has(""), "all four twists show up in service 2 (%s)" % [seen.keys()])
+	check(seen.size() == Kitchen.EVENT_IDS.size() and not seen.has(""), "every twist shows up in service 2 (%s)" % [seen.keys()])
 	var one := Kitchen.new()
 	one.start(1, 5)
 	check(one.event == "", "service 1 is plain")
@@ -785,6 +785,26 @@ func test_kitchen_events() -> void:
 	check(k.score_parts().total == mini(plain + 8, 100), "serving the critic is worth 8 points")
 	k.critic = "walked"
 	check(k.score_parts().total == plain - 8, "walking the critic costs 8")
+	# 8.5 plan #2: HEAT WAVE adds a point to working cooks every other turn; PARTY OF 12 adds a big table.
+	k = _event_kitchen("heat")
+	k.tickets = [{"id": 92, "table": 7, "items": [{"dish": "FRIES", "state": "wait"}], "time": 9, "big": false}]
+	k.incoming.clear()
+	k.turn = 1
+	k.crew[0].acted = true
+	k.crew[0].stress = 0
+	k.crew[1].stress = 3
+	k.end_turn()
+	check(k.crew[0].stress == 1 and k.crew[1].stress == 1, "heat: +1 on a worker, a rester still rests (%d, %d)" % [k.crew[0].stress, k.crew[1].stress])
+	k.crew[0].acted = true
+	k.end_turn()
+	check(k.crew[0].stress == 1, "heat skips the even turns")
+	var pk := _event_kitchen("party")
+	var plain_k := Kitchen.new()
+	plain_k.with_events = false
+	plain_k.start(2, 11)
+	check(pk.total == plain_k.total + 1 and pk.incoming.size() == plain_k.incoming.size() + 1
+		and pk.incoming.filter(func(inc): return inc.ticket.big).size() > plain_k.incoming.filter(func(inc): return inc.ticket.big).size(),
+		"party: one more table, and it's a big one")
 	var back := Kitchen.new()
 	var vk := _event_kitchen("vip")
 	check(back.from_dict(JSON.parse_string(JSON.stringify(vk.to_dict()))) and back.event == "vip"
@@ -879,3 +899,14 @@ func test_temp_cook_and_curve_tweaks() -> void:
 	var s4 := Kitchen.new()
 	s4.start(4, 5)
 	check(s4.total == s3.total, "service 4 is a ticket lighter than the +1 curve (same as service 3)")
+
+
+## 8.5 plan #2: the shop pushes back. A temp cook doubles each hire; every two upgrades bring a table.
+func test_shop_pushes_back() -> void:
+	check(Upgrades.price("temp", 0) == 45 and Upgrades.price("temp", 1) == 90 and Upgrades.price("temp", 2) == 180, "temp: 45, 90, 180")
+	check(Upgrades.price("lamps", 3) == Upgrades.ALL.lamps.cost, "other prices don't move")
+	var owned: Array = []
+	check(Upgrades.buy("temp", 89, owned, 1) == -1, "second temp needs $90")
+	check(Upgrades.buy("temp", 100, owned, 1) == 10, "second temp bought for $90")
+	check(Upgrades.load_tickets([]) == 0 and Upgrades.load_tickets(["meal"]) == 0 and Upgrades.load_tickets(["meal", "lamps"]) == 1
+		and Upgrades.load_tickets(["meal", "lamps", "iron", "tray"]) == 2, "one table per two upgrades")

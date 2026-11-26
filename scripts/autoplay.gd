@@ -512,8 +512,27 @@ func _run() -> void:
 	game = get_tree().current_scene
 	_check(retry_ok and game != old_game and game.level == lost_lvl and game.cash == 77 and game.perks == perks_lost and not game.over and game.k.served == 0,
 		"RETRY PASS (RETRY SERVICE %d replays it with $%d and %s kept)" % [game.level, game.cash, str(game.perks)])
-	# TEMP COOK: a third cook at the pass for one service, tappable, drawn, then gone.
+	# TEMP COOK: bought in the shop, a third cook at the pass for one service, tappable, drawn, then
+	# gone; the next one costs double (8.5 plan #2), and two upgrades bring one more table.
+	game.cash = 300
+	var t_before: int = game.tickets_for(game.level)
+	game.open_shop()
+	await _frames(4)
+	await _click("TEMP COOK")
+	await _frames(4)
+	var temp_bought: bool = game.perks.has("temp") and game.temp_buys == 1 and game.cash == 255
+	var again_txt: String = ""
+	await _click("DONE")
+	game.perks.erase("temp")
+	game.open_shop()
+	await _frames(4)
+	var again_b: Node = get_tree().root.find_child("Buy_temp", true, false)
+	again_txt = again_b.text if again_b != null else "-"
+	await _click("DONE")
 	game.perks.append("temp")
+	var t_after: int = game.tickets_for(game.level)
+	_check(temp_bought and again_txt.contains("$90") and t_after == t_before + 1,
+		"PUSHBACK PASS (TEMP COOK $45, then '%s'; two upgrades: %d -> %d tickets)" % [again_txt.get_slice("\n", 0), t_before, t_after])
 	game._new_service()
 	game._after_move()
 	await _frames(20)
@@ -1141,6 +1160,21 @@ func _polish_checks(game: Node) -> void:
 	_check(two_burns == "END TURN\nGRILL + FRY BURN" and two_quits == want_q and "TOO LATE" in late and "+1 STRESS" in late and strip_pick
 		and plate_lbl.begins_with("DEV: PLATE") and plate_lbl.ends_with("+1 STRESS"),
 		"WARN PASS ('%s', '%s', '%s', strip tap picks the cook: %s)" % [two_burns.replace("\n", " / "), two_quits.replace("\n", " / "), late.replace("\n", " / "), strip_pick])
+	# 8.5 plan #2: HEAT WAVE shows on the stress preview before END TURN; a spent cook goes grey, DONE.
+	kk.event = "heat"
+	kk.turn = 1
+	kk.tickets = [{"id": 993, "table": 53, "items": [{"dish": "FRIES", "state": "wait"}], "time": 9, "big": false}]
+	for i in kk.pans.size():
+		kk.pans[i] = {}
+	kk.crew[0].stress = 0
+	kk.crew[0].acted = true
+	kk.crew[0].ap = 0
+	var heat_prev: int = game.stress_after(0)
+	game._refresh_hud()
+	game.field.queue_redraw()
+	await _frames(3)
+	await _shot("heat_spent")
+	_check(heat_prev == 1, "HEAT PASS (a worked cook on a heat turn previews +%d stress; spent DEV drawn grey with DONE)" % heat_prev)
 	kk.from_dict(JSON.parse_string(JSON.stringify(keep)))
 	game._refresh_hud()
 	var calm: String = game.end_btn.text
