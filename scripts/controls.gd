@@ -13,6 +13,10 @@ const ACTIONS := {
 	"jump": "JUMP", "attack": "ATTACK", "dodge": "DODGE", "crouch": "CROUCH", "aim": "AIM", "pause": "PAUSE",
 }
 
+## The actions this game uses, in the CONTROLS sheet and the legend. Rush is all taps on the board
+## plus PAUSE; the template's move/jump/attack rows read as leftovers (blind review #3, Nov 26).
+const SHOWN := ["pause"]
+
 const PAD_NAMES := {
 	JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y",
 	JOY_BUTTON_BACK: "BACK", JOY_BUTTON_START: "START", JOY_BUTTON_LEFT_SHOULDER: "LB",

@@ -86,6 +86,12 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   QUIT at their spot (the WALKED OUT line is gone); GAME OVER buttons wait 1 s; HOW TO PLAY says
   SCROLL FOR MORE until the end. POLISH PASS checks the quit warning and spent button, GAMEOVER PASS
   the tap guard, test_quit_warning_matches_end_turn the prediction against end_turn on random states.
+- Nov 26 blind review #3 (6.5/10: stress was how they lost and they barely saw it): a stress meter per
+  cook (one box per point to the cap + "STRESS 2/6" / "TIRED 5/6"), intro card 3 says cooks quit;
+  a QUIT marker never draws over a working cook; GAME OVER says a new night starts at service 1
+  (button NEW NIGHT); tap +N MORE to page the rail (`rail_off`, `_more_rect`; BACK returns);
+  bigger ticket/station text; Settings CONTROLS lists only `Controls.SHOWN` (pause); SHOP NEW! only
+  until opened. RAIL PAGE, SHOP NEW, GAMEOVER PASS.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

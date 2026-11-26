@@ -8,7 +8,7 @@ const Art = preload("res://scripts/menu_art.gd")
 const CARDS := [
 	"Friday. 7 PM.\nThe rail is filling up.",
 	"Every ticket has a clock.\nGet the food out before it hits zero.",
-	"Walk three tables and the night is over.\n\nHeard?",
+	"Walk three tables and the night is over.\nPush your cooks too hard and they quit.\n\nHeard?",
 ]
 
 var i := 0
