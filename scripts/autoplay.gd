@@ -214,7 +214,7 @@ func _run() -> void:
 	var real: Dictionary = game.k.to_dict()
 	var kk: Object = game.k
 	kk.tickets = [
-		{"id": 901, "table": 21, "items": [{"dish": "STEAK", "state": "wait"}], "time": 3, "big": false},
+		{"id": 901, "table": 21, "items": [{"dish": "STEAK", "state": "wait"}], "time": 4, "big": false},
 		{"id": 902, "table": 22, "items": [{"dish": "BURGER", "state": "wait"}, {"dish": "FRIES", "state": "cooking"}], "time": 8, "big": false}]
 	kk.pans = [{}, {"tid": 902, "dish": "FRIES", "left": 0, "sat": 0, "rushed": false}, {}, {}]
 	kk.window = []
@@ -230,10 +230,11 @@ func _run() -> void:
 	game._after_move()
 	var fire_default: String = game.act_btn.text
 	await _tap_at(game.field.get_global_transform() * game.ticket_rect(1).get_center())   # table 22: less urgent
-	var pick_ok: bool = game.pick_tid == 902 and game.act_btn.text == "DEV: FIRE T22"
+	var pick_ok: bool = game.pick_tid == 902 and game.act_btn.text.get_slice("\n", 0) == "DEV: FIRE T22"
+	var pick_dbg := "default '%s', after tap pick %d '%s'" % [fire_default, game.pick_tid, game.act_btn.text]
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())   # DEV's own station: act
-	pick_ok = pick_ok and kk.pans[0].get("tid", 0) == 902 and fire_default == "DEV: FIRE T21"
-	_check(pick_ok, "PICK PASS (button said FIRE T21, tapped table 22's ticket, FIRE cooked its burger)")
+	pick_ok = pick_ok and kk.pans[0].get("tid", 0) == 902 and fire_default.get_slice("\n", 0) == "DEV: FIRE T21"
+	_check(pick_ok, "PICK PASS (button said FIRE T21, tapped table 22's ticket, FIRE cooked its burger; %s, pan %s)" % [pick_dbg.replace("\n", " / "), str(kk.pans[0].get("tid", 0))])
 	# Tap a dish (Duff, Nov 25): table 22 now wants a burger and a steak, both grill. A tap on the
 	# STEAK row picks that dish: the button names it and FIRE cooks it, not the burger listed first.
 	var keep_items: Array = kk.tickets[1].items.duplicate(true)
@@ -350,6 +351,8 @@ func _run() -> void:
 	var ts_was = pst.get_value("text_size")
 	pst.set_value("text_size", 3)
 	await _frames(2)
+	var critic_was: String = game.k.critic
+	game.k.critic = "walked"   # worst case carries the critic's stamp too (8.5 pass)
 	game._grade_sheet("D", {"total": 47, "out": 43, "speed": 9, "pans": 10, "walks": -20, "critic": -8},
 		"The floor eases off a ticket.", {"service": 3, "served": 7, "total": 9, "walked": 2, "tips": 148})
 	var tb: VBoxContainer = game.sheet_box
@@ -358,13 +361,17 @@ func _run() -> void:
 	tb.add_child(UI.button("TITLE", func(): pass))
 	await _frames(4)
 	var pr: Rect2 = (tb.get_parent() as Control).get_global_rect()
+	var critic_lbl: Node = tb.find_child("Critic", true, false)
+	var critic_txt: String = critic_lbl.text if critic_lbl != null else ""
+	game.k.critic = critic_was
 	var vh: float = get_viewport().get_visible_rect().size.y
 	await _shot("grade_huge")
 	UI.close_sheet(tb)
 	game.sheet_box = real_box
 	pst.set_value("text_size", ts_was)
 	await _frames(2)
-	_check(pr.position.y >= 0.0 and pr.end.y <= vh, "GRADE FIT PASS (worst-case sheet at HUGE text: %d px of %d)" % [int(pr.size.y), int(vh)])
+	_check(pr.position.y >= 0.0 and pr.end.y <= vh and critic_txt == "CRITIC WALKED  -8",
+		"GRADE FIT PASS (worst-case sheet at HUGE text with the critic's stamp '%s': %d px of %d)" % [critic_txt, int(pr.size.y), int(vh)])
 	var graded: bool = game.between and grade_node != null and _find("NEXT SERVICE") != null
 	# Tips carry over: they're banked, the SHOP spends them, the upgrade shapes service 2 and is saved.
 	var tips1: int = game.k.tips
@@ -489,7 +496,41 @@ func _run() -> void:
 	var fresh: Node = game.find_child("Fresh", true, false)
 	_check(fresh != null and "service 1" in fresh.text and guarded and game.over and _find("NEW NIGHT") != null and not get_node("/root/Save").exists() and reason != null and "WALKED" in reason.text,
 		"GAMEOVER PASS (game over screen says why, NEW NIGHT waits a beat and says it starts at service 1, save cleared)")
-	await _click("TITLE")
+	# 8.5 pass: RETRY replays the lost service with tonight's bank and upgrades.
+	var lost_lvl: int = game.level
+	game.cash = 77
+	game.perks = ["tray"]
+	var perks_lost: Array = game.perks.duplicate()
+	var retry_ok: bool = _find("RETRY SERVICE %d" % lost_lvl) != null
+	var old_game: Node = game
+	await _click("RETRY SERVICE")
+	for i in 600:
+		if get_tree().current_scene != old_game and get_tree().current_scene != null and get_tree().current_scene.name == "Game":
+			break
+		await _frames(1)
+	await _frames(5)
+	game = get_tree().current_scene
+	_check(retry_ok and game != old_game and game.level == lost_lvl and game.cash == 77 and game.perks == perks_lost and not game.over and game.k.served == 0,
+		"RETRY PASS (RETRY SERVICE %d replays it with $%d and %s kept)" % [game.level, game.cash, str(game.perks)])
+	# TEMP COOK: a third cook at the pass for one service, tappable, drawn, then gone.
+	game.perks.append("temp")
+	game._new_service()
+	game._after_move()
+	await _frames(20)
+	await _shot("temp_cook")
+	var three: bool = game.k.crew.size() == 3 and game.k.crew[2].at == Kitchen.PASS_IX
+	game.sel = 0
+	game._portrait_pick = false
+	var pr3: Rect2 = game.station_rect(Kitchen.PASS_IX)
+	game.tap(Vector2(pr3.get_center().x, pr3.end.y + 120.0))
+	var jo_pick: bool = game.sel == 2
+	game._service_done()
+	await _frames(5)
+	_check(three and jo_pick and not game.perks.has("temp"),
+		"TEMP PASS (TEMP COOK adds %s at the pass, a tap under PASS picks them: %s, gone after the service)" % [game.k.crew[2].name if game.k.crew.size() > 2 else "-", jo_pick])
+	get_node("/root/Save").clear()
+	game.over = true   # leave without a checkpoint, so the title has no CONTINUE
+	game.quit_to_title()
 	await _wait_scene("Title")
 	await _frames(5)
 	_check(_find("CONTINUE") == null, "FLOW PASS (back at title, no stale CONTINUE)")
@@ -1058,6 +1099,48 @@ func _polish_checks(game: Node) -> void:
 	var finish: String = game.end_btn.text
 	_check(free_lbl == "DEV: RUSH (FREE)" and finish == "END TURN\nFINISH SERVICE",
 		"FINISH PASS (Cast Iron rush reads '%s'; an empty rail says '%s')" % [free_lbl, finish.replace("\n", " / ")])
+	# 8.5 pass: END TURN names every burn and every quit; FIRE says TOO LATE and what the first move costs;
+	# a tap in the strip under a station picks the cook standing there.
+	for c in kk.crew:
+		c.stress = 0
+		c.acted = false
+		c.ap = kk.ap
+	kk.crew[0].at = 0
+	kk.crew[1].at = 1
+	kk.tickets = [{"id": 990, "table": 50, "items": [{"dish": "STEAK", "state": "wait"}], "time": 1, "big": false},
+		{"id": 991, "table": 51, "items": [{"dish": "FRIES", "state": "wait"}], "time": 3, "big": false}]
+	kk.pans[0] = {"tid": 990, "dish": "STEAK", "left": 0, "sat": kk.burn_after, "rushed": false, "by": 0}
+	kk.pans[1] = {"tid": 991, "dish": "FRIES", "left": 0, "sat": kk.burn_after, "rushed": false, "by": 1}
+	game.sel = 0
+	game._refresh_hud()
+	var two_burns: String = game.end_btn.text
+	var plate_lbl: String = game.act_btn.text   # plating empties the burning pan: only the red ticket's +1
+	kk.pans[0] = {}
+	kk.pans[1] = {}
+	for c in 2:
+		kk.crew[c].stress = kk.stress_cap - 1
+		kk.crew[c].acted = true
+	game._refresh_hud()
+	var two_quits: String = game.end_btn.text
+	for c in 2:
+		kk.crew[c].stress = 0
+		kk.crew[c].acted = false
+	game.sel = 0
+	game.pick_tid = 990
+	game.pick_ix = -1
+	game._refresh_hud()
+	var late: String = game.act_btn.text
+	game.pick_tid = 0
+	game.sel = 0
+	game._portrait_pick = false
+	var sr1: Rect2 = game.station_rect(1)
+	game.tap(Vector2(sr1.position.x + 6.0, sr1.end.y + 140.0))
+	var strip_pick: bool = game.sel == 1
+	game._portrait_pick = false
+	var want_q: String = "END TURN\n%s + %s QUIT" % [kk.crew[0].name, kk.crew[1].name]
+	_check(two_burns == "END TURN\nGRILL + FRY BURN" and two_quits == want_q and "TOO LATE" in late and "+1 STRESS" in late and strip_pick
+		and plate_lbl.begins_with("DEV: PLATE") and plate_lbl.ends_with("+1 STRESS"),
+		"WARN PASS ('%s', '%s', '%s', strip tap picks the cook: %s)" % [two_burns.replace("\n", " / "), two_quits.replace("\n", " / "), late.replace("\n", " / "), strip_pick])
 	kk.from_dict(JSON.parse_string(JSON.stringify(keep)))
 	game._refresh_hud()
 	var calm: String = game.end_btn.text

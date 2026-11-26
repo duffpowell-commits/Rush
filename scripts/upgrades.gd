@@ -15,8 +15,10 @@ const ALL := {
 	# server tray) makes it 4.
 	"tray": {"name": "SERVER TRAY", "cost": 30, "says": "RUN 2 PLATES AT ONCE"},
 	"tray2": {"name": "ENTREE TRAY", "cost": 90, "says": "RUN 4 PLATES AT ONCE", "needs": "tray"},
+	# 8.5 pass: a third pair of hands for one service (service 4 was a wall for two cooks).
+	"temp": {"name": "TEMP COOK", "cost": 45, "says": "+1 COOK NEXT SERVICE"},
 }
-const ORDER := ["meal", "lamps", "tray", "tray2", "iron", "comps"]
+const ORDER := ["meal", "lamps", "tray", "tray2", "temp", "iron", "comps"]
 const MAX_TRAY := 4
 
 
@@ -53,4 +55,5 @@ static func apply(base: Dictionary, owned: Array) -> Dictionary:
 	if owned.has("comps"):
 		out.lives += 1
 	out["tray"] = 4 if owned.has("tray2") else (2 if owned.has("tray") else 1)
+	out["hires"] = 1 if owned.has("temp") else 0
 	return out
