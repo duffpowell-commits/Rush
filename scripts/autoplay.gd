@@ -145,7 +145,8 @@ func _run() -> void:
 	# Tap a station, get its cook (Duff, Nov 25): with MO picked, a tap on the GRILL (DEV stands
 	# there) picks DEV and sends nobody anywhere. With DEV stepped off, the GRILL still picks DEV,
 	# because his burger is on it: the pan wears his initial.
-	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
+	game.sel = 1   # MO picked earlier (not by a face tap just now)
+	game._after_move()
 	var mo_ap: int = k.crew[1].ap
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
 	var picked_here: bool = game.sel == 0 and k.crew[1].at == Kitchen.PASS_IX and k.crew[1].ap == mo_ap
@@ -162,6 +163,32 @@ func _run() -> void:
 	game._after_move()
 	await _shot("station_pick")
 	_check(picked_here and picked_pan and handoff, "STATION PICK PASS (MO picked, GRILL tap picked DEV who stands there; with DEV away it picked him by his burger; a 2nd GRILL tap sent MO to it)")
+	# Movement pass (build-73 reviews): a face tap always wins. Tap MO, then the GRILL where DEV
+	# stands: MO walks over instead of the tap swapping to DEV. A walk too far says so.
+	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
+	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
+	var face_went: bool = game.sel == 1 and k.crew[1].at == 0 and k.crew[1].ap == mo_ap - k.walk_cost(Kitchen.PASS_IX, 0)
+	game.field.queue_redraw()
+	await _frames(2)
+	await _shot("walk_costs")
+	k.crew[1].ap = 0
+	game._after_move()
+	await _tap_at(game.field.get_global_transform() * game.station_rect(Kitchen.PASS_IX).get_center())
+	var far_said: bool = k.crew[1].at == 0 and game.note.text == "MO: NO MOVES LEFT" and game.fx.any(func(e): return e.kind == "text" and e.text == "NO MOVES")
+	k.crew[1].ap = 1
+	k.crew[1].at = 0
+	game.sel = 1
+	k.all_open = true   # every stop counts: GRILL to PASS is 4 moves
+	game._after_move()
+	await _tap_at(game.field.get_global_transform() * game.station_rect(Kitchen.PASS_IX).get_center())
+	var far_note: String = game.note.text
+	k.all_open = false
+	far_said = far_said and k.crew[1].at == 0 and far_note == "TOO FAR: MO NEEDS 4 MOVES, HAS 1"
+	k.crew[1].at = Kitchen.PASS_IX
+	k.crew[1].ap = mo_ap
+	game.sel = 1
+	game._after_move()
+	_check(face_went and far_said, "MOVE PASS (MO tapped by face walked to DEV's GRILL; a spent walk said NO MOVES; a long one said '%s')" % far_note)
 	# The next hint follows by itself: after FIRE, END TURN is taught.
 	var next_hint := false
 	for i in 60:
@@ -236,7 +263,7 @@ func _run() -> void:
 	var left0: int = kk.pans[0].left
 	var rush_label: String = game.act_btn.text
 	game.act()
-	_check(rush_label == "DEV: RUSH +STRESS" and kk.pans[0].left == left0 - 1 and kk.crew[0].stress == kk.rush_stress,
+	_check(rush_label == "DEV: RUSH +1 STRESS" and kk.pans[0].left == left0 - 1 and kk.crew[0].stress == kk.rush_stress,
 		"RUSH PASS (burger %d -> %d minutes, DEV stress %d)" % [left0, kk.pans[0].left, kk.crew[0].stress])
 	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
 	await _tap_at(game.field.get_global_transform() * game.station_rect(1).get_center())   # MO plates the fries
@@ -1011,6 +1038,26 @@ func _polish_checks(game: Node) -> void:
 	await _shot("polish_tired")
 	var nx: String = game.next_line(ThemeDB.fallback_font, 2000.0)
 	await _shot("polish_board")
+	# Movement pass: the last table out says how to finish; Cast Iron's free RUSH says FREE; OUT counts this service.
+	var rs_was: int = kk.rush_stress
+	kk.rush_stress = 0
+	kk.crew[0].stress = 0
+	kk.crew[0].ap = kk.ap
+	kk.crew[0].at = 0
+	kk.pans[0] = {"tid": kk.tickets[0].id, "dish": "STEAK", "left": 2, "sat": 0, "rushed": false, "by": 0}
+	game.sel = 0
+	game._refresh_hud()
+	var free_lbl: String = game.act_btn.text
+	kk.rush_stress = rs_was
+	kk.pans[0] = {}
+	kk.tickets.clear()
+	kk.incoming.clear()
+	for c in kk.crew:
+		c.stress = 0
+	game._refresh_hud()
+	var finish: String = game.end_btn.text
+	_check(free_lbl == "DEV: RUSH (FREE)" and finish == "END TURN\nFINISH SERVICE",
+		"FINISH PASS (Cast Iron rush reads '%s'; an empty rail says '%s')" % [free_lbl, finish.replace("\n", " / ")])
 	kk.from_dict(JSON.parse_string(JSON.stringify(keep)))
 	game._refresh_hud()
 	var calm: String = game.end_btn.text
