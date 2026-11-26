@@ -21,8 +21,11 @@ const EVENTS := {
 	"fritz": ["GRILL ON THE FRITZ", "Grill dishes take a minute longer. Their tables wait one more."],
 	"vip": ["VIP TABLE", "Gold ticket: triple tips. Walk it and it counts as two."],
 	"critic": ["FOOD CRITIC", "Serve the critic: grade up. Walk them: grade down."],
+	# 8.5 plan #2 (blind review: only two twists in four services, and stress never moved).
+	"heat": ["HEAT WAVE", "The line is an oven: working cooks take +1 stress every other turn."],
+	"party": ["PARTY OF 12", "A twelve-top books in: one extra big table mid-service."],
 }
-const EVENT_IDS := ["tour", "fritz", "vip", "critic"]
+const EVENT_IDS := ["tour", "fritz", "vip", "critic", "heat", "party"]
 
 const STATIONS := ["GRILL", "FRY", "SAUTE", "COLD", "PASS"]
 const PASS_IX := 4
@@ -141,6 +144,10 @@ func _set_up_event() -> void:
 			_mark(1 if count > 1 else 0, "vip")
 		"critic":
 			_mark(count / 3, "critic")
+		"party":   # one more big table, landing with the middle of the service
+			var mid := count / 2
+			incoming.insert(mid, {"arrive": incoming[mid].arrive if count > 0 else 0, "ticket": _make_ticket(true)})
+			total += 1
 
 
 func _mark(i: int, key: String) -> void:
@@ -409,6 +416,11 @@ func act_here(c: int, tid: int = 0, allow_rush: bool = true, ix: int = -1) -> bo
 
 # ---------------------------------------------------------------- end of turn
 
+## HEAT WAVE: this turn's end adds a point to every cook who worked (odd turns: every other one).
+func heat_turn() -> bool:
+	return event == "heat" and turn % 2 == 1
+
+
 func end_turn() -> void:
 	if done:
 		return
@@ -459,7 +471,7 @@ func end_turn() -> void:
 		if cr.out:
 			continue
 		if cr.acted:
-			cr.stress += 1 if red > 0 else 0
+			cr.stress += (1 if red > 0 else 0) + (1 if heat_turn() else 0)
 		else:
 			cr.stress = maxi(0, cr.stress - 2)
 		if cr.stress >= stress_cap:
