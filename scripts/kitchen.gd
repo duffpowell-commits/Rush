@@ -81,6 +81,8 @@ var stress_cap := 6
 var burn_after := 1      # a finished pan burns at the end of the turn its wait passes this (2 turns to plate at 1)
 var rush_stress := 1     # stress a RUSH costs the cook
 var tray := 1            # plates one RUN carries (shop trays: 2, then 4)
+var fox_cost := 2        # moves the cook chasing the fox loses (TUNE). Bot, service 3: 41% lost without the fox, 46% at 2, 51% at 3
+var fox_turn := -1       # the studio fox's cameo (Duff, Nov 26): the turn it runs through the kitchen, -1 = no fox
 var batch := 1           # dishes one FIRE cooks: 2 with the shop's DOUBLE BURNERS (same dish, any table)
 var prep_every := 3      # CROSS PREP: every Nth dish needs an ingredient prepped at another station (TUNE)
 var first_tickets := 7   # tickets in service 1 (8.5 plan #3 tried 8: the bot lost s1 26% vs 8%, so it stays 7) (Nov 25 stations: bot s1 ~8%, s2 ~32%, s3 ~48%, s4 ~71% game over, twists on)
@@ -162,6 +164,9 @@ func start(n: int, seed_value: int = 0) -> void:
 		incoming[0].ticket.items = [{"dish": "BURGER", "state": "wait"}]
 	event = ""
 	critic = ""
+	# The fox shows up on the quiet night (service 3 never rolls a twist): halfway through, one cook
+	# loses that turn chasing it. Impactful, not game-ruining (Duff, Nov 26). No rng draw, so the deal holds.
+	fox_turn = turns / 2 if with_events and n == 3 else -1
 	if with_events and (n == 2 or n >= 4):
 		var pool: Array = MILD_EVENTS if n == 2 else EVENT_IDS
 		event = pool[rng.randi_range(0, pool.size() - 1)]
@@ -677,10 +682,29 @@ func end_turn() -> void:
 		cr.ap = 0 if cr.brk else ap
 		cr.used = []
 		cr.acted = false
+		cr.erase("fox")
 	turn += 1
 	_arrivals()
+	if turn == fox_turn:
+		_fox_runs()
 	if (tickets.is_empty() and incoming.is_empty()) or crew.all(func(cr): return cr.out) or turn >= turns + ticket_time + 3:
 		done = true
+
+
+## The fox: the calmest working house cook drops everything to chase it (no moves this turn, still rests).
+func _fox_runs() -> void:
+	var who := -1
+	for c in crew.size():
+		var cr: Dictionary = crew[c]
+		if cr.out or cr.brk or cr.ap <= 0:
+			continue
+		if who < 0 or cr.stress < crew[who].stress:
+			who = c
+	if who < 0:
+		return
+	crew[who].ap = maxi(0, crew[who].ap - fox_cost)
+	crew[who]["fox"] = true
+	_say("FOX IN THE KITCHEN! %s CHASES IT" % crew[who].name)
 
 
 ## A cook leaves holding a plate: that dish goes back on the ticket to refire, like a burn.
@@ -745,7 +769,7 @@ func to_dict() -> Dictionary:
 		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
 		"stress_cap": stress_cap, "burn_after": burn_after,
 		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic, "all_open": all_open,
-		"burns": burns, "speed": speed, "tray": tray, "breaks": breaks, "batch": batch}
+		"burns": burns, "speed": speed, "tray": tray, "breaks": breaks, "batch": batch, "fox_turn": fox_turn, "fox_cost": fox_cost}
 
 
 ## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
@@ -777,6 +801,8 @@ func from_dict(d: Dictionary) -> bool:
 	critic = str(d.get("critic", ""))
 	breaks = int(d.get("breaks", 1))
 	batch = clampi(int(d.get("batch", 1)), 1, 2)
+	fox_turn = int(d.get("fox_turn", -1))
+	fox_cost = int(d.get("fox_cost", 2))
 	window = []
 	for w in d.window:
 		window.append({"tid": int(w.tid), "dish": str(w.dish)})
@@ -788,6 +814,8 @@ func from_dict(d: Dictionary) -> bool:
 			"perks": (c.get("perks", []) as Array).map(func(x): return str(x)), "used": (c.get("used", []) as Array).map(func(x): return str(x)),
 			"acts": int(c.get("acts", 0)),
 			"hand": {} if h.is_empty() else {"tid": int(h.tid), "dish": str(h.dish)}})
+		if c.get("fox", false):
+			crew[-1]["fox"] = true
 	pans = []
 	for p in d.pans:
 		pans.append({} if p.is_empty() else {"tid": int(p.tid), "dish": str(p.dish), "left": int(p.left), "sat": int(p.sat),

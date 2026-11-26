@@ -24,6 +24,7 @@ const MenuArt = preload("res://scripts/menu_art.gd")
 const Upgrades = preload("res://scripts/upgrades.gd")
 const HowToPlay = preload("res://scripts/how_to_play.gd")
 const ART_BG := preload("res://assets/art/bg_line.jpg")
+const ART_FOX := preload("res://assets/art/fox_cameo.png")   # the studio logo's fox head (Duff picked it, Nov 26)
 const ART_STATIONS := [preload("res://assets/art/station_grill.png"), preload("res://assets/art/station_fryer.png"),
 	preload("res://assets/art/station_saute.png"), preload("res://assets/art/station_cold.png"), preload("res://assets/art/station_pass.png")]
 const ART_COOKS := {"DEV": preload("res://assets/art/cook_dev.png"), "MO": preload("res://assets/art/cook_mo.png")}
@@ -36,12 +37,13 @@ const LIVES := 3             # tables you can walk in one service
 ## Live sliders (DEV MENU -> TUNE). Applied when a service starts.
 const TUNE := {"ticket_time": [4.0, 16.0], "crew_ap": [1.0, 5.0], "stress_cap": [2.0, 12.0],
 	"service_turns": [8.0, 40.0], "first_tickets": [2.0, 14.0], "more_tickets": [0.0, 4.0],
-	"rush_stress": [0.0, 3.0], "breaks": [0.0, 3.0], "prep_every": [1.0, 8.0]}
+	"rush_stress": [0.0, 3.0], "breaks": [0.0, 3.0], "prep_every": [1.0, 8.0], "fox_cost": [0.0, 3.0]}
 var ticket_time := 9.0
 var crew_ap := 3.0
 var stress_cap := 6.0
 var service_turns := 20.0
 var first_tickets := 7.0
+var fox_cost := 2.0          # the studio fox cameo (service 3): moves the cook chasing it loses (docs/MASCOT.md)
 var prep_every := 3.0        # CROSS PREP twist: every Nth dish needs an ingredient from another station
 var breaks := 1.0            # second winds a service: the first cook who'd quit takes five instead
 var more_tickets := 1.0
@@ -262,7 +264,7 @@ func _refresh_hud() -> void:
 				break
 	act_btn.text = a if a != "" else "TAP A STATION"   # nothing to do here: say how to move
 	if a == "" and not k.crew[sel].out and k.crew[sel].ap <= 0:   # say why: this cook is spent till END TURN
-		act_btn.text = "%s: %s" % [k.crew[sel].name, "ON BREAK" if k.crew[sel].get("brk", false) else "NO MOVES"]   # short: HUGE text wraps it over the status line
+		act_btn.text = "%s: %s" % [k.crew[sel].name, "CHASING FOX" if k.crew[sel].get("fox", false) else ("ON BREAK" if k.crew[sel].get("brk", false) else "NO MOVES")]   # short: HUGE text wraps it over the status line
 	if a == "FIRE":   # say which table it cooks for, picked or not
 		var fp := k.fire_pick(sel, pick_tid, pick_ix)
 		act_btn.text = "FIRE T%d" % fp.t.table
@@ -373,6 +375,7 @@ func _new_service() -> void:
 	k.hires = u.hires
 	k.breaks = int(breaks)
 	k.prep_every = int(prep_every)
+	k.fox_cost = int(fox_cost)
 	k.batch = u.batch
 	k.cook_perks = cook_perks.duplicate(true)
 	k.gone = gone.duplicate()
@@ -485,7 +488,7 @@ func _tick_fx(dt: float) -> void:
 			var now := Time.get_ticks_msec()
 			for fc in k.crew.size():
 				var cr: Dictionary = k.crew[fc]
-				if (cr.acted and cr.ap > 0 and not cr.out) or now < int(_flinch.get(fc, 0)):
+				if (cr.acted and cr.ap > 0 and not cr.out) or now < int(_flinch.get(fc, 0)) or (cr.get("fox", false) and now - _fox_t0 < 4000):
 					moving = true
 		if walking or (moving and _steam_t >= 1.0 / 30.0):
 			if not walking:
@@ -593,6 +596,12 @@ func end_turn() -> void:
 						_flinch[fc] = Time.get_ticks_msec() + 450
 				_shake(10.0)
 				UI.buzz(60)
+		elif e.begins_with("FOX IN THE KITCHEN"):
+			_fox_t0 = Time.get_ticks_msec()
+			get_node("/root/Audio").sfx("door")
+			get_node("/root/Subs").cue("[yip and clatter: a fox is loose in the kitchen]")
+			_shake(8.0)
+			UI.buzz(40)
 		elif e.ends_with("WALKED OUT"):
 			get_node("/root/Audio").sfx("door")
 			get_node("/root/Subs").cue("[door slams: cook walked out]")
@@ -1715,7 +1724,7 @@ func _draw_field(f: Control) -> void:
 			f.draw_circle(pos + Vector2(-16 + a * 16, -COOK_R - 12), 6.0, UI.key("info"))
 		if spent:
 			f.draw_circle(pos, COOK_R, Color(0, 0, 0, 0.2))
-			var word := "BREAK" if cr.get("brk", false) else "DONE"   # second wind: sitting out this turn
+			var word := "FOX!" if cr.get("fox", false) else ("BREAK" if cr.get("brk", false) else "DONE")   # second wind / the fox: sitting out this turn
 			f.draw_string_outline(font, pos + Vector2(-COOK_R, -2), word, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(17), 5, Color(0, 0, 0, 0.9))
 			f.draw_string(font, pos + Vector2(-COOK_R, -2), word, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(17),
 				UI.key("warn") if word == "BREAK" else UI.DIM)
@@ -1758,7 +1767,32 @@ func _draw_field(f: Control) -> void:
 			_draw_fit(f, ART_DISHES[cr.hand.dish], Rect2(pos + Vector2(COOK_R - 18, -COOK_R - 6), Vector2(40, 40)))
 			_plate(f, Rect2(pos + Vector2(-50, COOK_R + 22), Vector2(100, 24)))
 			f.draw_string(font, pos + Vector2(-60, COOK_R + 40), "> " + cr.hand.dish, HORIZONTAL_ALIGNMENT_CENTER, 120, UI.font_size(15), UI.key("good"))
+	_draw_fox(f)
 	_draw_fx(f)
+
+
+var _fox_t0 := 0   # when the fox popped up (ms), for its pop-in
+
+
+## The studio fox (docs/MASCOT.md): its head pops up over the cook chasing it, for that one turn.
+func _draw_fox(f: Control) -> void:
+	var font := ThemeDB.fallback_font
+	for c in k.crew.size():
+		if not k.crew[c].get("fox", false) or k.crew[c].out:
+			continue
+		var pos: Vector2 = _cook_draw.get(c, cook_pos(c))   # where the cook is drawn (they may be mid-walk)
+		var age := float(Time.get_ticks_msec() - _fox_t0) / 1000.0 if _fox_t0 > 0 else 9.0
+		var pop := clampf(age / 0.35, 0.0, 1.0)
+		var sz := 104.0 * (0.4 + 0.6 * pop)
+		var bob := 0.0 if _settings.get_value("low_graphics") else sin(age * 6.0) * 4.0
+		# Beside the cook, on the side with more room, never over their face (the autoplay shot hid MO).
+		var right := pos.x < f.size.x / 2.0
+		var x := pos.x + COOK_R + 26.0 if right else pos.x - COOK_R - 26.0 - sz
+		var at := Vector2(clampf(x, 0.0, f.size.x - sz), pos.y - sz * 0.75 + bob)
+		f.draw_texture_rect(ART_FOX, Rect2(at, Vector2(sz, sz)), false)
+		if pop >= 1.0:
+			_plate(f, Rect2(at.x, at.y + sz - 4, sz, 24))
+			f.draw_string(font, Vector2(at.x, at.y + sz + 14), "FOX!", HORIZONTAL_ALIGNMENT_CENTER, sz, UI.font_size(16), UI.key("warn"))
 
 
 # ---------------------------------------------------------------- pause + game over

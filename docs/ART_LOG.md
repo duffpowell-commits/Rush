@@ -24,3 +24,8 @@ with crisp edges." Props/icons keyed on magenta (#FF00FF).
 | `assets/art/station_cold.png` | rush-st-cold-20261125 / 1 | 24813 | cut --height 256; magenta seen through the glass recoloured pale glass. Opens in service 3 | waiting on Duff |
 | `assets/art/dish_salad.png` | rush-dish-salad-20261125 / 0 | 31338 | cut --height 128 | waiting on Duff |
 | `assets/art/dish_cake.png` | rush-dish-cake-20261125 / 0 | 31339 | cut --height 128; key shadow under the plate removed | waiting on Duff |
+
+## Studio fox cameo (Nov 26, 2026)
+| File | Source | Cleanup | Verdict |
+|---|---|---|---|
+| `assets/art/fox_cameo.png` | 3 Eyed Fox Studios logo (Duff's upload, the app-icon version) | head cropped, purple background keyed out, 384 px | Duff: "Real logo head pops up" (after Forge jobs rush-fox-cameo-20261126, -cameo2, -cameo3, -cameo4 missed the face) |

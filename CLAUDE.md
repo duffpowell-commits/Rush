@@ -154,6 +154,8 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   `prep_every` TUNE), DOUBLE BURNERS shop upgrade ($100: one FIRE cooks a dish for two tables), and a
   difficulty review: HEAT every 4th turn, PARTY swaps in for a small table, the rail grows every other
   service past 5. Bot: s1 7%, s2 24%, s3 41%, s4 48%, s5 67%, s6 67%. PREP, BURNERS PASS. docs/HANDOFF.md.
+- Nov 26 fox cameo (docs/MASCOT.md): service 3, halfway, the studio logo's fox head pops up over the
+  calmest cook, who loses 2 of 3 moves chasing it (`Kitchen.fox_turn`, `fox_cost` TUNE). FOX PASS.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).
