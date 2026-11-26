@@ -180,7 +180,9 @@ jobs:
         # Uploads the web build (channel html5) and the APK (channel android) to the itch page in
         # ITCH_TARGET. butler never changes the page's visibility: a draft page stays a draft.
         # Skips quietly until Duff adds the BUTLER_API_KEY secret (docs/ITCH.md).
+        # continue-on-error: an itch outage or a wrong slug never blocks the GitHub Pages play link below.
         if: github.ref == 'refs/heads/main'
+        continue-on-error: true
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
           ITCH_TARGET: ${{ vars.ITCH_TARGET || '3-eyedfox/rush' }}

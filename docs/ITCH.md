@@ -5,7 +5,7 @@ publishes it). Money: free with tips, "$0 or donate" (studio rule, Nov 25 2026).
 2026 Annual Jam before Rush's Dec 1 check.
 
 ## How builds get there
-- Every push to main: build.yml zips the web build as `Rush_web.zip` and puts it on the `dev`
+- Every push to main that changes the game (pushes touching only docs/ or *.md skip CI): build.yml zips the web build as `Rush_web.zip` and puts it on the `dev`
   release next to `Rush.apk`.
 - If the repo has a `BUTLER_API_KEY` secret, the same run pushes both to itch with butler:
   web zip -> channel `html5`, APK -> channel `android`. No secret = the step skips.
