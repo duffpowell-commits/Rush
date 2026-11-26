@@ -2,7 +2,7 @@
 
 Video: duffquest_3d_reveal.mp4 (22 s, 1080x1920, faceless)
 Caption (TikTok + Shorts):
-We made what you've been asking for. Duff Quest is going 3D. Same porch pirate. Same Marketplace Mike. Way better punches. Follow so you don't miss the drop. Play the current version free, link in bio.
+We made what you've been asking for. Duff Quest is going 3D. Same porch pirate. Way better punches. Follow so you don't miss the drop. Play the current version free, link in bio.
 #indiegame #gamedev #godot #beatemup #comedygame
 YouTube title: Duff Quest went 3D #shorts
 
