@@ -26,5 +26,8 @@ For any coding AI (Claude, Grok, Codex, ChatGPT...) or person working on a 3 Eye
 
 ## This game: Rush
 - **Duff's example (the template for every game):** on a quiet service, a fox gets loose in the kitchen and costs a turn. Only on a quiet service, never on a rush or a party night, at most once a night.
-- It goes in after the fox art is approved.
-- Before building: Duff OKs the fox art on a card.
+- **Built Nov 26.** Art: the studio logo's own fox head, cut out (`assets/art/fox_cameo.png`). Duff
+  picked it on a card after three Forge rounds drifted off the mascot (jobs rush-fox-cameo{,2,3,4}-20261126).
+- Rule (`Kitchen.fox_turn`, `_fox_runs`): service 3 only (it never rolls a twist), halfway through.
+  The calmest working cook loses `fox_cost` moves (TUNE, default 2 of 3; bot service-3 losses: 41% no fox, 46% at 2, 51% at 3), and the head pops up over them with "FOX!" (a cook left with no moves reads "CHASING FOX"). No rng
+  draw, so a seed deals the same service. FOX PASS, test_fox_cameo.

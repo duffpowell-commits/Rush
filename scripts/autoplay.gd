@@ -1324,6 +1324,28 @@ func _polish_checks(game: Node) -> void:
 	var both: Array = kk.pans[1].get("more", [])
 	kk.batch = 1
 	_check(both == [991] and kk.tickets[1].items[0].state == "cooking", "BURNERS PASS (one FIRE: T50 + T51 fries in one pan)")
+	# The studio fox (docs/MASCOT.md): it pops up over the calmer cook, who loses the turn chasing it.
+	for i in kk.pans.size():
+		kk.pans[i] = {}
+	kk.crew[0].at = 0
+	kk.crew[1].at = 1
+	kk.crew[0].stress = 2
+	kk.crew[1].stress = 0
+	kk.fox_turn = kk.turn + 1
+	kk.end_turn()
+	game._fox_t0 = Time.get_ticks_msec() - 1000
+	game.sel = 1
+	game._refresh_hud()
+	game.field.queue_redraw()
+	await _frames(3)
+	await _shot("fox_cameo")
+	var fox_btn: String = game.act_btn.text
+	var fox_news: bool = kk.events.any(func(e): return String(e).begins_with("FOX IN THE KITCHEN"))
+	game.sel = 0
+	_check(kk.crew[1].get("fox", false) and kk.crew[1].ap == kk.ap - kk.fox_cost and fox_news,
+		"FOX PASS (the logo fox pops up over MO, who loses %d moves chasing it; button '%s')" % [kk.fox_cost, fox_btn.replace("\n", " ")])
+	kk.fox_turn = -1
+	kk.crew[1].erase("fox")
 	kk.from_dict(JSON.parse_string(JSON.stringify(keep)))
 	game._refresh_hud()
 	var calm: String = game.end_btn.text

@@ -13,8 +13,8 @@ Last updated: 2026-11-26 17:00 UTC (Claude).
   that matters but never ruins a run. Duff OKs the fox art on a card before it's built. Rule + this game's idea: `docs/MASCOT.md`.
 
 ## Where it is right now
-- main = `9414b64` (PR #33, plan #4), build 92. CROSS PREP + DOUBLE BURNERS + difficulty review are on
-  the working branch (see "Cross prep" below). Live builds:
+- main = `0ed06f0` (PR #34, cross prep + double burners), build 95. The fox cameo is on the working
+  branch. Live builds:
   - Web: https://duffpowell-commits.github.io/Rush/ (gh-pages, pushed by CI on every main push;
     the gh-pages commit message reads "web build <sha7>").
   - APK: Releases -> `dev` -> `Rush.apk`; `version.json` on the same release shows `{"code", "sha"}`.
@@ -109,6 +109,10 @@ builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
   service 5 the rail grows every other service (`count_for`). After: s1 7, s2 24, s3 41, s4 48,
   s5 67, s6 67, s7 88, s8 88; every twist within +13 of a plain s4; CROSS PREP +2. With DOUBLE
   BURNERS: s4 23, s5 41. Bot script lives only in scratch (never commit `tools/_bal_tmp.gd`).
+
+## Studio fox cameo (Duff, Nov 26; rule in docs/MASCOT.md)
+- Service 3, halfway: the logo fox's head pops up over the calmest cook, who loses 2 of 3 moves
+  (`fox_cost` TUNE). Art `assets/art/fox_cameo.png` is the real logo head (Duff's pick). FOX PASS.
 
 ## Next, step by step
 1. Duff's call on Nov 26: blind reviews are paused to save usage; build fixes and merge on green

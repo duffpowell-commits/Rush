@@ -1091,3 +1091,33 @@ func test_double_burners() -> void:
 		"a walked first table hands the pan to the other one")
 	var u := Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, ["burners"])
 	check(u.batch == 2 and Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, []).batch == 1, "the shop sets it")
+
+
+## The studio fox (docs/MASCOT.md): on service 3 (the quiet one) it runs through halfway, and the
+## calmest cook loses that turn chasing it. Once a night, never on a twist night, survives a save.
+func test_fox_cameo() -> void:
+	for n in [1, 2, 4, 5]:
+		var q := Kitchen.new()
+		q.start(n, 9)
+		check(q.fox_turn == -1, "no fox in service %d" % n)
+	var k := Kitchen.new()
+	k.start(3, 9)
+	check(k.event == "" and k.fox_turn == k.turns / 2, "service 3: the fox comes halfway")
+	var guard := 0
+	while k.turn < k.fox_turn - 1 and guard < 40:
+		k.end_turn()
+		guard += 1
+	k.crew[0].stress = 4   # resting drops 2 at END TURN: MO stays the calmer one
+	k.crew[1].stress = 1
+	k.end_turn()
+	check(k.crew[1].get("fox", false) and k.crew[1].ap == k.ap - k.fox_cost and not k.crew[0].get("fox", false) and k.crew[0].ap == k.ap,
+		"the calmer cook chases it and loses %d moves" % k.fox_cost)
+	check(k.events.any(func(e): return String(e).begins_with("FOX IN THE KITCHEN")), "the news line says so")
+	var k2 := Kitchen.new()
+	check(k2.from_dict(JSON.parse_string(JSON.stringify(k.to_dict()))) and k2.crew[1].get("fox", false) and k2.fox_turn == k.fox_turn, "a save keeps it")
+	k.end_turn()
+	check(not k.crew[1].get("fox", false) and k.crew[1].ap == k.ap, "one turn only")
+	var plain := Kitchen.new()
+	plain.with_events = false
+	plain.start(3, 9)
+	check(plain.fox_turn == -1, "plain services (sweeps) have no fox")
