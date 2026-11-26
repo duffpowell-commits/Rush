@@ -164,6 +164,34 @@ jobs:
           godot --headless --path . --export-release "Web" build/web/index.html 2>&1 | tee web.log
           test -f build/web/index.html && test -f build/web/index.wasm && test -f build/web/index.pck
           ls -la build/web
+      - name: Web zip to the "dev" release (main only; itch.io takes this zip as-is)
+        # Rush_web.zip = build/web with index.html at the top, the layout itch's HTML upload wants.
+        # Phone fallback for itch: tap the zip in Releases -> dev, then upload it on the itch page.
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          WEBZIP="${GITHUB_REPOSITORY#*/}_web.zip"
+          (cd build/web && zip -qr "$GITHUB_WORKSPACE/$WEBZIP" .)
+          unzip -l "$WEBZIP" | grep -q " index.html$"
+          gh release upload dev "$WEBZIP" --clobber
+          echo "WEBZIP=$WEBZIP" >> $GITHUB_ENV
+      - name: Push to itch.io with butler (main only, once BUTLER_API_KEY is set)
+        # Uploads the web build (channel html5) and the APK (channel android) to the itch page in
+        # ITCH_TARGET. butler never changes the page's visibility: a draft page stays a draft.
+        # Skips quietly until Duff adds the BUTLER_API_KEY secret (docs/ITCH.md).
+        if: github.ref == 'refs/heads/main'
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET || '3-eyedfox/rush' }}
+        run: |
+          if [ -z "$BUTLER_API_KEY" ]; then echo "No BUTLER_API_KEY secret: skipping itch upload"; exit 0; fi
+          curl -sSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -qo butler.zip -d butler && chmod +x butler/butler
+          VER="0.1.${{ github.run_number }}"
+          ./butler/butler push "$WEBZIP" "$ITCH_TARGET:html5" --userversion "$VER"
+          ./butler/butler push build/android/$APK "$ITCH_TARGET:android" --userversion "$VER"
+          ./butler/butler status "$ITCH_TARGET"
       - name: Publish the web build to GitHub Pages (main only)
         # Play link: https://duffpowell-commits.github.io/Rush/ (Settings -> Pages -> branch gh-pages, once).
         # build/web becomes the only commit on gh-pages. Threads are off in the Web preset, so Pages
