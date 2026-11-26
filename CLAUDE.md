@@ -99,6 +99,13 @@ the handoff between sessions. Commands, standing rules, guards and layout: AGENT
   shows at cap-3; the action button names the cook ("DEV: PLATE"); no two tickets share a table
   number (`_make_ticket`); pan labels shrink before cutting words; stress plates narrow to the gap
   between cooks. STRESS PASS, test_table_numbers_unique, test_quit_warning_matches_end_turn.
+- Nov 26 build-73 reviews (first-timer 7, IGN-style 7.5, Claude 7.5; all three tripped on moving
+  cooks). Duff: "Yes" to the movement pass. With a cook picked, every other open station shows
+  "WALK n" or "TOO FAR" (hidden when they're spent); a walk that can't happen says why
+  (`_too_far`: "TOO FAR: MO NEEDS 4 MOVES, HAS 1" / "MO: NO MOVES LEFT", plus a floating word); a
+  tap on a cook's face always wins (`_portrait_pick`: the next station tap sends that cook instead
+  of picking the station's cook); an empty rail reads "END TURN / FINISH SERVICE"; RUSH says
+  "+1 STRESS" or "(FREE)" after Cast Iron; the top bar's OUT counts this service. MOVE, FINISH PASS.
 - Latest build: Releases -> `dev` -> `Rush.apk`.
 - Nov 24: Eyes (docs/EYES.md): a cloud session can run Rush, tap buttons, read the screen and
   screenshot it. `tools/eyes/smoke.json` plays a turn. Copied from the starter (Duff's OK).

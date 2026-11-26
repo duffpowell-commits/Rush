@@ -54,6 +54,7 @@ var twist_box: VBoxContainer   # the TONIGHT card while it's up
 var perks: Array = []        # upgrades owned tonight (upgrades.gd)
 var k: Kitchen
 var sel := 0                 # selected cook
+var _portrait_pick := false  # the last field tap picked a cook by face: the next station tap sends them
 var _pick_from := {}         # last station tap that switched cooks: {st, prev}; a 2nd tap there sends prev
 var pick_ix := -1            # dish on that ticket the player tapped: FIRE cooks exactly it (-1 = any)
 var pick_tid := 0            # ticket the player tapped: FIRE cooks for it first (0 = most urgent)
@@ -219,6 +220,8 @@ func _refresh_hud() -> void:
 		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after:
 			end_btn.text = "END TURN\n%s BURNS" % Kitchen.STATIONS[i]
 			break
+	if end_btn.text == "END TURN" and not k.done and not between and k.tickets.is_empty() and k.incoming.is_empty():
+		end_btn.text = "END TURN\nFINISH SERVICE"   # every table is out: say what the button does now
 	if end_btn.text == "END TURN":   # a turn earlier (stress pass): one more worked turn after this one and they quit
 		for c in k.crew.size():
 			if not k.crew[c].out and stress_after(c) == k.stress_cap - 1:
@@ -236,7 +239,7 @@ func _refresh_hud() -> void:
 		var cr: Dictionary = k.crew[sel]
 		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
 		var red := 1 if k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2) else 0
-		act_btn.text = "RUSH (QUITS!)" if cr.stress + k.rush_stress + red >= k.stress_cap else "RUSH +STRESS"
+		act_btn.text = "RUSH (FREE)" if k.rush_stress <= 0 else ("RUSH (QUITS!)" if cr.stress + k.rush_stress + red >= k.stress_cap else "RUSH +%d STRESS" % k.rush_stress)
 	elif a == "RUN" and k.tray > 1:   # a tray: say how many plates go out on this one action
 		var n := mini(k.tray, k.window.size() + (0 if k.crew[sel].hand.is_empty() else 1))
 		if n > 1:
@@ -436,6 +439,7 @@ func _draw_fx(f: Control) -> void:
 ## One minute of service passes.
 func end_turn() -> void:
 	_pick_from = {}   # a station handoff only counts on the very next field tap
+	_portrait_pick = false
 	if paused or over or between:
 		return
 	rail_off = 0   # a new turn opens on the most urgent tickets
@@ -918,9 +922,12 @@ func tap(p: Vector2) -> void:
 	for c in k.crew.size():
 		if not k.crew[c].out and cook_pos(c).distance_to(p) <= COOK_R + 6.0:
 			sel = c
+			_portrait_pick = true   # the next station tap sends this cook, never swaps to another
 			get_node("/root/Audio").sfx("click")
 			_after_move()
 			return
+	var portrait := _portrait_pick
+	_portrait_pick = false
 	for i in Kitchen.STATIONS.size():
 		if station_rect(i).grow(4.0).has_point(p):
 			if not k.is_open(i):
@@ -929,9 +936,12 @@ func tap(p: Vector2) -> void:
 				return
 			if pf.get("st", -1) == i and int(pf.prev) != sel and not k.crew[int(pf.prev)].out:
 				sel = int(pf.prev)   # tapped the same station again: the cook you had picked goes there after all
-				if k.move(sel, i):
+				var went := k.move(sel, i)
+				if went:
 					get_node("/root/Audio").sfx("click")
 				_after_move()
+				if not went:
+					_too_far(i)   # after the redraw, so the status line keeps the reason
 				return
 			if k.crew[sel].at == i:
 				act()
@@ -940,7 +950,7 @@ func tap(p: Vector2) -> void:
 			# dropped it"): a cook standing there first, else the cook who fired its pan. Only an
 			# empty station with nobody's pan on it sends the selected cook over. Tapping the same station
 			# again sends the cook you had picked instead (a handoff: MO plates DEV's burger).
-			var owner := station_cook(i)
+			var owner := -1 if portrait else station_cook(i)   # a cook you tapped by face goes where you send them
 			if owner >= 0 and owner != sel:
 				_pick_from = {"st": i, "prev": sel}
 				sel = owner
@@ -949,7 +959,26 @@ func tap(p: Vector2) -> void:
 			elif k.move(sel, i):
 				get_node("/root/Audio").sfx("click")
 				_after_move()
+			else:
+				_too_far(i)
 			return
+
+
+## A walk that can't happen says why, on the station and in the status line (it used to do nothing).
+func _too_far(i: int) -> void:
+	var cr: Dictionary = k.crew[sel]
+	if cr.out:
+		return
+	var need: int = k.walk_cost(cr.at, i)
+	var why := "%s: NO MOVES LEFT" % cr.name if cr.ap <= 0 else "TOO FAR: %s NEEDS %d MOVES, HAS %d" % [cr.name, need, cr.ap]
+	if note != null:
+		note.text = why
+	var r := station_rect(i)
+	_fx_text(Vector2(r.get_center().x, r.position.y - 6), "TOO FAR" if cr.ap > 0 else "NO MOVES", UI.key("bad"), 24)
+	get_node("/root/Audio").sfx("click", 0.7)
+	UI.buzz(30)
+	if field != null:
+		field.queue_redraw()
 
 
 ## The cook a tap on station i should pick: one standing there, else the one who fired its pan; -1 if none.
@@ -1104,7 +1133,7 @@ func _draw_field(f: Control) -> void:
 		_more_rect = mr.grow(8.0)   # a bit of slack for a thumb
 		f.draw_string(font, mr.position + Vector2(0, 19), mt, HORIZONTAL_ALIGNMENT_CENTER, more_w, UI.font_size(16), UI.BG)
 	_plate(f, Rect2(pad - 6, y0 - 36, f.size.x - 2 * pad + 12, 30))   # busy kitchen wall behind: text sits on plates
-	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [score, k.walked, lives_max, k.tips],
+	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [k.served, k.walked, lives_max, k.tips],
 		HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20, UI.font_size(18), UI.key("bad") if k.walked >= lives_max - 1 else ink)
 	f.draw_string(font, Vector2(pad, y0 + 240), next_line(font, f.size.x - 20 - more_w), HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20 - more_w, UI.font_size(18), ink)
 	# --- the line
@@ -1176,6 +1205,22 @@ func _draw_field(f: Control) -> void:
 			var up := _fit(font, "%d TO RUN" % k.window.size(), "RUN %d" % k.window.size(), r.size.x - 8, 15) if not k.window.is_empty() else _fit(font, "RUN HERE", "RUN", r.size.x - 8, 15)
 			f.draw_string(font, r.get_center() + Vector2(-r.size.x / 2, 10), up, HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
 				UI.font_size(15), UI.key("good") if not k.window.is_empty() else ink)
+	# Walk costs (movement pass, build-73 reviews: walking ate turns unseen): with a cook picked,
+	# every other open station says what getting there costs, or TOO FAR.
+	if not k.crew[sel].out and not k.done and k.crew[sel].ap > 0:   # spent: the button already says NO MOVES
+		var me: Dictionary = k.crew[sel]
+		for i in Kitchen.STATIONS.size():
+			if i == me.at or not k.is_open(i):
+				continue
+			var r := station_rect(i)
+			var cost: int = k.walk_cost(me.at, i)
+			var far: bool = cost > me.ap
+			var wl := "TOO FAR" if far else "WALK %d" % cost
+			wl = _fit(font, wl, "FAR" if far else "W%d" % cost, r.size.x - 12, 13)
+			var chip := Rect2(r.position.x + 6, r.position.y + 36, r.size.x - 12, 18)
+			f.draw_rect(chip, Color(0, 0, 0, 0.7))
+			f.draw_string(font, chip.position + Vector2(0, 14), wl, HORIZONTAL_ALIGNMENT_CENTER, chip.size.x,
+				UI.font_size(13), UI.key("bad") if far else UI.key("info"))
 	# --- crew
 	for c in k.crew.size():
 		var cr: Dictionary = k.crew[c]
