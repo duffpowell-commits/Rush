@@ -8,6 +8,10 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 17:00 UTC (Claude).
 
+## Studio mascot (Duff, Nov 26)
+- **the three-eyed fox is in every game as a rare cameo, not a pal**: a small event
+  that matters but never ruins a run. Duff OKs the fox art on a card before it's built. Rule + this game's idea: `docs/MASCOT.md`.
+
 ## Where it is right now
 - main = `c56d586` (PR #32, plan #3), build 89. 8.5 plan #4 is on the working branch (see below). Live builds:
   - Web: https://duffpowell-commits.github.io/Rush/ (gh-pages, pushed by CI on every main push;
