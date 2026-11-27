@@ -37,7 +37,7 @@ const LIVES := 3             # tables you can walk in one service
 ## Live sliders (DEV MENU -> TUNE). Applied when a service starts.
 const TUNE := {"ticket_time": [4.0, 16.0], "crew_ap": [1.0, 5.0], "stress_cap": [2.0, 12.0],
 	"service_turns": [8.0, 40.0], "first_tickets": [2.0, 14.0], "more_tickets": [0.0, 4.0],
-	"rush_stress": [0.0, 3.0], "breaks": [0.0, 3.0], "prep_every": [1.0, 8.0], "fox_cost": [0.0, 3.0], "late_ramp": [0.0, 3.0], "late_big_start": [6.0, 20.0]}
+	"rush_stress": [0.0, 3.0], "breaks": [0.0, 3.0], "prep_every": [1.0, 8.0], "fox_cost": [0.0, 3.0], "late_ramp": [0.0, 3.0], "late_big_start": [6.0, 20.0], "challenge_cap": [0.0, 5.0]}
 var ticket_time := 9.0
 var crew_ap := 3.0
 var stress_cap := 6.0
@@ -49,12 +49,14 @@ var breaks := 1.0            # second winds a service: the first cook who'd quit
 var more_tickets := 1.0
 var late_ramp := 1.0
 var late_big_start := 7.0
+var challenge_cap := 3.0
 var rush_stress := 1.0
 
 var level := 1               # service number
 var score := 0               # tickets out, whole night
 var lives := LIVES
 var lives_max := LIVES     # LIVES, +1 with SECOND CHANCE
+var chef_pressure := 0       # earned challenge within this saved night
 var cash := 0                # tips banked tonight, spent in the SHOP between services
 var twist_box: VBoxContainer   # the TONIGHT card while it's up
 var perks: Array = []        # upgrades owned tonight (upgrades.gd)
@@ -85,6 +87,7 @@ var pause_btn: Button
 var act_btn: Button
 var end_btn: Button
 var note: Label
+var feedback: Label
 var field: Control
 var sheet_box: VBoxContainer
 var _settings: Node
@@ -102,6 +105,7 @@ func _ready() -> void:
 		score = int(d.get("score", 0))
 		_night_before = score
 		cash = int(d.get("cash", 0))
+		chef_pressure = clampi(int(d.get("chef_pressure", 0)), 0, 5)
 		perks = (d.get("perks", []) as Array).filter(func(p): return Upgrades.ALL.has(p))
 		cook_xp = d.get("cook_xp", {}).duplicate()
 		var cp: Variant = d.get("cook_perks", {})
@@ -135,7 +139,7 @@ func _ready() -> void:
 ## score = finished services only; the service in progress rides along in "kitchen" (its own
 ## served count), so a reload can't count tickets twice.
 func state() -> Dictionary:
-	var d := {"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(),
+	var d := {"level": level, "score": _night_before, "cash": cash, "chef_pressure": chef_pressure, "perks": perks.duplicate(),
 		"cook_perks": cook_perks.duplicate(true), "cook_xp": cook_xp.duplicate(), "levelup": levelup, "gone": gone.duplicate()}
 	if k != null and not between and not over and not k.done:
 		d["kitchen"] = k.to_dict()
@@ -200,15 +204,31 @@ func _build() -> void:
 	act_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # big text sizes wrap onto two lines, not past the edge
 	act_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN   # a taller wrapped button grows up, never off the bottom
 	_corner(act_btn, left, false, 230)
-	note = UI.label("", 20, UI.ACCENT)
+	note = UI.label("", 15, UI.ACCENT)
 	note.anchor_right = 1.0
 	note.anchor_top = 1.0
 	note.anchor_bottom = 1.0
-	note.offset_top = -40 - 96 - 70
-	note.offset_bottom = -40 - 96 - 8
+	note.offset_top = -40 - 96 - 22
+	note.offset_bottom = -40 - 96
+	note.autowrap_mode = TextServer.AUTOWRAP_OFF
+	note.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	note.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(note)
-	get_node("/root/Subs").lift = 40 + 96 + 70 + 6   # sound captions sit above the status line, never on it
+	feedback = UI.label("", 15, UI.ACCENT)
+	feedback.add_theme_font_size_override("font_size", mini(UI.font_size(15), 19))
+	feedback.name = "FeedbackStrip"
+	feedback.anchor_right = 1.0
+	feedback.anchor_top = 0.0
+	feedback.anchor_bottom = 0.0
+	feedback.offset_left = 10
+	feedback.offset_right = -10
+	feedback.offset_top = station_rect(0).position.y - 51
+	feedback.offset_bottom = station_rect(0).position.y - 29
+	feedback.autowrap_mode = TextServer.AUTOWRAP_OFF
+	feedback.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	feedback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(feedback)
+	get_node("/root/Subs").compact_y = feedback.offset_top  # caption and feedback share a reserved strip
 	for sh in get_tree().get_nodes_in_group("sheet"):   # open sheets stay on top of the rebuilt HUD
 		if sh.get_parent() == self:
 			move_child(sh, -1)
@@ -254,7 +274,7 @@ func _refresh_hud() -> void:
 	var burns: Array[String] = []   # every pan that burns, not just the first (8.5 pass)
 	for i in (k.pans.size() if quits.is_empty() and brk.is_empty() else 0):
 		var p: Dictionary = k.pans[i]
-		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after:
+		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_limit(p):
 			burns.append(Kitchen.STATIONS[i])
 	if not burns.is_empty():
 		end_btn.text = "END TURN\n%s BURN%s" % [" + ".join(burns), "S" if burns.size() == 1 else ""]
@@ -266,7 +286,7 @@ func _refresh_hud() -> void:
 				end_btn.text = "END TURN\n%s NEAR QUIT" % k.crew[c].name
 				break
 	act_btn.text = a if a != "" else "TAP A STATION"   # nothing to do here: say how to move
-	if a == "" and not k.crew[sel].out and k.crew[sel].ap <= 0:   # say why: this cook is spent till END TURN
+	if a == "" and not k.crew[sel].out and k.crew[sel].ap <= 0 and not k.has_free_walk(sel):   # say why: this cook is spent till END TURN
 		act_btn.text = "%s: %s" % [k.crew[sel].name, "CHASING FOX" if k.crew[sel].get("fox", false) else ("ON BREAK" if k.crew[sel].get("brk", false) else "NO MOVES")]   # short: HUGE text wraps it over the status line
 	if a == "FIRE":   # say which table it cooks for, picked or not
 		var fp := k.fire_pick(sel, pick_tid, pick_ix)
@@ -281,7 +301,7 @@ func _refresh_hud() -> void:
 	elif a == "RUSH":   # warn when this rush would send the cook over the edge
 		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
 		var projected := stress_after(sel, true) + k.rush_cost()
-		act_btn.text = ("RUSH (TAKES 5)" if _wind_for(sel) else "RUSH (QUITS!)") if projected >= k.stress_cap else ("RUSH (FREE)" if k.rush_cost() <= 0 else "RUSH +%d STRESS" % k.rush_cost())
+		act_btn.text = ("RUSH (TAKES 5)" if _wind_for(sel) else "RUSH (QUITS!)") if projected >= k.stress_cap else ("RUSH 0 STRESS" if k.rush_cost() <= 0 else "RUSH +%d STRESS" % k.rush_cost())
 	elif a == "RUN" and k.tray > 1:   # a tray: say how many plates go out on this one action
 		var n := mini(k.tray, k.window.size() + (0 if k.crew[sel].hand.is_empty() else 1))
 		if n > 1:
@@ -303,7 +323,7 @@ func _refresh_hud() -> void:
 		elif then > k.crew[sel].stress:
 			act_btn.text += "\n+%d STRESS" % (then - k.crew[sel].stress)
 		elif k.crew[sel].stress >= k.stress_cap - 3 and stress_after(sel) < k.crew[sel].stress:   # no cost, but a tired cook gives up their rest
-			act_btn.text += "\nSKIPS REST"
+			act_btn.text += "\nREST -%d IF IDLE" % k.rest_recovery(sel)
 	act_btn.disabled = a == ""
 	if undo_btn != null:   # only while there's a move to take back this turn
 		undo_btn.visible = not _undo.is_empty() and not _undo_used and not k.done and not between and not over
@@ -328,9 +348,13 @@ func pace_adjust() -> Dictionary:
 
 
 ## Tickets the given service brings, after pace and the house's read.
+func challenge_bonus(n: int) -> int:
+	return clampi(chef_pressure, 0, int(challenge_cap)) if n >= 3 and int(_settings.get_value("pace")) != 0 else 0
+
+
 func tickets_for(n: int) -> int:
 	var base := int(first_tickets)
-	return Kitchen.count_for(maxi(mini(3, base), base + pace_adjust().tickets),
+	return Kitchen.count_for(maxi(mini(3, base), base + pace_adjust().tickets) + challenge_bonus(n),
 		int(more_tickets), n, int(late_ramp))
 
 
@@ -341,12 +365,16 @@ func _house_reads(g: String, lost: bool = false) -> String:
 	var was := ease
 	if lost or g in ["D", "F"]:
 		ease = mini(ease + 1, 2)
-	elif g in ["A+", "A"] and (k == null or k.service >= 2):   # service 1 is the lesson: acing it doesn't stack service 2 (8.5 plan #3)
+	elif g in ["A+", "A"] and (k == null or k.service >= 2):
 		ease = maxi(ease - 1, -2)
-	if ease == was:
-		return ""
-	_settings.set_value("house_ease", ease)
-	return "The floor eases off a ticket." if ease > was else "Word's out. Busier next service."
+	var old_pressure := chef_pressure
+	if int(_settings.get_value("pace")) != 0 or lost or g in ["D", "F"]:
+		chef_pressure = Kitchen.pressure_after(chef_pressure, g, k.service if k != null else level, lost, int(challenge_cap))
+	if ease != was:
+		_settings.set_value("house_ease", ease)
+	if int(_settings.get_value("pace")) != 0 and chef_pressure != old_pressure:
+		return "Chef challenge rises." if chef_pressure > old_pressure else "Chef challenge eased."
+	return "" if ease == was else ("The floor eases off a ticket." if ease > was else "Word's out. Busier next service.")
 
 
 func _new_service() -> void:
@@ -370,7 +398,8 @@ func _new_service() -> void:
 	k.stress_cap = u.stress_cap
 	k.turns = int(service_turns)
 	# Later services ramp independently of purchases.
-	k.first_tickets = maxi(mini(3, int(first_tickets)), int(first_tickets) + adj.tickets)
+	k.challenge = challenge_bonus(level)
+	k.first_tickets = maxi(mini(3, int(first_tickets)), int(first_tickets) + adj.tickets) + k.challenge
 	k.more_tickets = int(more_tickets)
 	k.late_ramp = int(late_ramp)
 	k.late_big_start = int(late_big_start)
@@ -449,6 +478,9 @@ var shake_amt := 0.0
 
 func _fx_text(pos: Vector2, text: String, col: Color, size: int = 28) -> void:
 	fx.append({"kind": "text", "pos": pos, "t": 0.0, "life": 0.9, "col": col, "text": text, "size": size})
+	if feedback != null:
+		feedback.text = text
+		feedback.add_theme_color_override("font_color", col)
 
 
 func _fx_ring(pos: Vector2, col: Color, r: float = 60.0) -> void:
@@ -512,6 +544,8 @@ func _tick_fx(dt: float) -> void:
 		elif e.kind == "text":
 			e.pos.y -= 40.0 * dt
 	fx = fx.filter(func(e): return e.t < e.life)
+	if feedback != null and not fx.any(func(e): return e.kind == "text"):
+		feedback.text = ""
 	if shake_amt > 0.0:
 		shake_amt = maxf(0.0, shake_amt - 30.0 * dt)
 		field.position = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake_amt
@@ -521,7 +555,6 @@ func _tick_fx(dt: float) -> void:
 
 
 func _draw_fx(f: Control) -> void:
-	var font := ThemeDB.fallback_font
 	for e in fx:
 		var k01: float = e.t / e.life
 		var a := 1.0 - k01
@@ -531,17 +564,8 @@ func _draw_fx(f: Control) -> void:
 			"ring":
 				f.draw_arc(e.pos, e.r * (0.4 + k01), 0.0, TAU, 32, Color(e.col, a), 6.0 * a + 1.0)
 			"text":
-				var sz := UI.font_size(e.size)
-				var pop := 1.0 + 0.3 * maxf(0.0, 1.0 - e.t * 8.0)   # a quick pop as it appears
-				var fs := int(sz * pop)
-				var w := font.get_string_size(e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-				while w > f.size.x - 12.0 and fs > 12:   # big text sizes: shrink to fit the field
-					fs -= 2
-					w = font.get_string_size(e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-				var p: Vector2 = e.pos - Vector2(w / 2.0, 0)
-				p.x = clampf(p.x, 6.0, f.size.x - w - 6.0)
-				f.draw_string_outline(font, p, e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 8, Color(MenuArt.PAPER_INK, a))
-				f.draw_string(font, p, e.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(e.col, a))
+				pass   # text is displayed in FeedbackStrip, not over tickets or station status
+
 
 
 ## One minute of service passes.
@@ -651,10 +675,10 @@ func _service_done() -> void:
 	between = true
 	_music_heat()   # the busy layer settles behind the grade sheet
 	level += 1
-	checkpoint()
 	var g := k.grade()
 	var parts := k.score_parts()
 	var read := _house_reads(g)
+	checkpoint()
 	_grade_sheet(g, parts, read, {"service": k.service, "served": k.served, "total": k.total, "walked": k.walked, "tips": k.tips, "bonus": bonus})
 	_shop_opened = false
 	var shop := UI.button("", func(): open_shop())
@@ -708,7 +732,9 @@ func _refresh_points() -> void:
 	if why == null:
 		return
 	var n := tickets_for(level)
-	why.text = _points_head + ("\n%s Next: %d tickets." % [_points_read, n] if _points_read != "" else "  Next: %d tickets." % n)
+	var extra := challenge_bonus(level)
+	var next := "Next: %d tickets%s." % [n, " (+%d chef)" % extra if extra > 0 else ""]
+	why.text = _points_head + ("\n%s %s" % [_points_read, next] if _points_read != "" else "  " + next)
 
 
 ## The grade lands like a stamp: big, then slammed down with a thud and a buzz.
@@ -745,7 +771,7 @@ func open_shop() -> void:
 	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
 	var bank := UI.label("Bank: $%d. Upgrades do not add tables." % cash, 20, UI.DIM)
 	if level < 4:
-		bank.text += "\nEntree tray + burners open S4."
+		bank.text += "\nCast iron S3; advanced kit S4." if level < 3 else "\nEntree tray, burners & safety net S4."
 	if not perks.has("temp"):   # build-84 review: nothing said a third cook was the answer to a busier night
 		var left := 2 - gone.size()
 		bank.text += "\nNext: %d tickets, %d cook%s. THIRD COOK helps." % [tickets_for(level), left, "" if left == 1 else "s"]
@@ -864,7 +890,7 @@ func mvp() -> String:
 	var best := ""
 	var best_acts := -1
 	for cr in k.crew:
-		if cr.name not in ["DEV", "MO", "JO"] or gone.has(cr.name) or cr.out or (cook_perks.get(cr.name, []) as Array).size() >= Kitchen.PERK_IDS.size():
+		if cr.name not in ["DEV", "MO", "JO"] or gone.has(cr.name) or cr.out or (Kitchen.PERK_IDS.all(func(id): return (cook_perks.get(cr.name, []) as Array).has(id)) and Kitchen.advanced_for(cook_perks.get(cr.name, []), level + 1) == ""):
 			continue
 		var a: int = int(cr.get("work", 0))
 		var fewer: bool = best != "" and (cook_perks.get(cr.name, []) as Array).size() < (cook_perks.get(best, []) as Array).size()
@@ -890,7 +916,10 @@ func perk_offer(nm: String) -> Array:
 		pool[j] = t
 	# Give a role-consistent choice first when possible, with alternatives from other paths.
 	var offer: Array = []
-	if not have.is_empty():
+	var advanced := Kitchen.advanced_for(have, level)
+	if advanced != "":
+		offer.append(advanced)
+	if not have.is_empty() and offer.is_empty():
 		for id in pool:
 			if Kitchen.perk_role(id) == Kitchen.cook_role(have):
 				offer.append(id)
@@ -921,9 +950,9 @@ func open_levelup() -> void:
 		(". Has: " + ", ".join(have.map(func(id): return Kitchen.PERKS[id][0]))) if not have.is_empty() else "."], 20, UI.DIM)
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(sub)
-	box.add_child(UI.label("One free perk action per turn.", 18, UI.DIM))
+	box.add_child(UI.label("One free perk action per turn, even at 0 moves.", 18, UI.DIM))
 	for id in perk_offer(nm):
-		var b := UI.button("%s: %s\n%s" % [Kitchen.perk_role(id), Kitchen.PERKS[id][0], Kitchen.PERKS[id][1]], func(): pick_perk(id), 88)
+		var b := UI.button("%s: %s\n%s" % ["ADVANCED" if Kitchen.ADVANCED.values().has(id) else Kitchen.perk_role(id), Kitchen.PERKS[id][0], Kitchen.PERKS[id][1]], func(): pick_perk(id), 88)
 		b.name = "Perk_" + id
 		b.add_theme_font_size_override("font_size", UI.font_size(20))
 		box.add_child(b)
@@ -987,6 +1016,8 @@ func tonight() -> void:
 	# still close this card afterwards.
 	var box := UI.sheet(self)
 	twist_box = box
+	if k.challenge > 0:
+		box.add_child(UI.label("CHEF CHALLENGE: +%d TABLES" % k.challenge, 22, UI.ACCENT))
 	if ns >= 0:   # the line grows: a station opens tonight, with its dishes
 		var dishes: Array = Kitchen.DISHES.keys().filter(func(d): return Kitchen.DISHES[d].st == ns)
 		var opened := UI.label("NEW STATION: " + Kitchen.STATIONS[ns], 30, UI.ACCENT)
@@ -1042,9 +1073,9 @@ func bot_step() -> bool:
 		pick_ix = -1
 		var what := k.action_here(c, false)
 		if what != "":
-			var ap_was: int = k.crew[c].ap
+			var acts_was: int = k.crew[c].acts
 			act()
-			if k.crew[c].ap < ap_was:
+			if k.crew[c].acts > acts_was:
 				return true
 			break   # the action didn't take: end the turn rather than retry it forever
 		var goal: int = k._bot_goal(c)
@@ -1168,8 +1199,10 @@ func _coach_next() -> void:
 				# phone (web, 9:19.5) stretches the canvas, and a fraction of its height landed on the station names
 				c.anchor_top = 0.0
 				c.anchor_bottom = 0.0
-				c.offset_top = station_rect(0).position.y - 50.0   # the field sits at the origin; fits the gap under the NEXT bar
-				c.offset_bottom = c.offset_top + 48.0
+				c.add_theme_font_size_override("font_size", 19)
+				c.add_theme_constant_override("outline_size", 3)
+				c.offset_top = station_rect(0).position.y - 28.0   # the field sits at the origin; fits the gap under the NEXT bar
+				c.offset_bottom = c.offset_top + 24.0
 		return
 
 
@@ -1272,12 +1305,14 @@ var _pointer := -2  # -2 none, -1 mouse, >=0 touch index
 var _press_pos := Vector2.ZERO
 var _drag_pos := Vector2.ZERO
 var _press_cook := -1
+var _press_rail := false
 var _dragging := false
 
 
 func _cancel_gesture() -> void:
 	_pointer = -2
 	_press_cook = -1
+	_press_rail = false
 	_dragging = false
 	if is_instance_valid(field):
 		field.queue_redraw()
@@ -1333,6 +1368,7 @@ func _begin_gesture(id: int, p: Vector2) -> void:
 	_press_pos = p
 	_drag_pos = p
 	_press_cook = cook_at(p)
+	_press_rail = p.y >= _rail_y() and p.y < _rail_y() + 200.0
 
 
 func _move_gesture(id: int, p: Vector2) -> void:
@@ -1350,9 +1386,17 @@ func _end_gesture(id: int, p: Vector2) -> void:
 	_move_gesture(id, p)
 	var c := _press_cook
 	var dragged := _dragging
+	var delta := p - _press_pos
+	var swipe := _press_rail and absf(delta.x) >= 45.0 and absf(delta.x) > absf(delta.y)
 	var short_tap := p.distance_to(_press_pos) < DRAG_THRESHOLD
 	_cancel_gesture()
-	if dragged:
+	if swipe:
+		if delta.x < 0 and rail_tickets().size() > 4:
+			rail_off += 4
+		elif delta.x > 0:
+			rail_off = maxi(0, rail_off - 4)
+		_after_move()
+	elif dragged:
 		var i := station_at(p)
 		if i >= 0 and _can_walk(c, i):
 			var before := _snap()
@@ -1375,7 +1419,7 @@ func station_at(p: Vector2) -> int:
 
 
 func _can_walk(c: int, i: int) -> bool:
-	return c >= 0 and c < k.crew.size() and not k.crew[c].out and k.crew[c].ap > 0 and k.is_open(i) and k.crew[c].at != i and k.move_cost(c, i) <= k.crew[c].ap
+	return c >= 0 and c < k.crew.size() and k.can_act(c, "MOVE") and k.is_open(i) and k.crew[c].at != i and k.move_cost(c, i) <= k.crew[c].ap
 
 
 func cook_visual_pos(c: int) -> Vector2:
@@ -1425,10 +1469,8 @@ func _select_cook(c: int) -> void:
 
 ## A tap at a point on the field (also used by the autoplay bot).
 func tap(p: Vector2) -> void:
-	if _more_rect.has_area() and _more_rect.has_point(p):   # page the rail
-		rail_off = rail_off + 4 if rail_tickets().size() > 4 else 0
-		get_node("/root/Audio").sfx("click")
-		_after_move()
+	if _more_rect.has_area() and _more_rect.has_point(p):
+		open_rail()
 		return
 	var rail := rail_tickets()
 	for i in mini(rail.size(), 4):
@@ -1463,6 +1505,38 @@ func tap(p: Vector2) -> void:
 		_after_move()
 	else:
 		_too_far(i)
+
+
+## Inspect every active order and the NEXT demand without advancing the service.
+func open_rail() -> void:
+	var box := UI.sheet(self, 500)
+	box.add_child(UI.label("ALL ORDERS", 30, UI.ACCENT))
+	box.add_child(UI.label(next_line(ThemeDB.fallback_font, 440), 18, UI.DIM))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size.y = 560
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(rows)
+	var orders: Array = k.tickets.duplicate()
+	orders.sort_custom(func(a, b): return a.time < b.time)
+	for i in orders.size():
+		var t: Dictionary = orders[i]
+		var parts: Array[String] = []
+		for it in t.items:
+			parts.append("%s — %s" % [it.dish, ("PREP " + Kitchen.STATIONS[int(it.needs)] if it.has("needs") else Kitchen.station_of(it.dish)) if it.state == "wait" else ("ON PASS" if it.state == "carried" else it.state.to_upper())])
+		var b := UI.button("T%d  |  %d MIN%s\n%s" % [t.table, t.time, ("  URGENT" if t.time <= 2 else "") + ("  VIP" if t.get("vip", false) else ("  BIG" if t.big else "")), "\n".join(parts)], func():
+			pick_tid = t.id
+			pick_ix = -1
+			rail_off = (i / 4) * 4
+			UI.close_sheet(box)
+			_after_move(), 92)
+		b.name = "Order_%d" % t.id
+		b.add_theme_font_size_override("font_size", UI.font_size(18))
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rows.add_child(b)
+	box.add_child(UI.button("DONE", func(): UI.close_sheet(box)))
 
 
 func _move_undoable(c: int, i: int) -> bool:
@@ -1507,7 +1581,7 @@ func _too_far(i: int) -> void:
 	if cr.out:
 		return
 	var need: int = k.move_cost(sel, i)
-	var why := "%s: NO MOVES LEFT" % cr.name if cr.ap <= 0 else "TOO FAR: %s NEEDS %d MOVES, HAS %d" % [cr.name, need, cr.ap]
+	var why := "%s: FREE WALK ONLY" % cr.name if cr.ap <= 0 and k.has_free_walk(sel) else ("%s: NO MOVES LEFT" % cr.name if cr.ap <= 0 else "TOO FAR: %s NEEDS %d MOVES, HAS %d" % [cr.name, need, cr.ap])
 	if note != null:
 		note.text = why
 	var r := station_rect(i)
@@ -1575,7 +1649,7 @@ func stress_after(c: int, as_acted := false, emptied := -1) -> int:
 	var s: int = cr.stress
 	for i in k.pans.size():
 		var p: Dictionary = k.pans[i]
-		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after and cr.at == i and i != emptied:
+		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_limit(p) and cr.at == i and i != emptied:
 			s += k.burn_stress(c)
 	return s + (1 if red else 0) + (1 if k.heat_turn() else 0) if (cr.acted or as_acted) else maxi(0, s - k.rest_recovery(c))
 
@@ -1707,12 +1781,12 @@ func _draw_field(f: Control) -> void:
 	_plate(f, Rect2(pad - 6, y0 + 218, f.size.x - 2 * pad + 12, 30))
 	var more_w := 0.0
 	_more_rect = Rect2()
-	if shown.size() > 4 or rail_off > 0:   # a tappable badge: page on to the hidden tickets, or back to the first ones
+	if k.tickets.size() > 4:   # tap to inspect all, swipe cards to page
 		var all_t: Array = k.tickets.duplicate()
 		all_t.sort_custom(func(a, b): return a.time < b.time)
 		var hid: Array = shown.slice(4) if shown.size() > 4 else all_t.slice(0, rail_off)
 		var hot := hid.any(func(t): return t.time <= 2)   # red when a ticket off screen is about to walk
-		var mt := ("+%d MORE" % hid.size()) if shown.size() > 4 else "BACK"
+		var mt := "ALL %d" % all_t.size()
 		if hot:
 			mt += "!"   # hot: a "!" as well as red
 		more_w = font.get_string_size(mt, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(16)).x + 16
@@ -1723,7 +1797,7 @@ func _draw_field(f: Control) -> void:
 	_plate(f, Rect2(pad - 6, y0 - 36, f.size.x - 2 * pad + 12, 30))   # busy kitchen wall behind: text sits on plates
 	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [k.served, k.walked, lives_max, k.tips],
 		HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20, UI.font_size(18), UI.key("bad") if k.walked >= lives_max - 1 else ink)
-	f.draw_string(font, Vector2(pad, y0 + 240), next_line(font, f.size.x - 20 - more_w), HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20 - more_w, UI.font_size(18), ink)
+	f.draw_string(font, Vector2(pad, y0 + 240), ("SWIPE %d–%d/%d" % [rail_off + 1, mini(rail_off + 4, k.tickets.size()), k.tickets.size()] if k.tickets.size() > 4 else next_line(font, f.size.x - 20 - more_w)), HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20 - more_w, UI.font_size(18), ink)
 	# --- the line
 	for i in Kitchen.STATIONS.size():
 		var r := station_rect(i)
@@ -1754,7 +1828,7 @@ func _draw_field(f: Control) -> void:
 		if i < k.pans.size() and not k.pans[i].is_empty():
 			var p: Dictionary = k.pans[i]
 			var up: bool = p.left <= 0
-			var burning: bool = up and p.sat >= k.burn_after
+			var burning: bool = up and p.sat >= k.burn_limit(p)
 			var tone := ("bad" if burning else "warn") if up else "info"
 			if not low and up:
 				f.draw_circle(r.get_center() + Vector2(0, 20), 46.0, Color(UI.key(tone), 0.2))
@@ -1822,7 +1896,7 @@ func _draw_field(f: Control) -> void:
 	# Walk costs (movement pass, build-73 reviews: walking ate turns unseen): with a cook picked,
 	# every other open station says what getting there costs, or TOO FAR.
 	var command_cook := _press_cook if _dragging else sel
-	if not k.crew[command_cook].out and not k.done and k.crew[command_cook].ap > 0:   # spent: the button already says NO MOVES
+	if not k.crew[command_cook].out and not k.done and k.can_act(command_cook, "MOVE"):   # spent: the button already says NO MOVES
 		var me: Dictionary = k.crew[command_cook]
 		for i in Kitchen.STATIONS.size():
 			if i == me.at or not k.is_open(i):
@@ -1858,7 +1932,7 @@ func _draw_field(f: Control) -> void:
 		var near_cap: bool = cr.stress >= k.stress_cap - 2   # 8.5 plan #3: the face itself warns, not just the meter
 		# 8.5 plan #2: who can still act, at a glance. A spent cook goes grey with DONE across the face;
 		# the rest wear their moves left as a big number (the pips alone went unseen).
-		var spent: bool = cr.ap <= 0
+		var spent: bool = cr.ap <= 0 and not k.free_available(c)
 		var tex: Texture2D = CREW_SHEETS.get(cr.name)
 		if tex != null:
 			var row := crew_frame(c)
@@ -1884,7 +1958,7 @@ func _draw_field(f: Control) -> void:
 			var bc := pos + Vector2(COOK_R - 7, -COOK_R - 5)   # bigger (build-84 review: the badge was easy to miss)
 			f.draw_circle(bc, 19.0, UI.key("info"))
 			f.draw_arc(bc, 19.0, 0.0, TAU, 28, Color(0, 0, 0, 0.85), 2.5)
-			f.draw_string(font, bc + Vector2(-19, 9), str(cr.ap), HORIZONTAL_ALIGNMENT_CENTER, 38, UI.font_size(25), Color(0.05, 0.06, 0.09))
+			f.draw_string(font, bc + Vector2(-19, 9), ("0+" if cr.ap == 0 else str(cr.ap)), HORIZONTAL_ALIGNMENT_CENTER, 38, UI.font_size(22 if cr.ap == 0 else 25), Color(0.05, 0.06, 0.09))
 		# Stress: one box per point up to the cap (full = they quit), and the count in words under it.
 		# Blind review #3: the thin bar went unseen, and stress is what loses most first nights.
 		var cap: int = maxi(1, k.stress_cap)
@@ -1902,7 +1976,7 @@ func _draw_field(f: Control) -> void:
 				f.draw_rect(box, UI.key("bad"), false, 2.0)
 			elif b >= after and b < cr.stress:
 				f.draw_rect(box, UI.key("good"), false, 2.0)
-		if cr.hand.is_empty() and (note == null or note.text == ""):   # (a carried plate's name, or the event line, sits here instead)
+		if cr.hand.is_empty():   # (a carried plate's name, or the event line, sits here instead)
 			# As wide as the gap to the next cook allows: two plates side by side ran together.
 			var pw := 100.0
 			for o in k.crew.size():
@@ -1988,7 +2062,7 @@ func pause() -> void:
 func open_crew_card() -> void:
 	var box := UI.sheet(self, 500)
 	box.add_child(UI.label("YOUR CREW", 30, UI.ACCENT))
-	box.add_child(UI.label("One free perk action per cook per turn.", 18, UI.DIM))
+	box.add_child(UI.label("One free perk action per cook per turn, even at 0 moves.", 18, UI.DIM))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size.y = 460
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -2076,7 +2150,7 @@ func game_over() -> void:
 
 ## Replay the service that was lost: same night, same bank and upgrades, fresh tickets.
 func retry_service() -> void:
-	_save.write({"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(),
+	_save.write({"level": level, "score": _night_before, "cash": cash, "chef_pressure": chef_pressure, "perks": perks.duplicate(),
 		"cook_perks": cook_perks.duplicate(true), "cook_xp": cook_xp.duplicate()})   # earned perks stay; a pending pick was for the service you beat; a walked-out cook comes back
 	get_node("/root/Loader").go("res://scenes/game.tscn")
 
@@ -2117,4 +2191,5 @@ func _go_back() -> void:
 func _exit_tree() -> void:
 	var subs := get_node_or_null("/root/Subs")
 	if subs != null:
-		subs.lift = 0.0   # other screens keep the default caption spot
+		subs.lift = 0.0
+		subs.compact_y = -1.0   # other screens keep the default caption spot

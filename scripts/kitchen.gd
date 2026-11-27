@@ -51,8 +51,14 @@ const PERKS := {
 	"recovery": ["QUICK RECOVERY", "Rest removes 3 stress"],
 	"steady": ["STEADY HAND", "Burns add 1 less stress"],
 	"prep": ["PREP HAND", "First PREP each turn is free"],
+	"heat_master": ["HEAT MASTER", "Specialty pans you fire burn 1m later"],
+	"pass_captain": ["PASS CAPTAIN", "First 2+ plate RUN calms you by 1"],
+	"deep_rest": ["DEEP REST", "Idle turns remove 4 stress"],
+	"long_stride": ["LONG STRIDE", "First 2+ stop walk saves 2 moves"],
 }
 const PERK_IDS := ["fast_0", "fast_1", "fast_2", "fast_3", "run", "plate", "walk", "recovery", "steady", "prep"]
+const ADVANCED := {"SPECIALIST": "heat_master", "EXPEDITOR": "pass_captain", "VETERAN": "deep_rest", "UTILITY": "long_stride"}
+
 
 const STATIONS := ["GRILL", "FRY", "SAUTE", "COLD", "PASS"]
 const PASS_IX := 4
@@ -92,6 +98,7 @@ var cast_iron := false
 var iron_used := false
 var late_ramp := 1
 var late_big_start := 7
+var challenge := 0    # high-performing kitchens get extra complexity; active service saves it
 var batch := 1           # dishes one FIRE cooks: 2 with the shop's DOUBLE BURNERS (same dish, any table)
 var prep_every := 3      # CROSS PREP: every Nth dish needs an ingredient prepped at another station (TUNE)
 var first_tickets := 7   # tickets in service 1 (8.5 plan #3 tried 8: the bot lost s1 26% vs 8%, so it stays 7) (Nov 25 stations: bot s1 ~8%, s2 ~32%, s3 ~48%, s4 ~71% game over, twists on)
@@ -163,7 +170,7 @@ func start(n: int, seed_value: int = 0) -> void:
 	var last_arrival := maxi(turns - ticket_time - 2, 4)
 	for i in count:
 		var arrive := int(round(float(i) * last_arrival / maxf(count - 1, 1)))
-		var big := i == count / 2 + 1 or (n >= late_big_start and i == count / 3 and i > 1)
+		var big := i == count / 2 + 1 or ((n >= late_big_start or (n >= 4 and challenge >= 2)) and i == count / 3 and i > 1)
 		incoming.append({"arrive": arrive, "ticket": _make_ticket(big)})
 	# No dead opening turns (build-76 review: "fire one dish, END TURN, END TURN"): the second ticket
 	# lands at 7:00 from service 2, and a minute in on service 1 while the first one teaches.
@@ -267,7 +274,7 @@ func walk_cost(from: int, to: int) -> int:
 
 func _cook(nm: String) -> Dictionary:
 	return {"name": nm, "at": 0, "ap": ap, "stress": 0, "out": false, "hand": {}, "acted": false, "brk": false,
-		"perks": (cook_perks.get(nm, []) as Array).duplicate(), "used": [], "acts": 0, "work": 0}
+		"perks": (cook_perks.get(nm, []) as Array).duplicate(), "used": [], "acts": 0, "work": 0, "captain_used": false}
 
 
 func has_perk(c: int, id: String) -> bool:
@@ -279,7 +286,7 @@ func is_free(c: int, what: String) -> bool:
 	if c < 0 or c >= crew.size() or not (crew[c].get("used", []) as Array).is_empty():
 		return false
 	var id: String = {"RUN": "run", "PLATE": "plate", "MOVE": "walk", "PREP": "prep"}.get(what, "-")
-	if has_perk(c, id):
+	if has_perk(c, id) or (what == "MOVE" and has_perk(c, "long_stride")):
 		return true
 	var s: int = crew[c].at
 	return what == "PLATE" and s < PASS_IX and not pans[s].is_empty() and has_perk(c, "fast_%d" % s) and cook_time(pans[s].dish) == 1
@@ -303,7 +310,11 @@ func _did(c: int, productive: bool = true) -> void:
 ## What walking cook c to station s costs, with LIGHT FEET's free first step.
 func move_cost(c: int, s: int) -> int:
 	var cost := walk_cost(crew[c].at, s)
-	return maxi(0, cost - 1) if cost > 0 and is_free(c, "MOVE") else cost
+	if cost <= 0 or not is_free(c, "MOVE"):
+		return cost
+	if cost >= 2 and has_perk(c, "long_stride"):
+		return maxi(0, cost - 2)
+	return maxi(0, cost - 1) if has_perk(c, "walk") else cost
 
 
 ## Minutes this cook's dish takes: the twist, then a station hand perk.
@@ -361,16 +372,32 @@ func ticket(id: int) -> Dictionary:
 
 # ---------------------------------------------------------------- actions (each returns true if it happened)
 
-func can_act(c: int) -> bool:
-	return not done and c >= 0 and c < crew.size() and not crew[c].out and crew[c].ap > 0
+func can_act(c: int, what: String = "") -> bool:
+	if done or c < 0 or c >= crew.size() or crew[c].out or crew[c].get("brk", false):
+		return false
+	if crew[c].ap > 0:
+		return true
+	if what != "":
+		return is_free(c, what)
+	return ["MOVE", "RUN", "PLATE", "PREP"].any(func(a): return is_free(c, a))
+
+
+func has_free_walk(c: int) -> bool:
+	if not can_act(c, "MOVE") or not is_free(c, "MOVE"):
+		return false
+	return range(STATIONS.size()).any(func(s): return s != crew[c].at and is_open(s) and move_cost(c, s) == 0)
+
+
+func free_available(c: int) -> bool:
+	return can_act(c) and crew[c].ap == 0 and (action_here(c) != "" or has_free_walk(c))
 
 
 ## Move cook c to station s. Costs 1 AP per station crossed.
 func move(c: int, s: int) -> bool:
-	if not can_act(c) or s < 0 or s >= STATIONS.size() or s == crew[c].at or not is_open(s):
+	if not can_act(c, "MOVE") or s < 0 or s >= STATIONS.size() or s == crew[c].at or not is_open(s):
 		return false
 	var cost: int = move_cost(c, s)
-	if cost > crew[c].ap or (cost == 0 and crew[c].ap <= 0):
+	if cost > crew[c].ap:
 		return false
 	if cost < walk_cost(crew[c].at, s):
 		crew[c].used.append("walk")
@@ -383,7 +410,7 @@ func move(c: int, s: int) -> bool:
 ## Fire a waiting dish at this cook's station: the picked ticket (tid) if it has one here, else the
 ## most urgent ticket.
 func fire(c: int, tid: int = 0, ix: int = -1) -> bool:
-	if not can_act(c):
+	if not can_act(c, "FIRE"):
 		return false
 	var s: int = crew[c].at
 	if s == PASS_IX or not pans[s].is_empty():
@@ -393,7 +420,7 @@ func fire(c: int, tid: int = 0, ix: int = -1) -> bool:
 		return false
 	pick.item.state = "cooking"
 	pans[s] = {"tid": pick.t.id, "dish": pick.item.dish, "left": cook_time_by(c, pick.item.dish), "sat": 0, "rushed": false,
-		"by": c}   # who fired it: tapping the station picks that cook (Duff, Nov 25)
+		"by": c, "grace": 1 if has_perk(c, "heat_master") and has_perk(c, "fast_%d" % s) else 0}   # who fired it: tapping the station picks that cook (Duff, Nov 25)
 	if batch_at(s) > 1:   # DOUBLE BURNERS: the same dish for the next most urgent table rides in this pan
 		var more: Array = []
 		while more.size() < batch_at(s) - 1:
@@ -461,7 +488,7 @@ static func prep_name(item: Dictionary) -> String:
 
 ## PREP: pull the ingredient here for a dish at another station (1 move, no pan). Then it can fire.
 func prep(c: int, tid: int = 0) -> bool:
-	if not can_act(c) or crew[c].at == PASS_IX:
+	if not can_act(c, "PREP") or crew[c].at == PASS_IX:
 		return false
 	var pick := prep_pick(crew[c].at, tid)
 	if pick.is_empty():
@@ -486,7 +513,7 @@ func _waiting_for(s: int, tid: int) -> Dictionary:
 
 ## Plate the finished dish at this cook's station: it goes up on the pass window.
 func plate(c: int) -> bool:
-	if not can_act(c):
+	if not can_act(c, "PLATE"):
 		return false
 	var s: int = crew[c].at
 	if s == PASS_IX or pans[s].is_empty() or pans[s].left > 0:
@@ -517,7 +544,7 @@ func rush_cost() -> int:
 
 
 func rest_recovery(c: int) -> int:
-	return 3 if has_perk(c, "recovery") else 2
+	return 4 if has_perk(c, "deep_rest") else (3 if has_perk(c, "recovery") else 2)
 
 
 func burn_stress(c: int) -> int:
@@ -525,11 +552,11 @@ func burn_stress(c: int) -> int:
 
 
 static func perk_role(id: String) -> String:
-	if id.begins_with("fast_"):
+	if id.begins_with("fast_") or id == "heat_master":
 		return "SPECIALIST"
-	if id in ["run", "plate"]:
+	if id in ["run", "plate", "pass_captain"]:
 		return "EXPEDITOR"
-	if id in ["recovery", "steady"]:
+	if id in ["recovery", "steady", "deep_rest"]:
 		return "VETERAN"
 	return "UTILITY"
 
@@ -538,8 +565,31 @@ static func cook_role(owned: Array) -> String:
 	return "TRAINEE" if owned.is_empty() else perk_role(str(owned[0]))
 
 
+static func advanced_for(owned: Array, service_number: int) -> String:
+	if owned.size() < 2 or service_number < 4 or owned.any(func(id): return ADVANCED.values().has(id)):
+		return ""
+	return str(ADVANCED.get(cook_role(owned), ""))
+
+
+## Chef challenge is earned by excellent play, not purchases. The first service is exempt.
+static func pressure_after(current: int, grade_name: String, service_number: int, lost: bool = false, cap: int = 3) -> int:
+	if lost:
+		return maxi(0, current - 2)
+	if service_number < 2:
+		return 0
+	if grade_name == "A+":
+		return mini(cap, current + 1)
+	if grade_name in ["D", "F"]:
+		return maxi(0, current - 1)
+	return clampi(current, 0, cap)
+
+
+func burn_limit(p: Dictionary) -> int:
+	return burn_after + int(p.get("grace", 0))
+
+
 func rush(c: int) -> bool:
-	if not can_act(c) or crew[c].at == PASS_IX:
+	if not can_act(c, "RUSH") or crew[c].at == PASS_IX:
 		return false
 	var p: Dictionary = pans[crew[c].at]
 	if p.is_empty() or p.left <= 0 or p.get("rushed", false):
@@ -558,7 +608,7 @@ func rush(c: int) -> bool:
 ## window plates up to `tray` in all. The most urgent table goes first and its other plates ride
 ## along before the next table's. A ticket with every dish run is out: tips by time left.
 func run(c: int) -> bool:
-	if not can_act(c) or crew[c].at != PASS_IX:
+	if not can_act(c, "RUN") or crew[c].at != PASS_IX:
 		return false
 	var plates: Array = []
 	if not crew[c].hand.is_empty():
@@ -580,6 +630,9 @@ func run(c: int) -> bool:
 	if plates.is_empty():
 		return false
 	_pay(c, "RUN")
+	if plates.size() >= 2 and has_perk(c, "pass_captain") and not crew[c].get("captain_used", false):
+		crew[c].stress = maxi(0, crew[c].stress - 1)
+		crew[c].captain_used = true
 	for h in plates:
 		_serve(h)
 	return true
@@ -610,19 +663,19 @@ func action_here(c: int, allow_rush: bool = true) -> String:
 		return ""
 	var s: int = crew[c].at
 	if s == PASS_IX:
-		return "RUN" if not crew[c].hand.is_empty() or not window.is_empty() else ""
+		return "RUN" if can_act(c, "RUN") and (not crew[c].hand.is_empty() or not window.is_empty()) else ""
 	var p: Dictionary = pans[s]
-	if not p.is_empty() and p.left <= 0:
+	if not p.is_empty() and p.left <= 0 and can_act(c, "PLATE"):
 		return "PLATE"
-	if p.is_empty() and not _waiting_for(s, 0).is_empty():
+	if p.is_empty() and not _waiting_for(s, 0).is_empty() and can_act(c, "FIRE"):
 		var cp := prep_pick(s)
 		if cp.is_empty() or _waiting_for(s, 0).t.time <= cp.t.time:
 			return "FIRE"
-	if not prep_pick(s).is_empty():
+	if not prep_pick(s).is_empty() and can_act(c, "PREP"):
 		return "PREP"
-	if p.is_empty() and not _waiting_for(s, 0).is_empty():
+	if p.is_empty() and not _waiting_for(s, 0).is_empty() and can_act(c, "FIRE"):
 		return "FIRE"
-	if allow_rush and not p.is_empty() and p.left > 0 and not p.get("rushed", false):
+	if allow_rush and can_act(c, "RUSH") and not p.is_empty() and p.left > 0 and not p.get("rushed", false):
 		return "RUSH"
 	return ""
 
@@ -663,7 +716,7 @@ func end_turn() -> void:
 			p.left -= 1
 		else:
 			p.sat += 1
-			if p.sat > burn_after:
+			if p.sat > burn_limit(p):
 				pans[s] = {}
 				for tid in [p.tid] + p.get("more", []):
 					var t := ticket(tid)
@@ -730,6 +783,7 @@ func end_turn() -> void:
 			_say("%s WALKED OUT" % cr.name)
 		cr.ap = 0 if cr.brk else ap
 		cr.used = []
+		cr.captain_used = false
 		cr.acted = false
 		cr.erase("fox")
 	iron_used = false
@@ -819,7 +873,7 @@ func to_dict() -> Dictionary:
 		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
 		"stress_cap": stress_cap, "burn_after": burn_after,
 		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic, "all_open": all_open,
-		"burns": burns, "speed": speed, "tray": tray, "breaks": breaks, "batch": batch, "batch_stations": batch_stations.duplicate(), "cast_iron": cast_iron, "iron_used": iron_used, "fox_turn": fox_turn, "fox_cost": fox_cost}
+		"burns": burns, "speed": speed, "tray": tray, "challenge": challenge, "breaks": breaks, "batch": batch, "batch_stations": batch_stations.duplicate(), "cast_iron": cast_iron, "iron_used": iron_used, "fox_turn": fox_turn, "fox_cost": fox_cost}
 
 
 ## Load a to_dict() back. JSON turns every number into a float, so ints are cast back here.
@@ -848,6 +902,7 @@ func from_dict(d: Dictionary) -> bool:
 	burns = int(d.get("burns", 0))
 	speed = float(d.get("speed", 0.0))
 	tray = clampi(int(d.get("tray", 1)), 1, 4)
+	challenge = clampi(int(d.get("challenge", 0)), 0, 5)
 	critic = str(d.get("critic", ""))
 	breaks = int(d.get("breaks", 1))
 	batch = clampi(int(d.get("batch", 1)), 1, 2)
@@ -865,14 +920,14 @@ func from_dict(d: Dictionary) -> bool:
 		crew.append({"name": str(c.name), "at": int(c.at), "ap": int(c.ap), "stress": int(c.stress),
 			"out": bool(c.out), "acted": bool(c.acted), "brk": bool(c.get("brk", false)),
 			"perks": (c.get("perks", []) as Array).map(func(x): return str(x)), "used": (c.get("used", []) as Array).map(func(x): return str(x)),
-			"acts": int(c.get("acts", 0)), "work": int(c.get("work", c.get("acts", 0))),
+			"acts": int(c.get("acts", 0)), "work": int(c.get("work", c.get("acts", 0))), "captain_used": bool(c.get("captain_used", false)),
 			"hand": {} if h.is_empty() else {"tid": int(h.tid), "dish": str(h.dish)}})
 		if c.get("fox", false):
 			crew[-1]["fox"] = true
 	pans = []
 	for p in d.pans:
 		pans.append({} if p.is_empty() else {"tid": int(p.tid), "dish": str(p.dish), "left": int(p.left), "sat": int(p.sat),
-			"rushed": bool(p.get("rushed", false)), "by": int(p.get("by", -1))})
+			"rushed": bool(p.get("rushed", false)), "by": int(p.get("by", -1)), "grace": int(p.get("grace", 0))})
 		if not pans[-1].is_empty() and p.has("more"):
 			pans[-1]["more"] = (p.more as Array).map(func(x): return int(x))
 	tickets = []

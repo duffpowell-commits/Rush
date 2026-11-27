@@ -13,6 +13,9 @@ var _left := 0.0
 ## A gameplay screen can lift captions off its own bottom HUD: pixels from the bottom edge to the
 ## caption's bottom (0 = the default spot). Sheets still move them to the top.
 var lift := 0.0
+## Optional compact gameplay strip (absolute canvas y); captions replace transient action text.
+var compact_y := -1.0
+var _compact_last := false
 
 
 func _ready() -> void:
@@ -66,7 +69,22 @@ func showing() -> String:
 func _process(dt: float) -> void:
 	# A modal sheet (pause, grade, game over) has its buttons where captions sit: move them to the top.
 	var sheet := get_tree().get_first_node_in_group("sheet") != null
-	if lift > 0.0 and not sheet:   # sits with its bottom edge lift px above the screen's bottom
+	var compact := compact_y >= 0.0 and not sheet
+	if compact != _compact_last:
+		_compact_last = compact
+		var style: StyleBoxFlat = _bg.get_theme_stylebox("panel")
+		style.content_margin_top = 1 if compact else 8
+		style.content_margin_bottom = 1 if compact else 8
+		_label.autowrap_mode = TextServer.AUTOWRAP_OFF if compact else TextServer.AUTOWRAP_WORD_SMART
+		_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS if compact else TextServer.OVERRUN_NO_TRIMMING
+		_label.add_theme_font_size_override("font_size", mini(UI.font_size(15), 19) if compact else UI.font_size(18 if _label.text.begins_with("[") else 22))
+	if compact:
+		_bg.anchor_top = 0.0
+		_bg.anchor_bottom = 0.0
+		_bg.grow_vertical = Control.GROW_DIRECTION_END
+		_bg.offset_top = compact_y
+		_bg.offset_bottom = compact_y
+	elif lift > 0.0 and not sheet:   # sits with its bottom edge lift px above the screen's bottom
 		_bg.anchor_top = 1.0
 		_bg.anchor_bottom = 1.0
 		_bg.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -87,7 +105,7 @@ func _process(dt: float) -> void:
 		var line: String = _queue.pop_front()
 		_label.text = line
 		var sound := line.begins_with("[")   # a sound, not speech: smaller and softer, so it reads as a caption
-		_label.add_theme_font_size_override("font_size", UI.font_size(18 if sound else 22))
+		_label.add_theme_font_size_override("font_size", mini(UI.font_size(15), 19) if compact else UI.font_size(18 if sound else 22))
 		_label.add_theme_color_override("font_color", Color(UI.ink(), 0.75) if sound else UI.ink())
 		_bg.visible = true
 		_left = 1.2 + 0.3 * line.split(" ").size()
