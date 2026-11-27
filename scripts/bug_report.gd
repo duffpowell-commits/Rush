@@ -5,6 +5,7 @@ extends RefCounted
 ##   BugReport.open(parent_node)
 
 const UI = preload("res://scripts/ui.gd")
+const MenuArt = preload("res://scripts/menu_art.gd")
 const Config = preload("res://scripts/config.gd")
 
 
@@ -44,6 +45,7 @@ static func issue_url(text: String) -> String:
 
 static func open(parent: Node) -> VBoxContainer:
 	var box := UI.sheet(parent, 480)
+	MenuArt.diner_sheet(box)
 	box.add_child(UI.label("REPORT A BUG", 28, UI.ACCENT))
 	box.add_child(UI.label("What went wrong? Build and phone details are added for you.", 18, UI.DIM))
 	var note := TextEdit.new()

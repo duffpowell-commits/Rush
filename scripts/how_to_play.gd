@@ -3,6 +3,7 @@ extends RefCounted
 ## Six short steps, each with the art the player will see on the line, then two tips.
 
 const UI = preload("res://scripts/ui.gd")
+const MenuArt = preload("res://scripts/menu_art.gd")
 
 const STEPS := [
 	["dish_burger", "Tickets are the enemy. Each one has a clock. Get its food out before it hits zero."],
@@ -17,6 +18,7 @@ const TIPS := "Tap a ticket to make FIRE cook it first, or tap one dish on it to
 
 static func open(parent: Node) -> VBoxContainer:
 	var box := UI.sheet(parent, 500)
+	MenuArt.diner_sheet(box)
 	box.add_child(UI.label("HOW TO PLAY", 30, UI.ACCENT))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 620)

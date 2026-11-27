@@ -706,6 +706,7 @@ func _service_done() -> void:
 ## Kept tight so it fits at HUGE text with walks, the critic and the house's read all showing.
 func _grade_sheet(g: String, parts: Dictionary, read: String, st: Dictionary) -> void:
 	sheet_box = UI.sheet(self)
+	MenuArt.diner_sheet(sheet_box)
 	sheet_box.add_child(UI.label("SERVICE %d DONE" % st.service, 34, UI.ACCENT))
 	var big := 72 if float(_settings.text_scale()) > 1.2 else 96
 	var grade := UI.label(g, big, UI.key("good" if g in ["A+", "A", "B"] else ("warn" if g == "C" else "bad")))
@@ -856,9 +857,10 @@ func buy(id: String, box: VBoxContainer) -> void:
 		open_shop()
 
 
-## One-time celebration: the existing flat-ink crew art, with Jo highlighted.
+## One-time celebration: the existing painted crew art, with Jo highlighted.
 func _crew_expanded() -> void:
 	var box := UI.sheet(self)
+	MenuArt.diner_sheet(box)
 	var head := UI.label("CREW EXPANDED", 34, UI.ACCENT)
 	head.name = "CrewExpanded"
 	box.add_child(head)
@@ -1030,6 +1032,7 @@ func tonight() -> void:
 	# Its own box, not sheet_box: a pause (back, focus-out) on top swaps sheet_box, and HEARD! must
 	# still close this card afterwards.
 	var box := UI.sheet(self)
+	MenuArt.diner_sheet(box)
 	twist_box = box
 	if k.challenge > 0:
 		box.add_child(UI.label("CHEF CHALLENGE: +%d TABLES" % k.challenge, 22, UI.ACCENT))
@@ -2086,6 +2089,7 @@ func pause() -> void:
 	checkpoint()
 	get_node("/root/Subs").clear()
 	sheet_box = UI.sheet(self)
+	MenuArt.diner_sheet(sheet_box)
 	sheet_box.add_child(UI.label("PAUSED", 30, UI.ACCENT))
 	if k.event != "":
 		sheet_box.add_child(UI.label("TONIGHT: " + Kitchen.EVENTS[k.event][0], 20, UI.DIM))
@@ -2166,6 +2170,7 @@ func game_over() -> void:
 	get_node("/root/Audio").sfx("gameover")
 	get_node("/root/Subs").cue("[game over sting]")
 	sheet_box = UI.sheet(self)
+	MenuArt.diner_sheet(sheet_box)
 	sheet_box.add_child(UI.label("GAME OVER", 40, UI.key("bad")))
 	var why := "THE WHOLE LINE WALKED OUT" if k.crew.all(func(c): return c.out) else "TOO MANY TABLES WALKED"
 	var reason := UI.label(why, 26, UI.key("bad"))

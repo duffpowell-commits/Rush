@@ -3,6 +3,7 @@ extends RefCounted
 ## Changing text size or high contrast rebuilds the sheet so the new look shows at once.
 
 const UI = preload("res://scripts/ui.gd")
+const MenuArt = preload("res://scripts/menu_art.gd")
 const Quality = preload("res://scripts/quality.gd")
 const StudioSplash = preload("res://branding/studio_splash.gd")
 
@@ -10,6 +11,7 @@ const StudioSplash = preload("res://branding/studio_splash.gd")
 static func open(parent: Node) -> VBoxContainer:
 	var s: Node = parent.get_node("/root/Settings")
 	var box := UI.sheet(parent, 500)
+	MenuArt.diner_sheet(box)
 	box.add_child(UI.label("SETTINGS", 28, UI.ACCENT))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 600)
@@ -56,12 +58,16 @@ static func open(parent: Node) -> VBoxContainer:
 	_toggle(col, s, "SHARE ANONYMOUS STATS", "share_stats")
 	col.add_child(UI.button("CONTROLS", func(): open_controls(parent)))
 	col.add_child(UI.button("CREDITS", func(): _open_credits(parent)))
+	# Long option names must wrap rather than widen the whole sheet at HUGE.
+	for button in col.find_children("*", "Button", true, false):
+		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(UI.button("DONE", func(): UI.close_sheet(box)))
 	return box
 
 
 static func _open_credits(parent: Node) -> void:
 	var box := UI.sheet(parent, 500)
+	MenuArt.diner_sheet(box)
 	box.add_child(UI.label("CREDITS", 28, UI.ACCENT))
 	box.add_child(UI.label("Published by " + StudioSplash.PUBLISHER))
 	box.add_child(UI.button("DONE", func(): UI.close_sheet(box)))
@@ -101,6 +107,7 @@ static func _slider(col: Control, s: Node, title: String, key: String, lo: float
 static func open_controls(parent: Node) -> VBoxContainer:
 	var c: Node = parent.get_node("/root/Controls")
 	var box := UI.sheet(parent, 500)
+	MenuArt.diner_sheet(box)
 	box.add_child(UI.label("CONTROLS", 28, UI.ACCENT))
 	var hint := UI.label("Tap an action, then press a key or pad button", 18, UI.DIM)
 	box.add_child(hint)

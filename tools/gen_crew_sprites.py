@@ -1,6 +1,9 @@
 """Original flat-ink body animation, derived from Rush's existing cook portraits.
-Run from repo root; frame cells 128x176, two frames each for idle/walk/work/serve/rest.
+Legacy flat-ink prototype only; does not reproduce the approved painted V4 art.
+Frame cells 128x176, four columns, four walk frames and two for other rows.
+Requires a separate output directory; never writes the shipped atlases.
 """
+import argparse
 from pathlib import Path
 from PIL import Image, ImageDraw
 
@@ -29,8 +32,8 @@ def draw_frame(name, state, phase):
     def limb(points, color, width):
         d.line(points, fill=INK, width=width+6, joint='curve')
         d.line(points, fill=color, width=width, joint='curve')
-    bob = (phase if state in ('idle', 'rest') else -phase*3)
-    stride = (12 if phase else -12) if state == 'walk' else 0
+    bob = (phase if state in ('idle', 'rest') else -phase*3) if state != 'walk' else (0, -2, 0, -2)[phase]
+    stride = (-12, -3, 12, 3)[phase] if state == 'walk' else 0
     # sturdy non-slip shoes and dark work trousers
     for x, step in ((52,stride),(76,-stride)):
         limb([(x,119),(x+step//2,140),(x+step,159)], '#34383e', 17)
@@ -72,9 +75,20 @@ def draw_frame(name, state, phase):
     return im
 
 
-for name in ('dev','mo','jo'):
-    sheet = Image.new('RGBA',(128*2,176*5))
-    for row,state in enumerate(('idle','walk','work','serve','rest')):
-        for phase in range(2):
-            sheet.alpha_composite(draw_frame(name,state,phase),(128*phase,176*row))
-    sheet.save(ART / 'crew' / f'{name}.png')
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output-dir', type=Path, required=True)
+    output = parser.parse_args().output_dir.resolve()
+    if output == (ART / 'crew').resolve() or output.is_relative_to(ART.resolve()):
+        parser.error('Use a scratch output directory outside assets/art; approved art is read-only.')
+    output.mkdir(parents=True, exist_ok=True)
+    for name in ('dev', 'mo', 'jo'):
+        sheet = Image.new('RGBA', (128 * 4, 176 * 5))
+        for row, state in enumerate(('idle', 'walk', 'work', 'serve', 'rest')):
+            for phase in range(4 if state == 'walk' else 2):
+                sheet.alpha_composite(draw_frame(name, state, phase), (128 * phase, 176 * row))
+        sheet.save(output / f'{name}.png')
+
+
+if __name__ == '__main__':
+    main()

@@ -112,9 +112,13 @@ static func paper_style() -> StyleBoxFlat:
 	return sb
 
 
-## The main call to action: filled flame orange with ink text, so it is the first thing a thumb finds.
+## The main call to action: red enamel; high contrast keeps the existing white treatment.
 static func primary(b: Button) -> Button:
 	var hc := UI.contrast()
+	if not hc:
+		diner_button(b)
+		b.add_theme_font_size_override("font_size", UI.font_size(26))
+		return b
 	for state in ["normal", "hover", "pressed", "focus"]:
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color.WHITE if hc else (FLAME.darkened(0.2) if state == "pressed" else FLAME)
@@ -136,7 +140,13 @@ static func diner_sheet(box: VBoxContainer) -> void:
 	if UI.contrast():
 		return
 	var root: Control = box.get_meta("sheet")
-	var t := root.theme
+	diner_theme(root.theme)
+
+
+## Shared menu chrome; leave the generic theme available for the studio splash and debug tools.
+static func diner_theme(t: Theme) -> void:
+	if UI.contrast():
+		return
 	var panel := t.get_stylebox("panel", "PanelContainer").duplicate() as StyleBoxFlat
 	panel.bg_color = Color("392321")
 	panel.border_color = PAPER
@@ -145,6 +155,8 @@ static func diner_sheet(box: VBoxContainer) -> void:
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		var b := t.get_stylebox(state, "Button").duplicate() as StyleBoxFlat
 		b.bg_color = PAPER if state != "disabled" else Color("806b60")
+		if state == "hover":
+			b.bg_color = PAPER.lightened(0.10)
 		if state == "pressed":
 			b.bg_color = Color("e4bda0")
 		b.border_color = Color("953b30") if state == "pressed" else Color("b86450")
@@ -153,6 +165,35 @@ static func diner_sheet(box: VBoxContainer) -> void:
 	for c in ["font_color", "font_pressed_color", "font_hover_color", "font_focus_color"]:
 		t.set_color(c, "Button", PAPER_INK)
 	t.set_color("font_disabled_color", "Button", Color("fff1dc"))
+	# Scroll tracks and text input share the warm charcoal / paper palette.
+	for kind in ["VScrollBar", "HScrollBar"]:
+		for state in ["scroll", "scroll_focus", "grabber", "grabber_highlight", "grabber_pressed"]:
+			var rail := StyleBoxFlat.new()
+			rail.bg_color = Color("514842") if state.begins_with("scroll") else (Color("e4bda0") if state == "grabber_pressed" else PAPER)
+			rail.set_corner_radius_all(4)
+			rail.set_content_margin_all(7)
+			t.set_stylebox(state, kind, rail)
+	for state in ["slider", "grabber_area", "grabber_area_highlight"]:
+		var track := StyleBoxFlat.new()
+		track.bg_color = Color("514842") if state == "slider" else Color("b86450")
+		track.set_corner_radius_all(6)
+		track.content_margin_top = 8
+		track.content_margin_bottom = 8
+		t.set_stylebox(state, "HSlider", track)
+	for state in ["normal", "focus", "read_only"]:
+		var input := StyleBoxFlat.new()
+		input.bg_color = PAPER if state != "read_only" else Color("d8cbbc")
+		input.border_color = Color("792e2a")
+		input.set_border_width_all(3)
+		input.set_corner_radius_all(5)
+		input.set_content_margin_all(10)
+		if state == "focus":
+			input.draw_center = false
+		t.set_stylebox(state, "TextEdit", input)
+	for name in ["font_color", "font_readonly_color", "caret_color", "font_selected_color"]:
+		t.set_color(name, "TextEdit", PAPER_INK)
+	t.set_color("font_placeholder_color", "TextEdit", Color("66534a"))
+	t.set_color("selection_color", "TextEdit", Color("e4bda0"))
 
 
 ## Gameplay enamel buttons: preserve touch targets, labels, button nodes and accessibility.
