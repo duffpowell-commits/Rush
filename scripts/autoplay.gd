@@ -1201,6 +1201,9 @@ func _polish_checks(game: Node) -> void:
 	await _tap_at(game.field.get_global_transform() * game._more_rect.get_center())
 	await _frames(3)
 	var all_ok: bool = _has_label("ALL ORDERS") and game.find_children("Order_*", "Button", true, false).size() == 6
+	var first_order: Button = game.find_children("Order_*", "Button", true, false).front()
+	var ticket_style := first_order.get_theme_stylebox("normal") as StyleBoxFlat
+	_check(ticket_style.bg_color == (Color.BLACK if UI.contrast() else preload("res://scripts/menu_art.gd").PAPER), "ORDER SHEET ART PASS (ticket paper or high contrast)")
 	await _shot("all_orders")
 	var order_pick: Button = game.find_child("Order_%d" % fifth_id, true, false)
 	await _click_node(order_pick)

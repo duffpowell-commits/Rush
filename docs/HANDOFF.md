@@ -8,6 +8,14 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
+## Nov 27 — All Orders paper tickets (Duff feedback)
+- Duff flagged the blue All Orders modal in the V4 preview; requested matching diner art before merge.
+- Presentation-only: reuse diner sheet and cream paper ticket chrome, red enamel DONE, urgent ticket red border plus existing URGENT text. High contrast stays intact; no rules, order sort, input, save or balance changes.
+- Applied the supplied All Orders ZIP to PR #47 head `d674d5d`. Kept the coach hint behind open sheets so it cannot cover urgent tickets, without changing normal modal stacking or pause controls.
+- Focused `tests/order_sheet_style.gd` and `tools/test.sh` (57/57) passed. Rendered `tests/order_sheet_render.gd` and `tests/mobile_touch.gd` passed at 360x640 and 390x780. The new render test verifies urgent text, scroll to final ticket (GUI wheel on virtual X11), simulated native touch selection and DONE, unchanged kitchen state, viewport fit, and pause stacking. It covers normal, high contrast, huge, and high contrast + huge.
+- Actual engine captures (top and bottom): [360x640](renders/all_orders/360x640/) and [390x780](renders/all_orders/390x780/). Diner paper, enamel controls, urgency border, and high contrast visually checked. This is not a hardware-phone or blind gameplay review.
+- Duff conditionally authorized merge after matching renders, full rendered autoplay, fresh exact-head code review and CI gates. Verify the main dev build SHA after merge. No CrazyGames submission or new blind review.
+
 ## Nov 27 — v4 visual handoff (Codex)
 - Isolated branch `codex/rush-handoff-v4` from build 109 / `6d389c5`; v4 ZIP supersedes v3.
   Both ZIP checksums verified and all 21 patch files applied. No conflicting Rush lease found.

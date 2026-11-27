@@ -1210,6 +1210,12 @@ func _coach_next() -> void:
 		if st[2].call():
 			var c := Coach.teach(self, st[0], st[1], st[3])
 			if c != null:
+				# A hint created while a sheet is open belongs behind the modal, not over its tickets.
+				# Keep normal sibling ordering so pause/settings can still stack above All Orders.
+				for child in get_children():
+					if child.is_in_group("sheet"):
+						move_child(c, child.get_index())
+						break
 				c.set_meta("turn", k.turn)   # in the gap between the NEXT line and the stations, in pixels: a taller
 				# phone (web, 9:19.5) stretches the canvas, and a fraction of its height landed on the station names
 				c.anchor_top = 0.0
@@ -1525,8 +1531,9 @@ func tap(p: Vector2) -> void:
 ## Inspect every active order and the NEXT demand without advancing the service.
 func open_rail() -> void:
 	var box := UI.sheet(self, 500)
-	box.add_child(UI.label("ALL ORDERS", 30, UI.ACCENT))
-	box.add_child(UI.label(next_line(ThemeDB.fallback_font, 440), 18, UI.DIM))
+	MenuArt.diner_sheet(box)
+	box.add_child(UI.label("ALL ORDERS", 30, UI.ACCENT if UI.contrast() else MenuArt.PAPER))
+	box.add_child(UI.label(next_line(ThemeDB.fallback_font, 440), 18, UI.DIM if UI.contrast() else MenuArt.PAPER))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size.y = 560
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1550,8 +1557,17 @@ func open_rail() -> void:
 		b.name = "Order_%d" % t.id
 		b.add_theme_font_size_override("font_size", UI.font_size(18))
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		MenuArt.diner_button(b, true)
+		if not UI.contrast() and t.time <= 2:
+			for state in ["normal", "hover", "pressed", "focus"]:
+				var ticket := b.get_theme_stylebox(state).duplicate() as StyleBoxFlat
+				ticket.border_color = UI.key("bad")
+				ticket.set_border_width_all(4)
+				b.add_theme_stylebox_override(state, ticket)
 		rows.add_child(b)
-	box.add_child(UI.button("DONE", func(): UI.close_sheet(box)))
+	var done_btn := UI.button("DONE", func(): UI.close_sheet(box))
+	MenuArt.diner_button(done_btn)
+	box.add_child(done_btn)
 
 
 func _move_undoable(c: int, i: int) -> bool:
