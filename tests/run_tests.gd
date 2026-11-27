@@ -1121,3 +1121,80 @@ func test_fox_cameo() -> void:
 	plain.with_events = false
 	plain.start(3, 9)
 	check(plain.fox_turn == -1, "plain services (sweeps) have no fox")
+
+
+func test_tap_command() -> void:
+	var game = load("res://scenes/game.tscn").instantiate()
+	root.add_child(game)
+	await process_frame
+	game.k.start(1, 7)
+	game.sel = 0
+	game._after_move()
+	var pos: Vector2 = game.cook_pos(1) + Vector2(80, 0)
+	game._cook_draw[1] = pos
+	var ap: int = game.k.crew[1].ap
+	game.tap(pos)
+	check(game.sel == 1 and game.k.crew[1].ap == ap, "visible moving cook selects without spending AP")
+	game.sel = 1
+	var cost: int = game.k.move_cost(1, 0)
+	game.tap(game.station_rect(0).get_center())
+	check(game.sel == 1 and game.k.crew[1].at == 0 and game.k.crew[1].ap == ap - cost, "occupied station moves selected cook")
+	var before: Dictionary = game.k.to_dict()
+	game.tap(game.station_rect(0).get_center())
+	check(game.k.to_dict() == before, "same station never acts")
+	game.tap(Vector2(1, game.station_rect(0).end.y + 150))
+	check(game.sel == 1 and game.k.to_dict() == before, "blank tap does not select or mutate")
+	game.queue_free()
+	await process_frame
+
+
+func test_drag_command() -> void:
+	var game = load("res://scenes/game.tscn").instantiate()
+	root.add_child(game)
+	await process_frame
+	game.k.start(1, 7)
+	game._cook_draw.clear()
+	game.sel = 0
+	var start: Vector2 = game.cook_visual_pos(1)
+	var target: Vector2 = game.station_rect(0).get_center()
+	var ap: int = game.k.crew[1].ap
+	var cost: int = game.k.move_cost(1, 0)
+	var down := InputEventScreenTouch.new()
+	down.index = 2
+	down.pressed = true
+	down.position = start
+	game._field_input(down)
+	var drag := InputEventScreenDrag.new()
+	drag.index = 2
+	drag.position = target
+	game._field_input(drag)
+	check(game._dragging and game.k.crew[1].ap == ap, "drag previews without committing")
+	var other := InputEventScreenTouch.new()
+	other.index = 3
+	other.position = target
+	game._field_input(other)
+	check(game._dragging, "second finger cannot end active drag")
+	var up := InputEventScreenTouch.new()
+	up.index = 2
+	up.position = target
+	game._field_input(up)
+	check(game.sel == 1 and game.k.crew[1].at == 0 and game.k.crew[1].ap == ap - cost, "valid touch release commits one move")
+	var snapshot: Dictionary = game.k.to_dict()
+	var mouse := InputEventMouseButton.new()
+	mouse.device = InputEvent.DEVICE_ID_EMULATION
+	mouse.button_index = MOUSE_BUTTON_LEFT
+	mouse.position = game.station_rect(1).get_center()
+	mouse.pressed = true
+	game._field_input(mouse)
+	mouse.pressed = false
+	game._field_input(mouse)
+	check(game.k.to_dict() == snapshot, "emulated mouse does not double commit")
+	game._cook_draw.clear()
+	down.position = game.cook_visual_pos(1)
+	game._field_input(down)
+	game._field_input(drag)
+	game._cancel_gesture()
+	game._field_input(up)
+	check(game.k.to_dict() == snapshot, "cancelled drag has no effect")
+	game.queue_free()
+	await process_frame

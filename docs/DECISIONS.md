@@ -72,3 +72,13 @@ Approved by Duff on Nov 21 ("Build the pre-push hook", "Build the shared ruleboo
 ## 2026-11-24: Godot 4.7.2 for every game
 
 - Duff: "Lets go 4.7 for all of our games." 4.7.2 is the latest stable; 4.7 adds a stable Godot Android Build Environment (GABE) for exporting from the phone, HDR output and AreaLight3D. CI `GODOT_VERSION`, `config/features` and the engine lines in AGENTS.md / standards moved from 4.6.3 to 4.7.2. Older entries below keep their original version numbers as history.
+
+## 2026-11-27 — Cook sprites and tap commands (approved plan PR #41)
+- Tap a visible cook to select, tap an open reachable station to walk (even if occupied), and use
+  the large action button to FIRE/PLATE/RUN/PREP/RUSH. Repeated station taps never act or swap cooks.
+- A deliberate drag from a cook previews the destination and cost and uses the same movement and
+  undo rules. Invalid releases, cancellation, resize, pause and focus loss spend nothing. Native
+  touch owns the gesture; emulated mouse events are ignored by the field, not by the rest of the UI.
+- Full-body Dev, Mo and Jo sprites are drawn with existing flat-ink art direction; see ART_LOG.
+  Hit tests share the visual position, including movement and bob. Kitchen and save code unchanged.
+- The previous blind review score is not changed. Fresh-eyes, CI and release verification remain gates.

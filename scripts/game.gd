@@ -1,8 +1,7 @@
 extends Control
 ## Rush: a dinner service played turn by turn. Rules live in scripts/kitchen.gd; this draws them
 ## and turns taps into moves.
-##   Tap a cook to pick them. Tap a station to walk there (1 action per station). Tap the station
-##   they stand at, or the big button, to FIRE / PLATE / RUN. END TURN = one minute passes.
+##   Tap a cook to pick them. Tap a station to walk there (1 action per station). Use the big button to FIRE / PLATE / RUN. END TURN = one minute passes.
 ##   Every ticket out is a point. 3 tables walked in one service = GAME OVER. A service survived =
 ##   a grade sheet, then the next service (level) = checkpoint (autosave). Pause / focus-out saves
 ##   the service in progress too (kitchen.to_dict), so CONTINUE picks up the same minute.
@@ -27,6 +26,7 @@ const ART_BG := preload("res://assets/art/bg_line.jpg")
 const ART_FOX := preload("res://assets/art/fox_cameo.png")   # the studio logo's fox head (Duff picked it, Nov 26)
 const ART_STATIONS := [preload("res://assets/art/station_grill.png"), preload("res://assets/art/station_fryer.png"),
 	preload("res://assets/art/station_saute.png"), preload("res://assets/art/station_cold.png"), preload("res://assets/art/station_pass.png")]
+const CREW_SHEETS := {"DEV": preload("res://assets/art/crew/dev.png"), "MO": preload("res://assets/art/crew/mo.png"), "JO": preload("res://assets/art/crew/jo.png")}
 const ART_COOKS := {"DEV": preload("res://assets/art/cook_dev.png"), "MO": preload("res://assets/art/cook_mo.png")}
 const ART_DISHES := {"BURGER": preload("res://assets/art/dish_burger.png"), "STEAK": preload("res://assets/art/dish_steak.png"),
 	"FRIES": preload("res://assets/art/dish_fries.png"), "WINGS": preload("res://assets/art/dish_wings.png"),
@@ -69,9 +69,8 @@ var sel := 0                 # selected cook
 var _fresh_turn := false     # END TURN's news is on the status line until the first move of the turn
 var _steam_t := 0.0          # time since the last steam redraw
 var _flinch := {}            # cook -> msec until their burn flinch ends
+var _crew_action := {}       # cook -> [action, animation expiry]
 var _cook_draw := {}         # cook -> where they're drawn: they walk there instead of jumping (8.5 pass)
-var _portrait_pick := false  # the last field tap picked a cook by face: the next station tap sends them
-var _pick_from := {}         # last station tap that switched cooks: {st, prev}; a 2nd tap there sends prev
 var pick_ix := -1            # dish on that ticket the player tapped: FIRE cooks exactly it (-1 = any)
 var pick_tid := 0            # ticket the player tapped: FIRE cooks for it first (0 = most urgent)
 var paused := false
@@ -157,6 +156,7 @@ func _on_setting(key: String) -> void:
 
 
 func _build() -> void:
+	_cancel_gesture()
 	for c in get_children():
 		if not c.is_in_group("sheet"):
 			c.queue_free()
@@ -166,6 +166,7 @@ func _build() -> void:
 	var f := field
 	field.draw.connect(func(): _draw_field(f))
 	field.gui_input.connect(_field_input)
+	field.resized.connect(_cancel_gesture)
 	add_child(field)
 	move_child(field, 0)
 	hud = UI.label("", 22)
@@ -348,9 +349,9 @@ func _house_reads(g: String, lost: bool = false) -> String:
 
 
 func _new_service() -> void:
-	_portrait_pick = false
+	_cancel_gesture()
+	_crew_action.clear()
 	_cook_draw = {}   # a new service starts with everyone at their spot, not sliding from last service's
-	_pick_from = {}   # a station handoff only counts on the very next field tap
 	rail_off = 0
 	_stress_turn = -1   # hint timers count this service's turns
 	_spent_turn = -1
@@ -387,10 +388,9 @@ func _new_service() -> void:
 	pick_ix = -1
 
 
-## Selected cook acts where they stand (the big button, or tapping their own station).
+## Selected cook acts where they stand (the big button only).
 func act() -> void:
-	_portrait_pick = false   # a button press ends a face pick, like a station handoff
-	_pick_from = {}   # a station handoff only counts on the very next field tap
+	_cancel_gesture()
 	if paused or over or between:
 		return
 	var what := k.action_here(sel)
@@ -403,6 +403,7 @@ func act() -> void:
 	var before := _snap()
 	if k.act_here(sel, pick_tid, true, pick_ix):
 		_undo = before
+		_crew_action[sel] = [what, Time.get_ticks_msec() + 700]
 		var snd: String = {"FIRE": "fire", "RUSH": "rush", "PLATE": "plate", "RUN": "bell", "PREP": "click"}.get(what, "good")
 		get_node("/root/Audio").sfx(snd, 1.12 if what == "RUN" and k.served > served_before else randf_range(0.95, 1.05))
 		if what == "RUSH":
@@ -488,12 +489,12 @@ func _tick_fx(dt: float) -> void:
 			var now := Time.get_ticks_msec()
 			for fc in k.crew.size():
 				var cr: Dictionary = k.crew[fc]
-				if (cr.acted and cr.ap > 0 and not cr.out) or now < int(_flinch.get(fc, 0)) or (cr.get("fox", false) and now - _fox_t0 < 4000):
+				if not cr.out:
 					moving = true
-		if walking or (moving and _steam_t >= 1.0 / 30.0):
+		if walking or (moving and _steam_t >= 1.0 / 15.0):
 			if not walking:
 				_steam_t = 0.0
-			field.queue_redraw()   # a walk in progress: every frame, it's short; a bob or flinch: 30 a second
+			field.queue_redraw()   # a walk in progress: every frame, it's short; sprite animation: 15 a second
 		elif _steam_t >= 1.0 / 15.0 and not _settings.get_value("low_graphics") and k.pans.any(func(p): return not p.is_empty()):
 			_steam_t = 0.0
 			field.queue_redraw()   # steam over a pan: 15 a second is plenty, and spares the battery
@@ -541,11 +542,10 @@ func _draw_fx(f: Control) -> void:
 
 ## One minute of service passes.
 func end_turn() -> void:
+	_cancel_gesture()
 	if not (paused or over or between):
 		_undo = {}   # a new turn: the last one is final, and the undo comes back
 		_undo_used = false
-	_pick_from = {}   # a station handoff only counts on the very next field tap
-	_portrait_pick = false
 	if paused or over or between:
 		return
 	rail_off = 0   # a new turn opens on the most urgent tickets
@@ -1046,7 +1046,7 @@ func _coach_steps() -> Array:
 		["end_turn", "TAP END TURN: COOK", func(): return k.pans.any(func(p): return not p.is_empty()),
 			func(): return k.turn > 0],
 		# 8.5 plan #2: taught on turn 2, not after the first table is out ("face vs station" confused service 1).
-		["switch", "TAP FACE, THEN STATION", func(): return k.turn >= 1 and k.crew.size() > 1 and not k.crew[1].out,
+		["switch", "TAP COOK, THEN STATION", func(): return k.turn >= 1 and k.crew.size() > 1 and not k.crew[1].out,
 			func(): return sel != 0 or k.crew.size() < 2 or k.crew[1].out],
 		# Fresh-player review: the action dots over each cook were never noticed. After the first END TURN.
 		["dots", "NUMBER = MOVES LEFT", func(): return k.turn >= 1,
@@ -1195,23 +1195,172 @@ func cook_pos(c: int) -> Vector2:
 	# Keep the pair on screen at the end stations: clamp the pair's centre, not each cook.
 	var edge := COOK_R + 8.0 + half
 	var cx := clampf(r.get_center().x, edge, field.size.x - edge)
-	return Vector2(cx + off, r.end.y + 70.0)
+	return Vector2(cx + off, r.end.y + 60.0)
 
 
 const COOK_R := 36.0         # 72 wide: the touch rule
 
 
+# One owner per gesture. Native touch is handled directly; Godot's emulated mouse
+# events remain enabled for normal UI buttons but must not repeat field commands.
+const DRAG_THRESHOLD := 18.0
+var _pointer := -2  # -2 none, -1 mouse, >=0 touch index
+var _press_pos := Vector2.ZERO
+var _drag_pos := Vector2.ZERO
+var _press_cook := -1
+var _dragging := false
+
+
+func _cancel_gesture() -> void:
+	_pointer = -2
+	_press_cook = -1
+	_dragging = false
+	if is_instance_valid(field):
+		field.queue_redraw()
+
+
 func _field_input(e: InputEvent) -> void:
 	if paused or over or between:
+		_cancel_gesture()
 		return
-	if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT:
-		tap(e.position)
+	if e.device == InputEvent.DEVICE_ID_EMULATION:
+		return
+	if e is InputEventScreenTouch:
+		if e.canceled:
+			if _pointer == e.index:
+				_cancel_gesture()
+		elif e.pressed:
+			_begin_gesture(e.index, e.position)
+		else:
+			_end_gesture(e.index, e.position)
+	elif e is InputEventScreenDrag:
+		_move_gesture(e.index, e.position)
+	elif e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+		if e.pressed:
+			_begin_gesture(-1, e.position)
+		else:
+			_end_gesture(-1, e.position)
+	elif e is InputEventMouseMotion:
+		_move_gesture(-1, e.position)
+
+
+# Capture motion and release from the owning pointer even when it leaves the field
+# or crosses a HUD button. Only a field press can initiate a command.
+func _input(e: InputEvent) -> void:
+	if _pointer == -2 or not is_instance_valid(field):
+		return
+	if e.device == InputEvent.DEVICE_ID_EMULATION:
+		return
+	var owned := false
+	if e is InputEventScreenTouch or e is InputEventScreenDrag:
+		owned = e.index == _pointer and (e is InputEventScreenDrag or not e.pressed)
+	elif e is InputEventMouseMotion or e is InputEventMouseButton:
+		owned = _pointer == -1 and (e is InputEventMouseMotion or (e.button_index == MOUSE_BUTTON_LEFT and not e.pressed))
+	if owned:
+		var local: InputEvent = field.make_input_local(e)
+		_field_input(local)
+		get_viewport().set_input_as_handled()
+
+
+func _begin_gesture(id: int, p: Vector2) -> void:
+	if _pointer != -2:
+		return
+	_pointer = id
+	_press_pos = p
+	_drag_pos = p
+	_press_cook = cook_at(p)
+
+
+func _move_gesture(id: int, p: Vector2) -> void:
+	if _pointer != id:
+		return
+	_drag_pos = p
+	if _press_cook >= 0 and p.distance_to(_press_pos) >= DRAG_THRESHOLD:
+		_dragging = true
+	field.queue_redraw()
+
+
+func _end_gesture(id: int, p: Vector2) -> void:
+	if _pointer != id:
+		return
+	_move_gesture(id, p)
+	var c := _press_cook
+	var dragged := _dragging
+	var short_tap := p.distance_to(_press_pos) < DRAG_THRESHOLD
+	_cancel_gesture()
+	if dragged:
+		var i := station_at(p)
+		if i >= 0 and _can_walk(c, i):
+			var before := _snap()
+			sel = c
+			if k.move(c, i):
+				_undo = before
+				_after_move()
+	elif short_tap:
+		if c >= 0 and not k.crew[c].out:
+			_select_cook(c)
+		else:
+			tap(p)
+
+
+func station_at(p: Vector2) -> int:
+	for i in Kitchen.STATIONS.size():
+		if station_hit(i).has_point(p):
+			return i
+	return -1
+
+
+func _can_walk(c: int, i: int) -> bool:
+	return c >= 0 and c < k.crew.size() and not k.crew[c].out and k.crew[c].ap > 0 and k.is_open(i) and k.crew[c].at != i and k.move_cost(c, i) <= k.crew[c].ap
+
+
+func cook_visual_pos(c: int) -> Vector2:
+	var pos: Vector2 = _cook_draw.get(c, cook_pos(c))
+	var cr: Dictionary = k.crew[c]
+	if not _settings.get_value("low_graphics") and not cr.out:
+		var tt := Time.get_ticks_msec() / 1000.0
+		if cr.acted and cr.ap > 0:
+			pos.y += sin(tt * 7.0 + c * 1.7) * 3.0
+		if Time.get_ticks_msec() < int(_flinch.get(c, 0)):
+			pos.x += sin(tt * 70.0) * 5.0
+	return pos
+
+
+# Rows of the 2-column crew atlas: idle, walk, work, serve, rest.
+func crew_frame(c: int) -> int:
+	var cr: Dictionary = k.crew[c]
+	if _cook_draw.get(c, cook_pos(c)).distance_to(cook_pos(c)) > 2.0:
+		return 1
+	var recent: Array = _crew_action.get(c, [])
+	if not recent.is_empty() and Time.get_ticks_msec() < int(recent[1]):
+		return 3 if recent[0] in ["PLATE", "RUN"] else 2
+	if cr.ap <= 0 or cr.stress >= k.stress_cap - 2:
+		return 4
+	return 2 if cr.acted else 0
+
+
+func cook_at(p: Vector2) -> int:
+	var best := -1
+	var distance := INF
+	for c in k.crew.size():
+		if k.crew[c].out:
+			continue
+		var pos := cook_visual_pos(c)
+		var d := pos.distance_squared_to(p)
+		if Rect2(pos - Vector2(43, 55), Vector2(86, 108)).has_point(p) and d < distance:
+			best = c
+			distance = d
+	return best
+
+
+func _select_cook(c: int) -> void:
+	sel = c
+	get_node("/root/Audio").sfx("click")
+	_after_move()
 
 
 ## A tap at a point on the field (also used by the autoplay bot).
 func tap(p: Vector2) -> void:
-	var pf := _pick_from   # only the very next tap can use it
-	_pick_from = {}
 	if _more_rect.has_area() and _more_rect.has_point(p):   # page the rail
 		rail_off = rail_off + 4 if rail_tickets().size() > 4 else 0
 		get_node("/root/Audio").sfx("click")
@@ -1232,67 +1381,24 @@ func tap(p: Vector2) -> void:
 			get_node("/root/Audio").sfx("click")
 			_after_move()
 			return
-	for c in k.crew.size():
-		if not k.crew[c].out and cook_pos(c).distance_to(p) <= COOK_R + 6.0:
-			sel = c
-			_portrait_pick = true   # the next station tap sends this cook, never swaps to another
-			get_node("/root/Audio").sfx("click")
-			_after_move()
-			return
-	# Anywhere in the strip under a station picks the cook standing there (8.5 pass: cooks sit
-	# between columns and a tap where they just were missed).
-	for i in Kitchen.STATIONS.size():
-		var sr := station_rect(i)
-		if Rect2(sr.position.x - 4.0, sr.end.y, sr.size.x + 8.0, 150.0).has_point(p):
-			var best := -1
-			for c in k.crew.size():
-				if not k.crew[c].out and k.crew[c].at == i and (best < 0 or cook_pos(c).distance_to(p) < cook_pos(best).distance_to(p)):
-					best = c
-			if best >= 0:
-				sel = best
-				_portrait_pick = true
-				get_node("/root/Audio").sfx("click")
-				_after_move()
-				return
-	var portrait := _portrait_pick
-	_portrait_pick = false
-	for i in Kitchen.STATIONS.size():
-		if station_hit(i).has_point(p):
-			if not k.is_open(i):
-				if note != null:
-					note.text = "%s OPENS IN SERVICE %d" % [Kitchen.STATIONS[i], Kitchen.OPENS[i]]
-				return
-			if pf.get("st", -1) == i and int(pf.prev) != sel and not k.crew[int(pf.prev)].out:
-				var before := _snap()   # before sel changes, so UNDO gives back the cook you had selected
-				sel = int(pf.prev)   # tapped the same station again: the cook you had picked goes there after all
-				var went := k.move(sel, i)
-				if went:
-					_undo = before
-				if went:
-					get_node("/root/Audio").sfx("click")
-				_after_move()
-				if not went:
-					_too_far(i)   # after the redraw, so the status line keeps the reason
-				return
-			if k.crew[sel].at == i:
-				act()
-				return
-			# Tap a station, get its cook (Duff, Nov 25: "tap the station and get the employee that
-			# dropped it"): a cook standing there first, else the cook who fired its pan. Only an
-			# empty station with nobody's pan on it sends the selected cook over. Tapping the same station
-			# again sends the cook you had picked instead (a handoff: MO plates DEV's burger).
-			var owner := -1 if portrait else station_cook(i)   # a cook you tapped by face goes where you send them
-			if owner >= 0 and owner != sel:
-				_pick_from = {"st": i, "prev": sel}
-				sel = owner
-				get_node("/root/Audio").sfx("click")
-				_after_move()
-			elif _move_undoable(sel, i):
-				get_node("/root/Audio").sfx("click")
-				_after_move()
-			else:
-				_too_far(i)
-			return
+	var cook := cook_at(p)
+	if cook >= 0:
+		_select_cook(cook)
+		return
+	var i := station_at(p)
+	if i < 0:
+		return
+	if not k.is_open(i):
+		if note != null:
+			note.text = "%s OPENS IN SERVICE %d" % [Kitchen.STATIONS[i], Kitchen.OPENS[i]]
+		return
+	if k.crew[sel].at == i:
+		return  # actions are committed only through the contextual button
+	if _move_undoable(sel, i):
+		get_node("/root/Audio").sfx("click")
+		_after_move()
+	else:
+		_too_far(i)
 
 
 func _move_undoable(c: int, i: int) -> bool:
@@ -1310,6 +1416,7 @@ func _snap() -> Dictionary:
 ## Take back the last move of this turn, once a turn (8.5 plan #4, IGN build 89: a mis-tap cost a move
 ## with no way back). END TURN can't be taken back: that's the turn's real commitment.
 func undo() -> void:
+	_cancel_gesture()
 	if _undo.is_empty() or _undo_used or paused or over or between:
 		return
 	var back := Kitchen.new()
@@ -1323,8 +1430,7 @@ func undo() -> void:
 	_undo = {}
 	_undo_used = true
 	_cook_draw = {}
-	_pick_from = {}
-	_portrait_pick = false
+	_crew_action.clear()
 	get_node("/root/Audio").sfx("click", 0.8)
 	get_node("/root/Subs").cue("[undo]")
 	UI.buzz(15)
@@ -1346,18 +1452,6 @@ func _too_far(i: int) -> void:
 	UI.buzz(30)
 	if field != null:
 		field.queue_redraw()
-
-
-## The cook a tap on station i should pick: one standing there, else the one who fired its pan; -1 if none.
-func station_cook(i: int) -> int:
-	for c in k.crew.size():
-		if not k.crew[c].out and k.crew[c].at == i:
-			return c
-	if i < k.pans.size() and not k.pans[i].is_empty():
-		var by: int = k.pans[i].get("by", -1)
-		if by >= 0 and by < k.crew.size() and not k.crew[by].out:
-			return by
-	return -1
 
 
 ## Draw a texture inside a box, whole, keeping its shape (letterboxed, centred).
@@ -1663,13 +1757,14 @@ func _draw_field(f: Control) -> void:
 				UI.font_size(15), UI.key("good") if not k.window.is_empty() else ink)
 	# Walk costs (movement pass, build-73 reviews: walking ate turns unseen): with a cook picked,
 	# every other open station says what getting there costs, or TOO FAR.
-	if not k.crew[sel].out and not k.done and k.crew[sel].ap > 0:   # spent: the button already says NO MOVES
-		var me: Dictionary = k.crew[sel]
+	var command_cook := _press_cook if _dragging else sel
+	if not k.crew[command_cook].out and not k.done and k.crew[command_cook].ap > 0:   # spent: the button already says NO MOVES
+		var me: Dictionary = k.crew[command_cook]
 		for i in Kitchen.STATIONS.size():
 			if i == me.at or not k.is_open(i):
 				continue
 			var r := station_rect(i)
-			var cost: int = k.move_cost(sel, i)
+			var cost: int = k.move_cost(command_cook, i)
 			var far: bool = cost > me.ap
 			# The chip takes over the name row while a cook is picked (name + cost): above it a coach hint
 			# hid it, at the foot it hid UP! / PLATE NOW (fresh-eyes PR #30).
@@ -1684,13 +1779,7 @@ func _draw_field(f: Control) -> void:
 	# --- crew
 	for c in k.crew.size():
 		var cr: Dictionary = k.crew[c]
-		var pos: Vector2 = _cook_draw.get(c, cook_pos(c))   # mid-walk: drawn on the way, tapped at the spot
-		if not low and not cr.out:   # 8.5 plan #4 (IGN: cooks were badges): a working cook bobs, a burned one flinches
-			var tt := Time.get_ticks_msec() / 1000.0
-			if cr.acted and cr.ap > 0:
-				pos.y += sin(tt * 7.0 + c * 1.7) * 3.0
-			if Time.get_ticks_msec() < int(_flinch.get(c, 0)):
-				pos.x += sin(tt * 70.0) * 5.0
+		var pos := cook_visual_pos(c)
 		if cr.out:   # an empty spot where they stood: name + QUIT, right where you'd look for them
 			if k.crew.any(func(o): return not o.out and cook_pos(k.crew.find(o)).distance_to(pos) < COOK_R * 2.0):
 				continue   # a working cook stands here now: never cover them (blind review #3)
@@ -1700,28 +1789,27 @@ func _draw_field(f: Control) -> void:
 			f.draw_string(font, pos + Vector2(-COOK_R - 20, 16), "QUIT", HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2 + 40, UI.font_size(15), UI.key("bad"))
 			continue
 		if c == sel:
-			f.draw_circle(pos, COOK_R + 7.0, UI.ACCENT)
-		f.draw_circle(pos, COOK_R, Color("2b3448"))
+			f.draw_arc(pos, COOK_R + 7.0, 0.0, TAU, 48, UI.ACCENT, 4.0)
+			f.draw_rect(Rect2(pos - Vector2(39, 54), Vector2(78, 104)), UI.ACCENT, false, 2.0)
 		var near_cap: bool = cr.stress >= k.stress_cap - 2   # 8.5 plan #3: the face itself warns, not just the meter
 		# 8.5 plan #2: who can still act, at a glance. A spent cook goes grey with DONE across the face;
 		# the rest wear their moves left as a big number (the pips alone went unseen).
 		var spent: bool = cr.ap <= 0
-		if ART_COOKS.has(cr.name):
-			f.draw_texture_rect(ART_COOKS[cr.name], Rect2(pos - Vector2(COOK_R, COOK_R), Vector2(COOK_R, COOK_R) * 2.0), false,
-				Color(0.6, 0.6, 0.6) if spent else Color.WHITE)
-			var np := Rect2(pos.x - 26, pos.y + COOK_R - 22, 52, 22)
-			if near_cap:
-				f.draw_rect(np, UI.key("bad"))
-			else:
-				_plate(f, np)
-			f.draw_string(font, pos + Vector2(-COOK_R, COOK_R - 5), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(15),
-				UI.BG if near_cap else (UI.DIM if spent else ink))
+		var tex: Texture2D = CREW_SHEETS.get(cr.name)
+		if tex != null:
+			var row := crew_frame(c)
+			var frame := 0 if low else int(Time.get_ticks_msec() / 180.0) % 2
+			f.draw_texture_rect_region(tex, Rect2(pos - Vector2(37, 54), Vector2(74, 102)), Rect2(frame * 128, row * 176, 128, 176), Color(0.65, 0.65, 0.65) if spent else Color.WHITE)
+		elif ART_COOKS.has(cr.name):
+			_draw_fit(f, ART_COOKS[cr.name], Rect2(pos - Vector2(36, 36), Vector2(72, 72)))
+		var np := Rect2(pos.x - 28, pos.y + COOK_R + 10, 56, 22)
+		if near_cap:
+			f.draw_rect(np, UI.key("bad"))
 		else:
-			f.draw_string(font, pos + Vector2(-COOK_R, 7), cr.name, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(18), UI.DIM if spent else ink)
+			_plate(f, np)
+		f.draw_string(font, np.position + Vector2(0, 17), cr.name, HORIZONTAL_ALIGNMENT_CENTER, np.size.x, UI.font_size(15), UI.BG if near_cap else ink)
 		if near_cap:   # a red ring round the face, thick: shape as well as colour
 			f.draw_arc(pos, COOK_R + 2.0, 0.0, TAU, 40, UI.key("bad"), 5.0)
-		for a in cr.ap:   # action pips
-			f.draw_circle(pos + Vector2(-16 + a * 16, -COOK_R - 12), 6.0, UI.key("info"))
 		if spent:
 			f.draw_circle(pos, COOK_R, Color(0, 0, 0, 0.2))
 			var word := "FOX!" if cr.get("fox", false) else ("BREAK" if cr.get("brk", false) else "DONE")   # second wind / the fox: sitting out this turn
@@ -1729,7 +1817,7 @@ func _draw_field(f: Control) -> void:
 			f.draw_string(font, pos + Vector2(-COOK_R, -2), word, HORIZONTAL_ALIGNMENT_CENTER, COOK_R * 2, UI.font_size(17),
 				UI.key("warn") if word == "BREAK" else UI.DIM)
 		else:
-			var bc := pos + Vector2(COOK_R - 4, -COOK_R + 8)   # bigger (build-84 review: the badge was easy to miss)
+			var bc := pos + Vector2(COOK_R - 7, -COOK_R - 5)   # bigger (build-84 review: the badge was easy to miss)
 			f.draw_circle(bc, 19.0, UI.key("info"))
 			f.draw_arc(bc, 19.0, 0.0, TAU, 28, Color(0, 0, 0, 0.85), 2.5)
 			f.draw_string(font, bc + Vector2(-19, 9), str(cr.ap), HORIZONTAL_ALIGNMENT_CENTER, 38, UI.font_size(25), Color(0.05, 0.06, 0.09))
@@ -1744,7 +1832,7 @@ func _draw_field(f: Control) -> void:
 		# boxes a rest takes off are outlined green.
 		var after := stress_after(c)
 		for b in cap:
-			var box := Rect2(pos.x - sw / 2 + b * seg, pos.y + COOK_R + 6, seg - 2, 10)
+			var box := Rect2(pos.x - sw / 2 + b * seg, pos.y + COOK_R + 34, seg - 2, 10)
 			f.draw_rect(box, UI.key(tone) if b < cr.stress else Color("2b3448"))   # real stress stays filled; a rest only outlines
 			if b >= cr.stress and b < after:
 				f.draw_rect(box, UI.key("bad"), false, 2.0)
@@ -1760,13 +1848,24 @@ func _draw_field(f: Control) -> void:
 			var dl := "" if after == cr.stress else (" %+d" % (after - cr.stress))
 			var sl := ("TIRED %d/%d" if tired else "STRESS %d/%d") % [cr.stress, cap] + dl
 			sl = _fit(font, sl, "%d/%d%s" % [cr.stress, cap, dl], pw - 4, 14)
-			_plate(f, Rect2(pos.x - pw / 2, pos.y + COOK_R + 18, pw, 22))
-			f.draw_string(font, Vector2(pos.x - pw / 2, pos.y + COOK_R + 35), sl, HORIZONTAL_ALIGNMENT_CENTER, pw,
+			_plate(f, Rect2(pos.x - pw / 2, pos.y + COOK_R + 44, pw, 22))
+			f.draw_string(font, Vector2(pos.x - pw / 2, pos.y + COOK_R + 61), sl, HORIZONTAL_ALIGNMENT_CENTER, pw,
 				UI.font_size(14), UI.key("bad") if after > cr.stress else (UI.key(tone) if cr.stress > 0 else ink))
 		if not cr.hand.is_empty():   # the plate in hand, on the cook's shoulder, plus its name
 			_draw_fit(f, ART_DISHES[cr.hand.dish], Rect2(pos + Vector2(COOK_R - 18, -COOK_R - 6), Vector2(40, 40)))
 			_plate(f, Rect2(pos + Vector2(-50, COOK_R + 22), Vector2(100, 24)))
 			f.draw_string(font, pos + Vector2(-60, COOK_R + 40), "> " + cr.hand.dish, HORIZONTAL_ALIGNMENT_CENTER, 120, UI.font_size(15), UI.key("good"))
+	if _dragging and _press_cook >= 0:
+		var i := station_at(_drag_pos)
+		if i >= 0:
+			var r := station_rect(i)
+			var valid := _can_walk(_press_cook, i)
+			var col := UI.key("good") if valid else UI.key("bad")
+			f.draw_rect(r, col, false, 5.0)
+			var msg := "DROP: %d MOVES" % k.move_cost(_press_cook, i) if valid else "CANCEL"
+			f.draw_string_outline(font, r.position + Vector2(0, r.size.y - 12), msg, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(14), 5, Color.BLACK)
+			f.draw_string(font, r.position + Vector2(0, r.size.y - 12), msg, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(14), col)
+		f.draw_line(cook_visual_pos(_press_cook), _drag_pos, UI.ACCENT, 3.0)
 	_draw_fox(f)
 	_draw_fx(f)
 
@@ -1780,7 +1879,7 @@ func _draw_fox(f: Control) -> void:
 	for c in k.crew.size():
 		if not k.crew[c].get("fox", false) or k.crew[c].out:
 			continue
-		var pos: Vector2 = _cook_draw.get(c, cook_pos(c))   # where the cook is drawn (they may be mid-walk)
+		var pos := cook_visual_pos(c)
 		var age := float(Time.get_ticks_msec() - _fox_t0) / 1000.0 if _fox_t0 > 0 else 9.0
 		var pop := clampf(age / 0.35, 0.0, 1.0)
 		var sz := 104.0 * (0.4 + 0.6 * pop)
@@ -1798,6 +1897,7 @@ func _draw_fox(f: Control) -> void:
 # ---------------------------------------------------------------- pause + game over
 
 func pause() -> void:
+	_cancel_gesture()
 	if between:
 		checkpoint()   # the next service is already the checkpoint; the grade sheet stays up
 		return
@@ -1873,6 +1973,7 @@ func _notification(what: int) -> void:
 	match what:
 		# The phone took the app away (call, home button, notification shade): pause + save.
 		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT:
+			_cancel_gesture()
 			pause.call_deferred()
 		# Android back / back gesture: close the top sheet, else pause. Never quits.
 		NOTIFICATION_WM_GO_BACK_REQUEST:
