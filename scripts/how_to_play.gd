@@ -12,7 +12,7 @@ const STEPS := [
 	["cook_mo", "END TURN and every clock ticks a minute. Hot work adds stress. Max stress and that cook walks out."],
 	["dish_steak", "Walk 3 tables in one service and the night is over. Clear the service to get a grade: tables out, speed and clean pans all count."],
 ]
-const TIPS := "Tap a ticket to make FIRE cook it first, or tap one dish on it to fire exactly that.\nRUSH takes a minute off a pan, for stress.\nThe line grows: saute opens in service 2, cold in service 3.\nBuy equipment between services; pick an earned cook perk. PAUSE -> CREW shows your cooks.\nToo hot or too easy? Settings -> PACE. The kitchen also eases off after a rough night."
+const TIPS := "Tap a ticket to make FIRE cook it first, or tap one dish on it to fire exactly that.\nRUSH takes a minute off a pan, for stress.\nThe line grows: saute opens in service 2, cold in service 3.\nBuy equipment between services; pick an earned cook perk. PAUSE -> CREW shows your cooks. 0+ moves means a free perk action remains. Swipe crowded orders or tap ALL.\nToo hot or too easy? Settings -> PACE. The kitchen also eases off after a rough night."
 
 
 static func open(parent: Node) -> VBoxContainer:

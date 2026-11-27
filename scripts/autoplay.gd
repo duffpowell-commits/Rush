@@ -401,7 +401,7 @@ func _run() -> void:
 	await _shot("shop")
 	await _click("FAMILY MEAL")
 	await _frames(3)
-	var bought: bool = game.perks.has("meal") and game.cash == tips1 + bonus1 - 25 and _find("FAMILY MEAL") == null
+	var bought: bool = game.perks.has("meal") and game.cash == tips1 + bonus1 - Upgrades.price("meal") and _find("FAMILY MEAL") == null
 	await _click("DONE")
 	var shop_b: Button = _find("SHOP")
 	var new_gone: bool = shop_new and shop_b != null and not shop_b.text.contains("NEW")   # looked once: no more NEW!
@@ -646,6 +646,29 @@ func _run() -> void:
 	game._new_service()
 	_check(burner_ok and game.k.batch_at(0) == 2 and game.k.batch_at(1) == 1,
 		"STATION SHOP PASS (only Grill upgraded, no extra tickets)")
+	# The third earned perk may specialize; choose through the level-up screen.
+	game.cook_perks["MO"] = ["fast_1", "walk"]
+	game.levelup = "MO"
+	game.open_levelup()
+	await _frames(4)
+	var master: Button = game.find_child("Perk_heat_master", true, false)
+	await _shot("advanced_pick")
+	var advanced_visible: bool = master != null and master.text.contains("ADVANCED")
+	if master != null:
+		await _click_node(master)
+	await _frames(3)
+	_check(advanced_visible and game.cook_perks.MO.has("heat_master"), "ADVANCED PERK PASS (role specialization offered and picked)")
+	var house_before = get_node("/root/Settings").get_value("house_ease")
+	var pressure_before: int = game.chef_pressure
+	game.chef_pressure = 0
+	game._house_reads("A+")
+	game.checkpoint()
+	var pressure_saved: bool = get_node("/root/Save").read().chef_pressure == 1
+	game._new_service()
+	_check(pressure_saved and game.k.challenge == 1 and game.k.total == game.tickets_for(game.level),
+		"CHEF CHALLENGE PASS (A+ raises next service load and saves it)")
+	game.chef_pressure = pressure_before
+	get_node("/root/Settings").set_value("house_ease", house_before)
 	game.perks.erase("temp")   # isolate the existing base-crew walkout test
 	# Duff, Nov 26 ("Gone for the whole night"): a cook who walked out sits out the next services.
 	game.gone = ["MO"]
@@ -1165,17 +1188,26 @@ func _polish_checks(game: Node) -> void:
 	game.field.queue_redraw()
 	await _frames(3)
 	var warn: String = game.end_btn.text
-	# The +N MORE badge pages the rail: a tap shows the 5th ticket first, BACK returns.
+	# Swipe the rail and inspect the all-orders modal without spending actions.
 	var first_id: int = game.rail_tickets()[0].id
 	var fifth_id: int = game.rail_tickets()[4].id
-	await _tap_at(game.field.get_global_transform() * game._more_rect.get_center())
+	var rail_mid: float = game.ticket_rect(0).get_center().y
+	await _touch_at(Vector2(460, rail_mid), Vector2(80, rail_mid))
 	var paged: bool = game.rail_off == 4 and game.rail_tickets()[0].id == fifth_id
-	game.field.queue_redraw()
-	await _frames(2)
+	await _frames(3)
 	await _shot("polish_rail_page")
 	await _tap_at(game.field.get_global_transform() * game._more_rect.get_center())
+	await _frames(3)
+	var all_ok: bool = _has_label("ALL ORDERS") and game.find_children("Order_*", "Button", true, false).size() == 6
+	await _shot("all_orders")
+	var order_pick: Button = game.find_child("Order_%d" % fifth_id, true, false)
+	await _click_node(order_pick)
+	var picked_all: bool = game.pick_tid == fifth_id and game.rail_off == 4
+	await _touch_at(Vector2(80, rail_mid), Vector2(460, rail_mid))
 	var back: bool = game.rail_off == 0 and game.rail_tickets()[0].id == first_id
-	_check(paged and back, "RAIL PAGE PASS (+2 MORE showed tickets 5-6, BACK returned to the most urgent)")
+	_check(paged and back and all_ok and picked_all, "RAIL PAGE PASS (swipe to hidden tickets, all orders selects, swipe back)")
+	game.pick_tid = 0
+	game.pick_ix = -1
 	# Stress pass: two away and working: END TURN warns a turn early, the meter shows the +1, and
 	# the action button names the cook it moves.
 	var sat_was: int = kk.pans[0].sat
@@ -1226,8 +1258,33 @@ func _polish_checks(game: Node) -> void:
 		c.stress = 0
 	game._refresh_hud()
 	var finish: String = game.end_btn.text
-	_check(free_lbl == "DEV: RUSH (FREE)" and finish == "END TURN\nFINISH SERVICE",
+	_check(free_lbl == "DEV: RUSH 0 STRESS" and finish == "END TURN\nFINISH SERVICE",
 		"FINISH PASS (Cast Iron rush reads '%s'; an empty rail says '%s')" % [free_lbl, finish.replace("\n", " / ")])
+	# A promised FREE action remains usable at zero paid moves through the actual action button.
+	var free_keep: Dictionary = kk.to_dict()
+	var score_was: int = game.score
+	kk.crew[0].perks = ["run", "pass_captain"]
+	kk.crew[0].used = []
+	kk.crew[0].captain_used = false
+	kk.crew[0].stress = kk.stress_cap - 1
+	kk.crew[0].acted = false
+	kk.tray = 2
+	kk.crew[0].ap = 0
+	kk.crew[0].at = Kitchen.PASS_IX
+	kk.tickets = [{"id": 991, "table": 51, "items": [{"dish": "FRIES", "state": "carried"}, {"dish": "WINGS", "state": "carried"}], "time": 8, "big": false}, {"id": 992, "table": 52, "items": [{"dish": "STEAK", "state": "wait"}], "time": 3, "big": false}]
+	kk.window = [{"tid": 991, "dish": "FRIES"}, {"tid": 991, "dish": "WINGS"}]
+	game.sel = 0
+	game._after_move()
+	await _frames(3)
+	var free_button: bool = not game.act_btn.disabled and game.act_btn.text.contains("FREE") and not game.act_btn.text.contains("QUIT") and not game.act_btn.text.contains("TAKES 5")
+	await _shot("free_at_zero")
+	await _click_node(game.act_btn)
+	_check(free_button and kk.crew[0].ap == 0 and kk.crew[0].used.has("run") and kk.ticket(991).is_empty() and kk.crew[0].stress == kk.stress_cap - 2,
+		"ZERO AP PASS (captain RUN at zero moves calms, no false quit warning)")
+	kk.from_dict(free_keep)
+	game.score = score_was
+	game._after_move()
+
 	# 8.5 pass: END TURN names every burn and every quit; FIRE says TOO LATE and what the first move costs;
 	# a tap in the strip under a station picks the cook standing there.
 	for c in kk.crew:
@@ -1287,7 +1344,7 @@ func _polish_checks(game: Node) -> void:
 	var strip_pick: bool = game.sel == 1
 	var want_q: String = "END TURN\n%s + %s QUIT" % [kk.crew[0].name, kk.crew[1].name]
 	_check(two_burns == "END TURN\nGRILL + FRY BURN" and two_quits == want_q and "TOO LATE" in late and "+1 STRESS" in late and strip_pick
-		and plate_lbl.begins_with("DEV: PLATE") and plate_lbl.ends_with("+1 STRESS") and rest_lbl.ends_with("SKIPS REST"),
+		and plate_lbl.begins_with("DEV: PLATE") and plate_lbl.ends_with("+1 STRESS") and rest_lbl.contains("REST -2 IF IDLE"),
 		"WARN PASS ('%s', '%s', '%s', '%s', sprite tap picks the cook: %s)" % [two_burns.replace("\n", " / "), two_quits.replace("\n", " / "), late.replace("\n", " / "), rest_lbl.replace("\n", " / "), strip_pick])
 	_check(wind_quits == "END TURN\n%s QUITS" % kk.crew[1].name and wind_lbl == "END TURN\n%s TAKES 5" % kk.crew[0].name,
 		"WIND PASS ('%s', '%s')" % [wind_quits.replace("\n", " / "), wind_lbl.replace("\n", " / ")])

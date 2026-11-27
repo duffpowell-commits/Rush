@@ -6,10 +6,10 @@ extends RefCounted
 
 ## id: name on the button, price, what it does (<= 26 chars so the button fits at text size 1.4).
 const ALL := {
-	"lamps": {"name": "HEAT LAMPS", "cost": 30, "says": "+1 MIN ON EVERY TICKET"},
-	"meal": {"name": "FAMILY MEAL", "cost": 25, "says": "+1 STRESS BEFORE QUITTING"},
-	"iron": {"name": "CAST IRON", "cost": 35, "says": "1 STRESS-FREE RUSH/TURN"},
-	"comps": {"name": "SECOND CHANCE", "cost": 50, "says": "+1 WALK BEFORE GAME OVER"},
+	"lamps": {"name": "HEAT LAMPS", "cost": 40, "says": "+1 MIN ON EVERY TICKET"},
+	"meal": {"name": "FAMILY MEAL", "cost": 35, "says": "+1 STRESS BEFORE QUITTING"},
+	"iron": {"name": "CAST IRON", "cost": 65, "says": "1 STRESS-FREE RUSH/TURN", "opens": 3},
+	"comps": {"name": "SECOND CHANCE", "cost": 70, "says": "+1 WALK BEFORE GAME OVER", "opens": 4},
 	# Trays (Duff, Nov 25: "start out with the one dish ran rule and then upgrade it in the shop for a
 	# max of 4"). A RUN carries one plate; the server tray makes it 2, the entree tray (after the
 	# server tray) makes it 4.

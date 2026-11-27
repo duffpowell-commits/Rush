@@ -8,6 +8,18 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
+## Nov 27 — 8.5 refinement (Codex)
+- Build 106 independent first-timer rated 8/10, 37/37 served, four A+ services. Review:
+  `docs/reviews/firsttimer_rush_build106.md`.
+- Duff approved challenge/economy/specialization/clarity/readability. Save v8 tracks earned
+  Chef Challenge, cap 3; strong results add late tables, rough results ease it. Relaxed
+  disables bonus pressure. Jo $45 and two-cook onboarding intact.
+- More meaningful store choices (prices/gates in `upgrades.gd`); advanced primary-role
+  perk after two earned perks and S4. One advanced perk per cook, no stacked freebies.
+  True free actions at zero AP. Compact feedback and captions, swipe rail / ALL order view.
+- Comparative retest 31,830 service attempts, full report `docs/BALANCE_REFINEMENT.md`.
+  Review after deployment; no new score until real independent play.
+
 ## Nov 27 — Kitchen Progression & Balance (Codex)
 - Approved follow-up to build 104 simulation audit. The $45 Jo unlock and first three
   services stay intact. Later service load ramps by stage, with two big tables from S7.
