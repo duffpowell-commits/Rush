@@ -119,6 +119,9 @@ builds 70-76 were reported in chat only, and their findings are in CLAUDE.md).
 - Service 3, halfway: the logo fox's head pops up over the calmest cook, who loses 2 of 3 moves
   (`fox_cost` TUNE). Art `assets/art/fox_cameo.png` is the real logo head (Duff's pick). FOX PASS.
 
+## December 10 showcase
+Duff approved a focused showcase plan on Nov 26: see [DEC10_SHOWCASE.md](DEC10_SHOWCASE.md). Start with current-build human playtest evidence; preserve the Dec 1 keep/park decision and paused blind reviews.
+
 ## Next, step by step
 1. Duff plays build 99 on his phone; his notes outrank the rest. Blind reviews are paused (Duff,
    Nov 26): build fixes and merge on green CI plus a fresh-eyes check.
