@@ -31,6 +31,12 @@ Files: assets/art/crew/ (new validated sprites), assets/art/SOURCES.md or existi
 - [ ] Implement sprite idle/walk/work/plate/run/rest using existing animation/feedback and game state. Place badge/stress/name so it remains clear. Hit target follows actual rendered/animated position including bob offsets, not destination.
 - [ ] Run tests/autoplay, capture gameplay evidence mobile narrow and tall with large text. Commit.
 
+### Task 2b: Personality and stress-driven mood cues
+- [ ] Extend sprite art references with fictional Dev/Mo/Jo identities listed in the spec; preserve existing portrait resemblance.
+- [ ] Add tests for mood threshold transitions (calm, busy, frustrated, near quitting, then recovery) from the current stress value/cap; assert no change to AP, stress, costs or perk math. Critical warnings override flavor text; cap-change/undo/load should not replay stale chatter.
+- [ ] Implement mood presentation and distinct occasional character callouts using existing caption/feedback infrastructure. Keep stress meter and selected cook readable at all sizes. Provide examples of all moods in real screenshots, with reduced effects enabled and disabled.
+- [ ] Run TESTS PASS/AUTOPLAY PASS and record the mood evidence.
+
 ### Task 3: Optional drag shortcut
 Files: scripts/game.gd input and focus handling, scripts/autoplay.gd.
 - [ ] Tests: press-release under threshold selects only; deliberate drag from cook shows reachable target and preview; release valid commits one Kitchen.move; release invalid, pause, resize/focus loss cancel without AP; touch plus emulated mouse cannot double commit. Multiple fingers cannot commandeer active drag.
