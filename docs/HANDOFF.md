@@ -8,6 +8,15 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
+## Nov 27 — permanent third cook (Codex)
+- The $45 THIRD COOK upgrade is bought once per saved night. Jo starts at the pass in every
+  following service, including retries; a fresh night still begins with two cooks.
+- Save v6 keeps the existing upgrade id and honors paid legacy rentals via `temp_buys`.
+  A currently running legacy service resumes unchanged; Jo returns at the next service.
+- CREW EXPANDED celebrates the purchase with the existing crew sprites, stamp, sound and haptic.
+  Rule tests and autoplay cover price, duplicate purchase, service transition and reload.
+  Screenshot: [Crew Expanded](renders/flow_crew_expanded.png).
+
 ## Studio mascot (Duff, Nov 26)
 - **The three-eyed fox is in every game as a rare cameo, not a pal**: a small event
   that matters but never ruins a run. Duff OKs the fox art on a card before it's built. Rule + this game's idea: `docs/MASCOT.md`.

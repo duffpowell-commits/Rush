@@ -569,31 +569,30 @@ func _run() -> void:
 	game = get_tree().current_scene
 	_check(retry_ok and game != old_game and game.level == lost_lvl and game.cash == 77 and game.perks == perks_lost and not game.over and game.k.served == 0,
 		"RETRY PASS (RETRY SERVICE %d replays it with $%d and %s kept)" % [game.level, game.cash, str(game.perks)])
-	# TEMP COOK: bought in the shop, a third cook at the pass for one service, tappable, drawn, then
-	# gone; the next one costs double (8.5 plan #2), and two upgrades bring one more table.
+	# THIRD COOK: a one-time $45 purchase, celebrated with the existing crew art.
 	game.cash = 300
 	var t_before: int = game.tickets_for(game.level)
 	game.open_shop()
 	await _frames(4)
 	var bank_n: Label = get_tree().root.find_child("Bank", true, false)
 	var nudge: String = bank_n.text if bank_n != null else "-"
-	await _click("TEMP COOK")
+	await _click("THIRD COOK")
 	await _frames(4)
-	var temp_bought: bool = game.perks.has("temp") and game.temp_buys == 1 and game.cash == 255
-	var again_txt: String = ""
-	await _click("DONE")
-	game.perks.erase("temp")
-	game.open_shop()
+	var unlock: bool = _find("LET'S COOK!") != null and get_tree().root.find_child("CrewExpanded", true, false) != null
+	var crew_saved: Dictionary = get_node("/root/Save").read()
+	var crew_bought: bool = game.perks.has("temp") and game.cash == 255 and crew_saved.cash == 255 and crew_saved.perks.has("temp")
+	await get_tree().create_timer(0.4).timeout
+	await _shot("crew_expanded")
+	await _click("LET'S COOK!")
 	await _frames(4)
-	var again_b: Node = get_tree().root.find_child("Buy_temp", true, false)
-	again_txt = again_b.text if again_b != null else "-"
+	var again_b: Button = get_tree().root.find_child("Buy_temp", true, false)
+	var duplicate_blocked: bool = again_b != null and again_b.disabled and again_b.text.contains("OWNED")
 	await _click("DONE")
-	game.perks.append("temp")
 	var t_after: int = game.tickets_for(game.level)
-	_check(nudge.contains("TEMP COOK helps") and nudge.contains("%d tickets" % t_before),
+	_check(nudge.contains("THIRD COOK helps") and nudge.contains("%d tickets" % t_before),
 		"NUDGE PASS (shop: '%s')" % nudge.get_slice("\n", 1))
-	_check(temp_bought and again_txt.contains("$90") and t_after == t_before + 1,
-		"PUSHBACK PASS (TEMP COOK $45, then '%s'; two upgrades: %d -> %d tickets)" % [again_txt.get_slice("\n", 0), t_before, t_after])
+	_check(crew_bought and unlock and duplicate_blocked and t_after == t_before + 1,
+		"PUSHBACK PASS (third cook $45 once; two upgrades: %d -> %d tickets)" % [t_before, t_after])
 	game._new_service()
 	game._after_move()
 	await _frames(20)
@@ -604,8 +603,22 @@ func _run() -> void:
 	var jo_pick: bool = game.sel == 2
 	game._service_done()
 	await _frames(5)
-	_check(three and jo_pick and not game.perks.has("temp"),
-		"TEMP PASS (TEMP COOK adds %s at the pass, a tap on JO picks them: %s, gone after the service)" % [game.k.crew[2].name if game.k.crew.size() > 2 else "-", jo_pick])
+	var carried: bool = game.perks.has("temp") and get_node("/root/Save").read().perks.has("temp")
+	game._new_service()
+	_check(three and jo_pick and carried and game.k.crew.size() == 3,
+		"CREW EXPANDED PASS (Jo joins, selectable, saved, and returns next service)")
+	# Restore the saved checkpoint via the same scene loading path as CONTINUE.
+	var old_crew_game: Node = game
+	get_node("/root/Loader").go("res://scenes/game.tscn")
+	for i in 180:
+		await _frames(1)
+		if get_tree().current_scene != old_crew_game and get_tree().current_scene != null and get_tree().current_scene.name == "Game":
+			break
+	await _frames(5)
+	game = get_tree().current_scene
+	_check(game != old_crew_game and game.perks.has("temp") and game.k.crew.size() == 3 and not Upgrades.can_buy("temp", 999, game.perks),
+		"CREW RESTART PASS (saved unlock restores Jo without another purchase)")
+	game.perks.erase("temp")   # isolate the existing base-crew walkout test
 	# Duff, Nov 26 ("Gone for the whole night"): a cook who walked out sits out the next services.
 	game.gone = ["MO"]
 	game._new_service()
