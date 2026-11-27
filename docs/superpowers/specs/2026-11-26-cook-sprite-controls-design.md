@@ -12,3 +12,10 @@ Tap-to-command (chosen): tap a cook, highlight reachable stations, tap destinati
 - Drag only begins on a cook after a deliberate motion threshold; preview destination/cost; release on valid reachable station commits once, release elsewhere or cancel commits nothing. Do not process synthetic click twice. Pause/focus loss cancels drag.
 - Preserve undo and clear selection after quit when appropriate. No real-time mechanics or 3D. No new paid assets. Use Foxboard/current approved art direction.
 - Test phone touch at small and tall resolutions, overlap, edge taps, animated clicks, spent cooks, occupied stations, AP preview/commit and invalid/cancelled drags. No publication or blind review until existing release rules are satisfied.
+
+## Approved crew personalities and visible moods (Nov 26, Omaha local)
+All three are fictional, recognizable from the existing portraits. Personalities affect animation and sparse situational callouts only; earned perks still determine gameplay specialization.
+- Dev: veteran, confident, black apron, dry sarcasm. Calm: "Heard. Unfortunately." As stress rises, sarcastic, clipped, tense.
+- Mo: steady organizer, rolled sleeves. Calm: "Two minutes. We've got this." Under pressure, gets quieter and more deliberate.
+- Jo: energetic relief cook, colorful bandana. Calm: "Put me in, chef!" Under pressure, gets flustered.
+- Derive mood from the existing stress value and cap: calm, busy, frustrated, near quitting; recovery after stress drops. No new meter or stat modifiers. Relaxed idle becomes brisk working, tense posture and tired/rest state; near quitting must always be clearly signaled in words. Mood cues shouldn't compete with essential warnings. Recovery restores body language and humor. Use cooldowns/transition events rather than repeating dialogue every action. Respect reduced effects, captions and all touch clarity.
