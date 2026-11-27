@@ -192,15 +192,19 @@ func _build() -> void:
 	# thumb's side.
 	var left: bool = _settings.get_value("left_handed")
 	pause_btn = UI.button("PAUSE", pause)
+	MenuArt.diner_button(pause_btn)
 	_corner(pause_btn, left, true, 150)
 	undo_btn = UI.button("UNDO", undo)
+	MenuArt.diner_button(undo_btn)
 	undo_btn.name = "UndoButton"
 	_corner(undo_btn, not left, true, 150)
 	end_btn = UI.button("END TURN", end_turn, 96)
+	MenuArt.diner_button(end_btn)
 	end_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # the two-line burn warning at big text sizes
 	end_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_corner(end_btn, not left, false, 230)
 	act_btn = UI.button("FIRE", act, 96)
+	MenuArt.diner_button(act_btn, true)
 	act_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # big text sizes wrap onto two lines, not past the edge
 	act_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN   # a taller wrapped button grows up, never off the bottom
 	_corner(act_btn, left, false, 230)
@@ -434,6 +438,8 @@ func act() -> void:
 		_fresh_turn = false
 	var at: int = k.crew[sel].at
 	var tips_before := k.tips
+	var pass_before := k.window.size()
+	var held_before := 0 if k.crew[sel].hand.is_empty() else 1
 	var served_before := k.served
 	var before := _snap()
 	if k.act_here(sel, pick_tid, true, pick_ix):
@@ -455,13 +461,18 @@ func act() -> void:
 				_fx_text(top, "RUSHED!", MenuArt.FLAME)
 			"PLATE":
 				_fx_ring(c, UI.key("good"))
-				_fx_text(top, "UP!", UI.key("good"))
+				var plated := k.window.size() - pass_before
+				_fx_text(top, ("%d ON PASS" % plated) if plated > 0 else "PLATE WASTED", UI.key("good") if plated > 0 else UI.key("warn"))
 			"PREP":
 				_fx_ring(c, UI.key("info"))
 				_fx_text(top, "PREPPED!", UI.key("info"))
 			"RUN":
 				score = k.served + _night_before
-				_fx_text(top, "+$%d" % (k.tips - tips_before) if k.tips > tips_before else "RAN", UI.key("good"))
+				var ran := pass_before + held_before - k.window.size()
+				_fx_text(top, "%d SENT" % ran, UI.key("good"))
+				_fx_ring(c, UI.key("good"))
+				if k.tips > tips_before:
+					_fx_text(c + Vector2(0, 30), "+$%d" % (k.tips - tips_before), UI.ACCENT)
 				if k.served > served_before:   # a whole table out: the big moment
 					_fx_ring(c, UI.ACCENT, 90.0)
 					_fx_burst(c, UI.key("good"), 24)
@@ -770,6 +781,7 @@ var _shop_opened := false   # the SHOP button says NEW! until it's opened after 
 func open_shop() -> void:
 	_shop_opened = true
 	var box := UI.sheet(self, 500)
+	MenuArt.diner_sheet(box)
 	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
 	var bank := UI.label("Bank: $%d. Upgrades do not add tables." % cash, 20, UI.DIM)
 	if level < 4:
@@ -943,6 +955,7 @@ func perk_offer(nm: String) -> Array:
 func open_levelup() -> void:
 	var nm := levelup
 	var box := UI.sheet(self)
+	MenuArt.diner_sheet(box)
 	_lvl_box = box   # its own handle: a pause on top swaps sheet_box (like the twist card)
 	var head := UI.label("LEVEL UP: %s" % nm, 34, UI.ACCENT)
 	head.name = "LevelUp"
@@ -1197,6 +1210,12 @@ func _coach_next() -> void:
 		if st[2].call():
 			var c := Coach.teach(self, st[0], st[1], st[3])
 			if c != null:
+				# A hint created while a sheet is open belongs behind the modal, not over its tickets.
+				# Keep normal sibling ordering so pause/settings can still stack above All Orders.
+				for child in get_children():
+					if child.is_in_group("sheet"):
+						move_child(c, child.get_index())
+						break
 				c.set_meta("turn", k.turn)   # in the gap between the NEXT line and the stations, in pixels: a taller
 				# phone (web, 9:19.5) stretches the canvas, and a fraction of its height landed on the station names
 				c.anchor_top = 0.0
@@ -1436,7 +1455,7 @@ func cook_visual_pos(c: int) -> Vector2:
 	return pos
 
 
-# Rows of the 2-column crew atlas: idle, walk, work, serve, rest.
+# Crew atlas uses four columns for walk and two for other states. Rows: idle, walk, work, serve, rest.
 func crew_frame(c: int) -> int:
 	var cr: Dictionary = k.crew[c]
 	if _cook_draw.get(c, cook_pos(c)).distance_to(cook_pos(c)) > 2.0:
@@ -1512,8 +1531,9 @@ func tap(p: Vector2) -> void:
 ## Inspect every active order and the NEXT demand without advancing the service.
 func open_rail() -> void:
 	var box := UI.sheet(self, 500)
-	box.add_child(UI.label("ALL ORDERS", 30, UI.ACCENT))
-	box.add_child(UI.label(next_line(ThemeDB.fallback_font, 440), 18, UI.DIM))
+	MenuArt.diner_sheet(box)
+	box.add_child(UI.label("ALL ORDERS", 30, UI.ACCENT if UI.contrast() else MenuArt.PAPER))
+	box.add_child(UI.label(next_line(ThemeDB.fallback_font, 440), 18, UI.DIM if UI.contrast() else MenuArt.PAPER))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size.y = 560
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -1537,8 +1557,17 @@ func open_rail() -> void:
 		b.name = "Order_%d" % t.id
 		b.add_theme_font_size_override("font_size", UI.font_size(18))
 		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		MenuArt.diner_button(b, true)
+		if not UI.contrast() and t.time <= 2:
+			for state in ["normal", "hover", "pressed", "focus"]:
+				var ticket := b.get_theme_stylebox(state).duplicate() as StyleBoxFlat
+				ticket.border_color = UI.key("bad")
+				ticket.set_border_width_all(4)
+				b.add_theme_stylebox_override(state, ticket)
 		rows.add_child(b)
-	box.add_child(UI.button("DONE", func(): UI.close_sheet(box)))
+	var done_btn := UI.button("DONE", func(): UI.close_sheet(box))
+	MenuArt.diner_button(done_btn)
+	box.add_child(done_btn)
 
 
 func _move_undoable(c: int, i: int) -> bool:
@@ -1722,11 +1751,16 @@ func _draw_field(f: Control) -> void:
 	var shown: Array = rail_tickets()
 	var pad := 10.0
 	var urgent := urgent_tid()
+	var ticket_ink := ink if UI.contrast() else MenuArt.PAPER_INK
+	var ticket_dim := UI.DIM if UI.contrast() else Color("66594c")
 	for i in mini(shown.size(), 4):
 		var t: Dictionary = shown[i]
 		var r := ticket_rect(i)
 		var tone := "good" if t.time > 4 else ("warn" if t.time > 2 else "bad")
-		f.draw_rect(r, UI.panel_color())
+		f.draw_rect(r, UI.panel_color() if UI.contrast() else MenuArt.PAPER)
+		if not UI.contrast():
+			# A subtle order-slip edge without changing the card layout or hit area.
+			f.draw_rect(r.grow(-4.0), Color("ad9477"), false, 1.0)
 		f.draw_rect(r, UI.key(tone), false, 4.0 if tone == "bad" else 2.0)
 		if tone == "bad" and not (paused or over or between) and not _settings.get_value("low_graphics"):   # about to walk: the frame throbs
 			var throb := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 120.0)
@@ -1746,9 +1780,9 @@ func _draw_field(f: Control) -> void:
 				f.draw_string(font, Vector2(r.position.x, r.end.y - 7), "URGENT", HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
 					UI.font_size(13), UI.BG)
 		f.draw_string(font, r.position + Vector2(8, 26), "T%d" % t.table,
-			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 56, UI.font_size(18), ink)
+			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 56, UI.font_size(18), ticket_ink)
 		if t.big:   # small, between the table number and the clock, so it never runs into either
-			f.draw_string(font, r.position + Vector2(46, 25), "BIG", HORIZONTAL_ALIGNMENT_LEFT, 28, UI.font_size(11), UI.key("warn"))
+			f.draw_string(font, r.position + Vector2(46, 25), "BIG", HORIZONTAL_ALIGNMENT_LEFT, 28, UI.font_size(11), UI.key("warn") if UI.contrast() else Color("704713"))
 		for tag in ["vip", "critic"]:   # tonight's twist: a word band on the bottom plus a doubled frame
 			if t.get(tag, false):
 				f.draw_rect(r.grow(-6.0), MenuArt.FLAME, false, 2.0)
@@ -1758,7 +1792,7 @@ func _draw_field(f: Control) -> void:
 					UI.font_size(13), MenuArt.PAPER_INK)
 		# Clock: number plus a shape cue (filled bars), not colour alone.
 		f.draw_string(font, r.position + Vector2(r.size.x - 44, 28), "%d'" % t.time,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(24), UI.key(tone))
+			HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(24), UI.key(tone) if UI.contrast() else UI.key(tone).darkened(0.55))
 		for b in mini(t.time, 10):
 			f.draw_rect(Rect2(r.position.x + 8 + b * ((r.size.x - 16) / 10.0), r.position.y + 36, (r.size.x - 16) / 10.0 - 2, 6), UI.key(tone))
 		var iy := r.position.y + DISH_ROW0 + 20.0
@@ -1767,16 +1801,18 @@ func _draw_field(f: Control) -> void:
 			if t.id == pick_tid and n == pick_ix:   # the tapped dish: an accent bar and a pointer, not colour alone
 				f.draw_rect(Rect2(r.position.x + 3, iy - 20, r.size.x - 6, DISH_ROW - 2), Color(UI.ACCENT, 0.25))
 				f.draw_rect(Rect2(r.position.x + 3, iy - 20, 4, DISH_ROW - 2), UI.ACCENT)
-			var col: Color = UI.DIM if it.state == "served" else ink
+			var col: Color = ticket_dim if it.state == "served" else ticket_ink
 			f.draw_string(font, Vector2(r.position.x + 8, iy), it.dish, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(16), col)
 			if it.state == "served":   # struck through: done, in shape as well as colour
 				var dw := minf(font.get_string_size(it.dish, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(16)).x, r.size.x - 12)
-				f.draw_line(Vector2(r.position.x + 8, iy - 6), Vector2(r.position.x + 8 + dw, iy - 6), UI.DIM, 2.0)
+				f.draw_line(Vector2(r.position.x + 8, iy - 6), Vector2(r.position.x + 8 + dw, iy - 6), ticket_dim, 2.0)
 			# Its state in words on a small line under it (no symbol to learn): where it cooks while it waits.
 			var sub: String = {"wait": "at " + Kitchen.station_of(it.dish), "cooking": "cooking", "carried": "on the pass", "served": "served"}[it.state]
 			if it.state == "wait" and it.has("needs"):   # CROSS PREP: say what to prep and where, first
 				sub = "PREP AT " + Kitchen.STATIONS[int(it.needs)]   # the button names the ingredient
 			var sc: Color = UI.key("warn") if it.state == "wait" else (UI.key("info") if it.state != "served" else UI.DIM)
+			if not UI.contrast():
+				sc = ticket_dim if it.state == "served" else sc.darkened(0.60)
 			f.draw_string(font, Vector2(r.position.x + 8, iy + 14), sub,
 				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(14), sc)
 			iy += DISH_ROW
@@ -1938,7 +1974,8 @@ func _draw_field(f: Control) -> void:
 		var tex: Texture2D = CREW_SHEETS.get(cr.name)
 		if tex != null:
 			var row := crew_frame(c)
-			var frame := 0 if low else int(Time.get_ticks_msec() / 180.0) % 2
+			var frame_count := 4 if row == 1 else 2
+			var frame := 0 if low else int(Time.get_ticks_msec() / 180.0) % frame_count
 			f.draw_texture_rect_region(tex, Rect2(pos - Vector2(37, 54), Vector2(74, 102)), Rect2(frame * 128, row * 176, 128, 176), Color(0.65, 0.65, 0.65) if spent else Color.WHITE)
 		elif ART_COOKS.has(cr.name):
 			_draw_fit(f, ART_COOKS[cr.name], Rect2(pos - Vector2(36, 36), Vector2(72, 72)))
@@ -2063,6 +2100,7 @@ func pause() -> void:
 ## Review every cook's role, level, productive experience and earned perks.
 func open_crew_card() -> void:
 	var box := UI.sheet(self, 500)
+	MenuArt.diner_sheet(box)
 	box.add_child(UI.label("YOUR CREW", 30, UI.ACCENT))
 	box.add_child(UI.label("One free perk action per cook per turn, even at 0 moves.", 18, UI.DIM))
 	var scroll := ScrollContainer.new()

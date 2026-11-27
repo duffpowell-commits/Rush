@@ -280,6 +280,7 @@ func _run() -> void:
 	await _tap_at(game.field.get_global_transform() * game.cook_visual_pos(1))
 	await _click_node(game.act_btn)   # MO plates the fries
 	var up: bool = kk.window.size() == 1 and kk.crew[1].hand.is_empty()
+	var plate_feedback: bool = game.fx.any(func(e): return e.kind == "text" and e.text == "1 ON PASS")
 	game.field.queue_redraw()
 	await _shot("pick_rush_window")
 	game.end_turn()   # MO spent an action plating: a fresh turn to walk to the pass and run
@@ -289,7 +290,8 @@ func _run() -> void:
 	var ran: bool = kk.window.is_empty() and kk.ticket(902).items[1].state == "served"
 	_check(up and on_pass and ran, "WINDOW PASS (fries plated up on the window, MO walked to the pass and ran them)")
 	# Juice: FIRE threw sparks, the run floated its tips, and a red ticket throbs (words ride along).
-	var run_fx: bool = game.fx.any(func(e): return e.kind == "text")
+	var run_fx: bool = game.fx.any(func(e): return e.kind == "text" and e.text == "1 SENT")
+	_check(plate_feedback and run_fx, "KITCHEN FEEDBACK PASS (explicit plate and run counts)")
 	await _shot("juice")
 	_check(fire_fx and run_fx, "JUICE PASS (sparks on FIRE, floating words on RUN, %d effects live)" % game.fx.size())
 	# Real sound (Nov 25): each action plays its own kitchen recording, and the busy layer runs under the jazz.
@@ -1199,6 +1201,9 @@ func _polish_checks(game: Node) -> void:
 	await _tap_at(game.field.get_global_transform() * game._more_rect.get_center())
 	await _frames(3)
 	var all_ok: bool = _has_label("ALL ORDERS") and game.find_children("Order_*", "Button", true, false).size() == 6
+	var first_order: Button = game.find_children("Order_*", "Button", true, false).front()
+	var ticket_style := first_order.get_theme_stylebox("normal") as StyleBoxFlat
+	_check(ticket_style.bg_color == (Color.BLACK if UI.contrast() else preload("res://scripts/menu_art.gd").PAPER), "ORDER SHEET ART PASS (ticket paper or high contrast)")
 	await _shot("all_orders")
 	var order_pick: Button = game.find_child("Order_%d" % fifth_id, true, false)
 	await _click_node(order_pick)
