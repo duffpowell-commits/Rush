@@ -37,7 +37,7 @@ const LIVES := 3             # tables you can walk in one service
 ## Live sliders (DEV MENU -> TUNE). Applied when a service starts.
 const TUNE := {"ticket_time": [4.0, 16.0], "crew_ap": [1.0, 5.0], "stress_cap": [2.0, 12.0],
 	"service_turns": [8.0, 40.0], "first_tickets": [2.0, 14.0], "more_tickets": [0.0, 4.0],
-	"rush_stress": [0.0, 3.0], "breaks": [0.0, 3.0], "prep_every": [1.0, 8.0], "fox_cost": [0.0, 3.0]}
+	"rush_stress": [0.0, 3.0], "breaks": [0.0, 3.0], "prep_every": [1.0, 8.0], "fox_cost": [0.0, 3.0], "late_ramp": [0.0, 3.0], "late_big_start": [6.0, 20.0]}
 var ticket_time := 9.0
 var crew_ap := 3.0
 var stress_cap := 6.0
@@ -47,6 +47,8 @@ var fox_cost := 2.0          # the studio fox cameo (service 3): moves the cook 
 var prep_every := 3.0        # CROSS PREP twist: every Nth dish needs an ingredient from another station
 var breaks := 1.0            # second winds a service: the first cook who'd quit takes five instead
 var more_tickets := 1.0
+var late_ramp := 1.0
+var late_big_start := 7.0
 var rush_stress := 1.0
 
 var level := 1               # service number
@@ -56,6 +58,7 @@ var lives_max := LIVES     # LIVES, +1 with SECOND CHANCE
 var cash := 0                # tips banked tonight, spent in the SHOP between services
 var twist_box: VBoxContainer   # the TONIGHT card while it's up
 var perks: Array = []        # upgrades owned tonight (upgrades.gd)
+var cook_xp := {}            # productive work banked on completed services
 var cook_perks := {}         # cook name -> perk ids earned tonight (8.5 plan #4: level-ups, Duff's pick)
 var _undo := {}               # the state before the last move this turn (8.5 plan #4: one UNDO a turn)
 var _undo_used := false
@@ -100,6 +103,7 @@ func _ready() -> void:
 		_night_before = score
 		cash = int(d.get("cash", 0))
 		perks = (d.get("perks", []) as Array).filter(func(p): return Upgrades.ALL.has(p))
+		cook_xp = d.get("cook_xp", {}).duplicate()
 		var cp: Variant = d.get("cook_perks", {})
 		if cp is Dictionary:
 			for nm in cp:
@@ -132,7 +136,7 @@ func _ready() -> void:
 ## served count), so a reload can't count tickets twice.
 func state() -> Dictionary:
 	var d := {"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(),
-		"cook_perks": cook_perks.duplicate(true), "levelup": levelup, "gone": gone.duplicate()}
+		"cook_perks": cook_perks.duplicate(true), "cook_xp": cook_xp.duplicate(), "levelup": levelup, "gone": gone.duplicate()}
 	if k != null and not between and not over and not k.done:
 		d["kitchen"] = k.to_dict()
 	return d
@@ -275,15 +279,14 @@ func _refresh_hud() -> void:
 		var pp := k.prep_pick(k.crew[sel].at, pick_tid)
 		act_btn.text = "PREP %s T%d" % [Kitchen.prep_name(pp.item), pp.t.table]
 	elif a == "RUSH":   # warn when this rush would send the cook over the edge
-		var cr: Dictionary = k.crew[sel]
 		# end of turn also adds 1 to a working cook while any ticket will be red (2 minutes or less)
-		var red := 1 if k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2) else 0
-		act_btn.text = ("RUSH (TAKES 5)" if _wind_for(sel) else "RUSH (QUITS!)") if cr.stress + k.rush_stress + red >= k.stress_cap else ("RUSH (FREE)" if k.rush_stress <= 0 else "RUSH +%d STRESS" % k.rush_stress)
+		var projected := stress_after(sel, true) + k.rush_cost()
+		act_btn.text = ("RUSH (TAKES 5)" if _wind_for(sel) else "RUSH (QUITS!)") if projected >= k.stress_cap else ("RUSH (FREE)" if k.rush_cost() <= 0 else "RUSH +%d STRESS" % k.rush_cost())
 	elif a == "RUN" and k.tray > 1:   # a tray: say how many plates go out on this one action
 		var n := mini(k.tray, k.window.size() + (0 if k.crew[sel].hand.is_empty() else 1))
 		if n > 1:
 			act_btn.text = "RUN %d PLATES" % n
-	if (a == "RUN" or a == "PLATE") and k.is_free(sel, a):   # the cook's knack: this one costs no move (8.5 plan #4)
+	if (a in ["RUN", "PLATE", "PREP"]) and k.is_free(sel, a):   # the cook's knack: this one costs no move (8.5 plan #4)
 		act_btn.text += " (FREE)"
 	if a != "":   # whose move this is, on the button (stress pass: taps moved the wrong cook)
 		var named := "%s: %s" % [k.crew[sel].name, act_btn.text]
@@ -327,8 +330,8 @@ func pace_adjust() -> Dictionary:
 ## Tickets the given service brings, after pace and the house's read.
 func tickets_for(n: int) -> int:
 	var base := int(first_tickets)
-	return Kitchen.count_for(maxi(mini(3, base), base + pace_adjust().tickets) + Upgrades.load_tickets(perks),
-		int(more_tickets), n)
+	return Kitchen.count_for(maxi(mini(3, base), base + pace_adjust().tickets),
+		int(more_tickets), n, int(late_ramp))
 
 
 ## After a service (or a lost night), the house reads you: a rough one eases the next, an aced one pushes it.
@@ -366,16 +369,19 @@ func _new_service() -> void:
 	k.ap = int(crew_ap)
 	k.stress_cap = u.stress_cap
 	k.turns = int(service_turns)
-	# A bigger kitchen draws a bigger crowd: +1 table per two upgrades (8.5 plan #2: the shop made it a cakewalk).
-	k.first_tickets = maxi(mini(3, int(first_tickets)), int(first_tickets) + adj.tickets) + Upgrades.load_tickets(perks)
+	# Later services ramp independently of purchases.
+	k.first_tickets = maxi(mini(3, int(first_tickets)), int(first_tickets) + adj.tickets)
 	k.more_tickets = int(more_tickets)
+	k.late_ramp = int(late_ramp)
+	k.late_big_start = int(late_big_start)
 	k.rush_stress = u.rush_stress
+	k.cast_iron = u.cast_iron
 	k.tray = u.tray
 	k.hires = u.hires
 	k.breaks = int(breaks)
 	k.prep_every = int(prep_every)
 	k.fox_cost = int(fox_cost)
-	k.batch = u.batch
+	k.batch_stations = u.batch_stations
 	k.cook_perks = cook_perks.duplicate(true)
 	k.gone = gone.duplicate()
 	k.start(level, rng.randi() if level > 1 else 0)
@@ -632,6 +638,9 @@ func _service_done() -> void:
 	_night_before += k.served
 	score = _night_before
 	var bonus: int = Kitchen.GRADE_BONUS.get(k.grade(), 10)   # every grade pays something (Duff, Nov 26)
+	for cr in k.crew:
+		if cr.name in ["DEV", "MO", "JO"]:
+			cook_xp[cr.name] = int(cook_xp.get(cr.name, 0)) + int(cr.get("work", 0))
 	levelup = mvp()
 	cash += k.tips + bonus
 	_record_best(level)
@@ -722,7 +731,7 @@ func _stamp(l: Control) -> void:
 func _shop_label() -> void:
 	var b: Button = sheet_box.get_node_or_null("ShopButton") if sheet_box != null else null
 	if b != null:
-		var can := Upgrades.ORDER.any(func(id): return Upgrades.can_buy(id, cash, perks))
+		var can := Upgrades.ORDER.any(func(id): return Upgrades.can_buy(id, cash, perks, level))
 		b.text = "SHOP ($%d)%s" % [cash, " NEW!" if can and not _shop_opened else ""]   # NEW until you've looked
 
 
@@ -734,7 +743,9 @@ func open_shop() -> void:
 	_shop_opened = true
 	var box := UI.sheet(self, 500)
 	box.add_child(UI.label("KITCHEN SHOP", 30, UI.ACCENT))
-	var bank := UI.label("Bank: $%d. Every 2 upgrades bring +1 table." % cash, 20, UI.DIM)
+	var bank := UI.label("Bank: $%d. Upgrades do not add tables." % cash, 20, UI.DIM)
+	if level < 4:
+		bank.text += "\nEntree tray + burners open S4."
 	if not perks.has("temp"):   # build-84 review: nothing said a third cook was the answer to a busier night
 		var left := 2 - gone.size()
 		bank.text += "\nNext: %d tickets, %d cook%s. THIRD COOK helps." % [tickets_for(level), left, "" if left == 1 else "s"]
@@ -742,7 +753,7 @@ func open_shop() -> void:
 	bank.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(bank)
 	var owned: Array[String] = []
-	var listed: Array = Upgrades.shown(perks)
+	var listed: Array = Upgrades.shown(perks, level)
 	for id in Upgrades.ORDER:
 		if perks.has(id) and not listed.has(id):   # owned rows already say OWNED: name only the ones that left the list
 			owned.append(String(Upgrades.ALL[id].name))
@@ -761,12 +772,12 @@ func open_shop() -> void:
 	box.add_child(scroll)
 	var big_text: bool = float(_settings.text_scale()) > 1.2
 	if big_text:
-		scroll.custom_minimum_size.y = 470
-	elif Upgrades.shown(perks).size() > 6:   # DOUBLE BURNERS made seven rows: DONE fell off a phone at normal text
+		scroll.custom_minimum_size.y = 430
+	elif Upgrades.shown(perks, level).size() > 6:   # DOUBLE BURNERS made seven rows: DONE fell off a phone at normal text
 		scroll.custom_minimum_size.y = 560
 	else:
 		scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED   # fits as is: no scroll
-	for id in Upgrades.shown(perks):
+	for id in Upgrades.shown(perks, level):
 		var u: Dictionary = Upgrades.ALL[id]
 		var b: Button
 		if perks.has(id):
@@ -776,7 +787,7 @@ func open_shop() -> void:
 			var cost := Upgrades.price(id)
 			var short := cash < cost   # say it in words, not just the disabled colour
 			b = UI.button("%s  %s\n%s" % [u.name, ("NEED $%d" if short else "$%d") % cost, u.says], func(): buy(id, box), 88)
-			b.disabled = not Upgrades.can_buy(id, cash, perks)
+			b.disabled = not Upgrades.can_buy(id, cash, perks, level)
 		b.name = "Buy_" + id
 		b.add_theme_font_size_override("font_size", UI.font_size(20))
 		rows.add_child(b)
@@ -784,7 +795,7 @@ func open_shop() -> void:
 
 
 func buy(id: String, box: VBoxContainer) -> void:
-	var left := Upgrades.buy(id, cash, perks)
+	var left := Upgrades.buy(id, cash, perks, level)
 	if left < 0:
 		return
 	var previous_cash := cash
@@ -797,7 +808,7 @@ func buy(id: String, box: VBoxContainer) -> void:
 	get_node("/root/Subs").cue("[register: %s bought]" % Upgrades.ALL[id].name.to_lower())
 	UI.buzz(25)
 	_shop_label()
-	_refresh_points()   # a bigger kitchen draws more tables: the grade sheet's "Next" says so
+	_refresh_points()
 	UI.close_sheet(box)
 	if id == "temp":
 		_crew_expanded()
@@ -847,17 +858,17 @@ func _record_best(services_cleared: int) -> void:
 		_settings.set_value("best_tickets", score)
 
 
-## The cook who did the most this service (actions taken; the original house cooks only; Jo retains the existing hire rules).
+## The cook who contributed most productive work this service (all permanent crew).
 ## Ties go to the one with fewer perks, so both cooks grow.
 func mvp() -> String:
 	var best := ""
 	var best_acts := -1
 	for cr in k.crew:
-		if Kitchen.TEMPS.has(cr.name) or gone.has(cr.name):
+		if cr.name not in ["DEV", "MO", "JO"] or gone.has(cr.name) or cr.out or (cook_perks.get(cr.name, []) as Array).size() >= Kitchen.PERK_IDS.size():
 			continue
-		var a: int = int(cr.get("acts", 0))
+		var a: int = int(cr.get("work", 0))
 		var fewer: bool = best != "" and (cook_perks.get(cr.name, []) as Array).size() < (cook_perks.get(best, []) as Array).size()
-		if a > best_acts or (a == best_acts and fewer):
+		if a > 0 and (a > best_acts or (a == best_acts and fewer)):
 			best = cr.name
 			best_acts = a
 	return best
@@ -868,7 +879,7 @@ func perk_offer(nm: String) -> Array:
 	var have: Array = cook_perks.get(nm, [])
 	var pool: Array = []
 	for id in Kitchen.PERK_IDS:   # not owned, and a station hand only for a station open by now
-		if not have.has(id) and (not id.begins_with("fast_") or Kitchen.OPENS[int(id.trim_prefix("fast_"))] <= level):
+		if not have.has(id) and (id != "prep" or level >= 4) and (not id.begins_with("fast_") or Kitchen.OPENS[int(id.trim_prefix("fast_"))] <= level):
 			pool.append(id)
 	var r := RandomNumberGenerator.new()
 	r.seed = hash("%s:%d:%d" % [nm, level, have.size()])
@@ -877,7 +888,24 @@ func perk_offer(nm: String) -> Array:
 		var t = pool[i]
 		pool[i] = pool[j]
 		pool[j] = t
-	return pool.slice(0, 3)
+	# Give a role-consistent choice first when possible, with alternatives from other paths.
+	var offer: Array = []
+	if not have.is_empty():
+		for id in pool:
+			if Kitchen.perk_role(id) == Kitchen.cook_role(have):
+				offer.append(id)
+				break
+	for id in pool:
+		if not offer.has(id) and not offer.any(func(p): return Kitchen.perk_role(p) == Kitchen.perk_role(id)):
+			offer.append(id)
+		if offer.size() == 3:
+			return offer
+	for id in pool:
+		if not offer.has(id):
+			offer.append(id)
+		if offer.size() == 3:
+			break
+	return offer
 
 
 ## LEVEL UP: pick one of three perks for the service's hardest worker, then the service starts.
@@ -889,12 +917,13 @@ func open_levelup() -> void:
 	head.name = "LevelUp"
 	box.add_child(head)
 	var have: Array = cook_perks.get(nm, [])
-	var sub := UI.label("Worked hardest last service. Pick a perk%s" % (
-		(". Has: " + ", ".join(have.map(func(id): return Kitchen.PERKS[id][0]))) if not have.is_empty() else "."), 20, UI.DIM)
+	var sub := UI.label("LV %d  |  %d XP  |  %s\nMost productive last service. Pick a perk%s" % [have.size() + 1, int(cook_xp.get(nm, 0)), Kitchen.cook_role(have),
+		(". Has: " + ", ".join(have.map(func(id): return Kitchen.PERKS[id][0]))) if not have.is_empty() else "."], 20, UI.DIM)
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(sub)
+	box.add_child(UI.label("One free perk action per turn.", 18, UI.DIM))
 	for id in perk_offer(nm):
-		var b := UI.button("%s\n%s" % [Kitchen.PERKS[id][0], Kitchen.PERKS[id][1]], func(): pick_perk(id), 88)
+		var b := UI.button("%s: %s\n%s" % [Kitchen.perk_role(id), Kitchen.PERKS[id][0], Kitchen.PERKS[id][1]], func(): pick_perk(id), 88)
 		b.name = "Perk_" + id
 		b.add_theme_font_size_override("font_size", UI.font_size(20))
 		box.add_child(b)
@@ -1547,8 +1576,8 @@ func stress_after(c: int, as_acted := false, emptied := -1) -> int:
 	for i in k.pans.size():
 		var p: Dictionary = k.pans[i]
 		if not p.is_empty() and p.left <= 0 and p.sat >= k.burn_after and cr.at == i and i != emptied:
-			s += 2
-	return s + (1 if red else 0) + (1 if k.heat_turn() else 0) if (cr.acted or as_acted) else maxi(0, s - 2)
+			s += k.burn_stress(c)
+	return s + (1 if red else 0) + (1 if k.heat_turn() else 0) if (cr.acted or as_acted) else maxi(0, s - k.rest_recovery(c))
 
 
 ## The NEXT bar in plain words ("NEXT: 2 dishes in 3 min"), as many as fit the width.
@@ -1721,7 +1750,7 @@ func _draw_field(f: Control) -> void:
 		f.draw_rect(r, UI.panel_color())
 		f.draw_rect(r, UI.ACCENT if here else Color("4a5878"), false, 3.0 if here else 2.0)
 		_draw_fit(f, ART_STATIONS[i], Rect2(r.position + Vector2(6, 40), r.size - Vector2(12, 46)))
-		f.draw_string(font, r.position + Vector2(0, 30), Kitchen.STATIONS[i], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(16), ink)
+		f.draw_string(font, r.position + Vector2(0, 30), Kitchen.STATIONS[i] + (" x2" if i < Kitchen.PASS_IX and k.batch_at(i) == 2 else ""), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, UI.font_size(14), ink)
 		if i < k.pans.size() and not k.pans[i].is_empty():
 			var p: Dictionary = k.pans[i]
 			var up: bool = p.left <= 0
@@ -1803,7 +1832,7 @@ func _draw_field(f: Control) -> void:
 			var far: bool = cost > me.ap
 			# The chip takes over the name row while a cook is picked (name + cost): above it a coach hint
 			# hid it, at the foot it hid UP! / PLATE NOW (fresh-eyes PR #30).
-			var nm: String = Kitchen.STATIONS[i]
+			var nm: String = Kitchen.STATIONS[i] + (" x2" if i < Kitchen.PASS_IX and k.batch_at(i) == 2 else "")
 			var wl := _fit(font, "TOO FAR" if far else ("FREE STEP" if cost == 0 else "WALK %d" % cost), "FAR" if far else ("FREE" if cost == 0 else "W%d" % cost), r.size.x - 8, 13)
 			var chip := Rect2(r.position.x + 3, r.position.y + 3, r.size.x - 6, 36)   # two lines: the name, then the cost
 			var tone_c: Color = UI.key("bad") if far else UI.key("info")
@@ -1842,7 +1871,7 @@ func _draw_field(f: Control) -> void:
 			f.draw_rect(np, UI.key("bad"))
 		else:
 			_plate(f, np)
-		f.draw_string(font, np.position + Vector2(0, 17), cr.name, HORIZONTAL_ALIGNMENT_CENTER, np.size.x, UI.font_size(15), UI.BG if near_cap else ink)
+		f.draw_string(font, np.position + Vector2(0, 17), "%s L%d" % [cr.name, (cr.perks as Array).size() + 1], HORIZONTAL_ALIGNMENT_CENTER, np.size.x, UI.font_size(12), UI.BG if near_cap else ink)
 		if near_cap:   # a red ring round the face, thick: shape as well as colour
 			f.draw_arc(pos, COOK_R + 2.0, 0.0, TAU, 40, UI.key("bad"), 5.0)
 		if spent:
@@ -1948,10 +1977,58 @@ func pause() -> void:
 	if k.event != "":
 		sheet_box.add_child(UI.label("TONIGHT: " + Kitchen.EVENTS[k.event][0], 20, UI.DIM))
 	sheet_box.add_child(MenuArt.primary(UI.button("RESUME", resume, 88)))
+	sheet_box.add_child(UI.button("CREW", open_crew_card))
 	sheet_box.add_child(UI.button("HOW TO PLAY", func(): HowToPlay.open(self)))
 	sheet_box.add_child(UI.button("SETTINGS", func(): SettingsSheet.open(self)))
 	sheet_box.add_child(UI.button("REPORT A BUG", func(): BugReport.open(self)))
 	sheet_box.add_child(UI.button("QUIT TO TITLE", quit_to_title))
+
+
+## Review every cook's role, level, productive experience and earned perks.
+func open_crew_card() -> void:
+	var box := UI.sheet(self, 500)
+	box.add_child(UI.label("YOUR CREW", 30, UI.ACCENT))
+	box.add_child(UI.label("One free perk action per cook per turn.", 18, UI.DIM))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size.y = 460
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(rows)
+	for nm in ["DEV", "MO", "JO"]:
+		if nm == "JO" and not perks.has("temp"):
+			continue
+		var have: Array = cook_perks.get(nm, [])
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		rows.add_child(row)
+		var atlas := AtlasTexture.new()
+		atlas.atlas = CREW_SHEETS[nm]
+		atlas.region = Rect2(0, 0, 128, 176)
+		var pic := TextureRect.new()
+		pic.texture = atlas
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.custom_minimum_size = Vector2(78, 108)
+		row.add_child(pic)
+		var text := VBoxContainer.new()
+		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(text)
+		var title := UI.label("%s  LV %d  |  %s" % [nm, have.size() + 1, Kitchen.cook_role(have)], 20, UI.ACCENT)
+		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		text.add_child(title)
+		var details := "%d XP" % int(cook_xp.get(nm, 0))
+		if gone.has(nm):
+			details += "  |  WALKED OUT"
+		for id in have:
+			details += "\n%s: %s" % [Kitchen.PERKS[id][0], Kitchen.PERKS[id][1]]
+		if have.is_empty():
+			details += "\nNo perks yet"
+		var body := UI.label(details, 18, UI.DIM)
+		body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		text.add_child(body)
+	box.add_child(UI.button("DONE", func(): UI.close_sheet(box)))
 
 
 func resume() -> void:
@@ -2000,7 +2077,7 @@ func game_over() -> void:
 ## Replay the service that was lost: same night, same bank and upgrades, fresh tickets.
 func retry_service() -> void:
 	_save.write({"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(),
-		"cook_perks": cook_perks.duplicate(true)})   # earned perks stay; a pending pick was for the service you beat; a walked-out cook comes back
+		"cook_perks": cook_perks.duplicate(true), "cook_xp": cook_xp.duplicate()})   # earned perks stay; a pending pick was for the service you beat; a walked-out cook comes back
 	get_node("/root/Loader").go("res://scenes/game.tscn")
 
 

@@ -591,8 +591,8 @@ func _run() -> void:
 	var t_after: int = game.tickets_for(game.level)
 	_check(nudge.contains("THIRD COOK helps") and nudge.contains("%d tickets" % t_before),
 		"NUDGE PASS (shop: '%s')" % nudge.get_slice("\n", 1))
-	_check(crew_bought and unlock and duplicate_blocked and t_after == t_before + 1,
-		"PUSHBACK PASS (third cook $45 once; two upgrades: %d -> %d tickets)" % [t_before, t_after])
+	_check(crew_bought and unlock and duplicate_blocked and t_after == t_before,
+		"PUSHBACK PASS (third cook $45 once; purchase leaves %d -> %d tickets)" % [t_before, t_after])
 	game._new_service()
 	game._after_move()
 	await _frames(20)
@@ -601,6 +601,7 @@ func _run() -> void:
 	game.sel = 0
 	game.tap(game.cook_visual_pos(2))
 	var jo_pick: bool = game.sel == 2
+	game.k.crew[2].work = 12
 	game._service_done()
 	await _frames(5)
 	var carried: bool = game.perks.has("temp") and get_node("/root/Save").read().perks.has("temp")
@@ -618,6 +619,33 @@ func _run() -> void:
 	game = get_tree().current_scene
 	_check(game != old_crew_game and game.perks.has("temp") and game.k.crew.size() == 3 and not Upgrades.can_buy("temp", 999, game.perks),
 		"CREW RESTART PASS (saved unlock restores Jo without another purchase)")
+	# Jo's productive work earns the role choice; the pending pick and XP survived the reload.
+	var jo_buttons: Array = game.find_children("Perk_*", "Button", true, false)
+	var jo_earned: bool = game.levelup == "JO" and int(game.cook_xp.get("JO", 0)) == 12 and jo_buttons.size() == 3
+	if not jo_buttons.is_empty():
+		await _click_node(jo_buttons[0])
+	await _frames(5)
+	game.open_crew_card()
+	await _frames(5)
+	await _shot("crew_progression")
+	var card_ok: bool = _has_label("YOUR CREW") and (game.cook_perks.get("JO", []) as Array).size() == 1
+	await _click("DONE")
+	_check(jo_earned and card_ok and get_node("/root/Save").read().cook_xp.get("JO", 0) == 12,
+		"CREW PROGRESSION PASS (Jo earned XP and a role perk, saved and shown in Crew)")
+	# Buy one station upgrade through the real shop; buying it must not add tables.
+	game.level = 4
+	game.cash = 300
+	var load_before: int = game.tickets_for(4)
+	game.open_shop()
+	await _frames(5)
+	await _shot("station_shop")
+	await _click("GRILL BURNERS")
+	await _frames(4)
+	var burner_ok: bool = game.perks.has("burners_0") and not game.perks.has("burners_1") and game.cash == 200 and game.tickets_for(4) == load_before
+	await _click("DONE")
+	game._new_service()
+	_check(burner_ok and game.k.batch_at(0) == 2 and game.k.batch_at(1) == 1,
+		"STATION SHOP PASS (only Grill upgraded, no extra tickets)")
 	game.perks.erase("temp")   # isolate the existing base-crew walkout test
 	# Duff, Nov 26 ("Gone for the whole night"): a cook who walked out sits out the next services.
 	game.gone = ["MO"]
@@ -1333,14 +1361,14 @@ func _polish_checks(game: Node) -> void:
 		"PREP PASS (grill button '%s', strips pulled, then COLD fires the salad)" % prep_btn.replace("\n", " "))
 	# DOUBLE BURNERS (shop): one FIRE cooks fries for two tables.
 	kk.event = ""
-	kk.batch = 2
+	kk.batch_stations = [1]
 	kk.tickets = [{"id": 990, "table": 50, "items": [{"dish": "FRIES", "state": "wait"}], "time": 5, "big": false, "t0": 5},
 		{"id": 991, "table": 51, "items": [{"dish": "FRIES", "state": "wait"}], "time": 8, "big": false, "t0": 8}]
 	kk.crew[0].at = 1
 	kk.crew[0].ap = kk.ap
 	kk.act_here(0)
 	var both: Array = kk.pans[1].get("more", [])
-	kk.batch = 1
+	kk.batch_stations = []
 	_check(both == [991] and kk.tickets[1].items[0].state == "cooking", "BURNERS PASS (one FIRE: T50 + T51 fries in one pan)")
 	# The studio fox (docs/MASCOT.md): it pops up over the calmer cook, who loses the turn chasing it.
 	for i in kk.pans.size():
@@ -1374,7 +1402,8 @@ func _polish_checks(game: Node) -> void:
 	await _frames(4)
 	var owned: Label = get_tree().root.find_child("Owned", true, false)
 	var owned_txt: String = owned.text if owned != null else "-"   # read now: DONE frees the sheet
-	var owned_ok: bool = owned_txt.contains("SERVER TRAY")
+	var owned_tray: Button = get_tree().root.find_child("Buy_tray", true, false)
+	var owned_ok: bool = owned_txt.contains("SERVER TRAY") or (owned_tray != null and owned_tray.disabled and owned_tray.text.contains("OWNED"))
 	await _shot("polish_shop")
 	await _click("DONE")
 	game.perks = perks_was
@@ -1391,6 +1420,8 @@ func _tray_checks(game: Node, pst: Node) -> void:
 	var cash_was: int = game.cash
 	var perks_was: Array = game.perks.duplicate()
 	var ts_was = pst.get_value("text_size")
+	var tray_level_was: int = game.level
+	game.level = 4  # late tier opens with burners
 	var one: bool = game.k.tray == 1
 	pst.set_value("text_size", 3)
 	game.cash = 999
@@ -1410,6 +1441,7 @@ func _tray_checks(game: Node, pst: Node) -> void:
 	var four: bool = game.perks.has("tray2") and Upgrades.apply({"ticket_time": 9, "stress_cap": 6,
 		"rush_stress": 1, "lives": 3}, game.perks).tray == 4
 	await _click("DONE")
+	game.level = tray_level_was
 	pst.set_value("text_size", ts_was)
 	await _frames(2)
 	# A tray RUN through the real button: two plates of one table go out on one action.

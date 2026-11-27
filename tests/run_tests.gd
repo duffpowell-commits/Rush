@@ -549,7 +549,7 @@ func test_second_wind_and_ramp() -> void:
 	k.end_turn()
 	check(not k.crew[0].brk and k.crew[0].ap == k.ap and k.crew[0].stress == k.stress_cap - 5, "back after one turn, rested")
 	check(Kitchen.count_for(7, 1, 1) == 7 and Kitchen.count_for(7, 1, 2) == 8 and Kitchen.count_for(7, 1, 3) == 9
-		and Kitchen.count_for(7, 1, 4) == 9 and Kitchen.count_for(7, 1, 5) == 10, "ramp: 7, 8, 9, 9, 10")
+		and Kitchen.count_for(7, 1, 4) == 10 and Kitchen.count_for(7, 1, 5) == 11 and Kitchen.count_for(7, 1, 6) == 12, "ramp: 7, 8, 9, 10, 11, 12")
 
 
 ## 8.5 plan #4 (Duff: "make the perks earn able like a level up system"): perks ride on the cook,
@@ -622,7 +622,7 @@ func test_rush_save_no_double_count() -> void:
 func test_save_migrates_v1() -> void:
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 1, "level": 3, "score": 9, "lives": 2})
-	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 6, "v1 -> v6")
+	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 7, "v1 -> v7")
 	sv.free()
 
 
@@ -704,7 +704,7 @@ func test_save_migrates_v2() -> void:
 	kd.erase("window")
 	kd.crew[0].hand = {"tid": 1, "dish": "BURGER"}
 	var d: Dictionary = sv._migrate({"_version": 2, "level": 1, "score": 0, "kitchen": kd})
-	check(int(d._version) == 6 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
+	check(int(d._version) == 7 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
 	var b := Kitchen.new()
 	check(b.from_dict(d.kitchen) and b.window.size() == 1, "and it loads")
 	sv.free()
@@ -763,12 +763,12 @@ func test_upgrades_carry() -> void:
 	check(Upgrades.buy("nope", 999, owned) == -1, "unknown id")
 	owned.append_array(["meal", "iron", "comps"])
 	var u := Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, owned)
-	check(u.ticket_time == 10 and u.stress_cap == 7 and u.rush_stress == 0 and u.lives == 4, "all four apply")
+	check(u.ticket_time == 10 and u.stress_cap == 7 and u.rush_stress == 1 and u.cast_iron and u.lives == 4, "all four apply")
 	for id in Upgrades.ALL:
 		check(String(Upgrades.ALL[id].says).length() <= 26, id + " fits the button")
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 3, "level": 2, "score": 8})
-	check(int(d._version) == 6 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v4")
+	check(int(d._version) == 7 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v7")
 	sv.free()
 
 
@@ -812,7 +812,7 @@ func test_tray_runs() -> void:
 	check(Upgrades.buy("tray", 100, owned) == 70, "server tray bought")
 	check(Upgrades.shown(owned).has("tray2") and not Upgrades.shown(owned).has("tray"), "then the entree tray")
 	check(Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, owned).tray == 2, "server tray = 2")
-	check(Upgrades.buy("tray2", 100, owned) == 10, "entree tray bought")
+	check(Upgrades.buy("tray2", 100, owned) == 35, "entree tray bought")
 	check(Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, owned).tray == Upgrades.MAX_TRAY, "entree tray = 4")
 	for tray in [1, 2, 4]:
 		var k := Kitchen.new()
@@ -1012,7 +1012,7 @@ func test_temp_cook_and_curve_tweaks() -> void:
 	s3.start(3, 5)
 	var s4 := Kitchen.new()
 	s4.start(4, 5)
-	check(s4.total == s3.total, "service 4 is a ticket lighter than the +1 curve (same as service 3)")
+	check(s4.total == s3.total + 1, "service 4 resumes the ramp")
 
 
 ## Permanent third cook: one payment, and previous paid rentals migrate without another charge.
@@ -1022,11 +1022,11 @@ func test_shop_pushes_back() -> void:
 	check(Upgrades.buy("temp", 44, owned) == -1 and owned.is_empty(), "cannot afford crew")
 	check(Upgrades.buy("temp", 45, owned) == 0 and owned == ["temp"], "crew bought once")
 	check(Upgrades.buy("temp", 100, owned) == -1 and owned == ["temp"], "no duplicate charge")
-	check(Upgrades.load_tickets([]) == 0 and Upgrades.load_tickets(["meal"]) == 0 and Upgrades.load_tickets(["meal", "lamps"]) == 1
-		and Upgrades.load_tickets(["meal", "lamps", "iron", "tray"]) == 2, "one table per two upgrades")
+	check(Upgrades.load_tickets([]) == 0 and Upgrades.load_tickets(["meal"]) == 0 and Upgrades.load_tickets(["meal", "lamps"]) == 0
+		and Upgrades.load_tickets(["meal", "lamps", "iron", "tray"]) == 0, "no purchase penalty")
 	var sv = load("res://scripts/save_game.gd").new()
 	var old: Dictionary = sv._migrate({"_version": 5, "cash": 73, "perks": ["tray"], "temp_buys": 2})
-	check(int(old._version) == 6 and old.perks == ["tray", "temp"] and old.cash == 73, "past hires unlock crew without charge")
+	check(int(old._version) == 7 and old.perks == ["tray", "temp"] and old.cash == 73, "past hires unlock crew without charge")
 	var active: Dictionary = sv._migrate({"_version": 5, "perks": ["temp"], "temp_buys": 1})
 	check(active.perks == ["temp"], "active hire migrates without duplication")
 	var legacy := Kitchen.new()
@@ -1090,7 +1090,7 @@ func test_cross_prep() -> void:
 func test_double_burners() -> void:
 	var k := Kitchen.new()
 	k.with_events = false
-	k.batch = 2
+	k.batch_stations = [1]
 	k.start(2, 3)
 	for i in k.pans.size():
 		k.pans[i] = {}
@@ -1113,8 +1113,8 @@ func test_double_burners() -> void:
 	k.end_turn()
 	check(k.ticket(83).is_empty() and not k.pans[1].is_empty() and k.pans[1].tid == 84 and not k.pans[1].has("more"),
 		"a walked first table hands the pan to the other one")
-	var u := Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, ["burners"])
-	check(u.batch == 2 and Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, []).batch == 1, "the shop sets it")
+	var u := Upgrades.apply({"ticket_time": 9, "stress_cap": 6, "rush_stress": 1, "lives": 3}, ["burners_1"])
+	check(u.batch_stations == [1] and k.batch_at(0) == 1 and k.batch_at(1) == 2, "the shop upgrades only the bought station")
 
 
 ## The studio fox (docs/MASCOT.md): on service 3 (the quiet one) it runs through halfway, and the
@@ -1222,3 +1222,59 @@ func test_drag_command() -> void:
 	check(game.k.to_dict() == snapshot, "cancelled drag has no effect")
 	game.queue_free()
 	await process_frame
+
+func test_kitchen_progression_balance() -> void:
+	var k := Kitchen.new()
+	k.hires = 1
+	k.cook_perks = {"JO": ["run", "walk", "recovery"]}
+	k.start(4, 12)
+	check(k.crew[2].name == "JO" and k.has_perk(2, "recovery"), "Jo earns perks")
+	k.crew[2].at = 4
+	check(k.move(2, 3) and k.crew[2].ap == k.ap and k.crew[2].work == 0, "walking is not productive XP")
+	check(not k.is_free(2, "RUN"), "shared free-action allowance")
+	k.crew[2].stress = 4
+	k.crew[2].acted = false
+	k.end_turn()
+	check(k.crew[2].stress == 1 and k.is_free(2, "RUN"), "veteran rest and new allowance")
+	k.cast_iron = true
+	k.crew[0].at = 0
+	k.crew[1].at = 1
+	k.pans[0] = {"tid": 1, "dish": "BURGER", "left": 2, "sat": 0, "rushed": false}
+	k.pans[1] = {"tid": 2, "dish": "WINGS", "left": 2, "sat": 0, "rushed": false}
+	check(k.rush(0) and k.crew[0].stress == 0 and k.rush(1) and k.crew[1].stress == 1, "one free RUSH for the whole kitchen")
+	var back := Kitchen.new()
+	check(back.from_dict(JSON.parse_string(JSON.stringify(k.to_dict()))) and back.cast_iron and back.iron_used, "rush allowance survives reload")
+	var specialist := Kitchen.new()
+	specialist.cook_perks = {"MO": ["fast_1", "steady"]}
+	specialist.start(2, 4)
+	specialist.tickets = [{"id": 91, "table": 7, "items": [{"dish": "FRIES", "state": "wait"}], "time": 9, "big": false}]
+	specialist.crew[1].at = 1
+	check(specialist.fire(1) and specialist.crew[1].work == 1, "FIRE earns productive XP")
+	specialist.end_turn()
+	check(specialist.is_free(1, "PLATE") and specialist.plate(1) and specialist.crew[1].ap == specialist.ap,
+		"station hand quick-plates a one-minute dish")
+	check(specialist.crew[1].work == 2 and not specialist.is_free(1, "PLATE") and specialist.burn_stress(1) == 1,
+		"quick plate counts and Veteran reduces burns")
+	var sv = load("res://scripts/save_game.gd").new()
+	var old: Dictionary = sv._migrate({"_version": 6, "perks": ["burners", "temp"], "cash": 42, "cook_perks": {"DEV": ["walk"]}})
+	check(old.perks.has("temp") and old.perks.has("burners_0") and old.perks.has("burners_3") and old.cash == 42, "legacy equipment grandfathered")
+	check(old.cook_perks.DEV == ["walk"], "legacy earned perk retained")
+	check(not Upgrades.can_buy("burners_0", 100, [], 3) and Upgrades.can_buy("burners_0", 100, [], 4), "burners open in service 4")
+	check(not Upgrades.can_buy("tray2", 100, ["tray"], 3) and Upgrades.can_buy("tray2", 100, ["tray"], 4), "advanced tray opens in service 4")
+	var late := Kitchen.new()
+	late.with_events = false
+	late.start(7, 12)
+	check(late.incoming.filter(func(i): return i.ticket.big).size() == 2, "a second big table adds late-service complexity")
+	var game = load("res://scripts/game.gd").new()
+	game.k = Kitchen.new()
+	game.k.hires = 1
+	game.k.start(4, 1)
+	game.k.crew[0].acts = 99
+	game.k.crew[0].work = 1
+	game.k.crew[2].work = 5
+	check(game.mvp() == "JO", "Jo wins productive MVP even when Dev walked more")
+	game.level = 4
+	var offers: Array = game.perk_offer("JO")
+	check(offers.size() == 3 and Kitchen.perk_role(offers[0]) != Kitchen.perk_role(offers[1]) and Kitchen.perk_role(offers[0]) != Kitchen.perk_role(offers[2]) and Kitchen.perk_role(offers[1]) != Kitchen.perk_role(offers[2]), "three role choices")
+	game.free()
+	sv.free()

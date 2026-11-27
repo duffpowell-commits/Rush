@@ -8,6 +8,22 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
+## Nov 27 — Kitchen Progression & Balance (Codex)
+- Approved follow-up to build 104 simulation audit. The $45 Jo unlock and first three
+  services stay intact. Later service load ramps by stage, with two big tables from S7.
+  No extra tickets simply for buying equipment.
+- Store: $65 Entree Tray and $100 station-specific burners open S4. Cast Iron gives the
+  kitchen one stress-free RUSH per turn. Existing paid global burners migrate to all four
+  station upgrades (save v7); active legacy services keep their saved equipment.
+- Dev, Mo and Jo earn productive XP for FIRE, PLATE, RUN and PREP. One service MVP perk pick,
+  role-aware offers (Specialist, Expeditor, Veteran, Utility), shared single free action
+  per cook per turn, and new recovery, steady hand and prep perks. Station hands help
+  one-minute dishes via quick plating. Pause -> CREW shows role, level, XP and perks.
+- Adjustable late difficulty lives in TUNE. Evidence: `docs/BALANCE_PROGRESSION.md`,
+  `docs/renders/flow_crew_progression.png`, `flow_station_shop.png`, `flow_levelup.png`.
+- Human phone playtest still needed; automated results measure comparative behavior,
+  not a blind first-timer score.
+
 ## Nov 27 — permanent third cook (Codex)
 - The $45 THIRD COOK upgrade is bought once per saved night. Jo starts at the pass in every
   following service, including retries; a fresh night still begins with two cooks.
