@@ -15,8 +15,8 @@ const ALL := {
 	# server tray) makes it 4.
 	"tray": {"name": "SERVER TRAY", "cost": 30, "says": "RUN 2 PLATES AT ONCE"},
 	"tray2": {"name": "ENTREE TRAY", "cost": 90, "says": "RUN 4 PLATES AT ONCE", "needs": "tray"},
-	# 8.5 pass: a third pair of hands for one service (service 4 was a wall for two cooks).
-	"temp": {"name": "TEMP COOK", "cost": 45, "says": "+1 COOK NEXT SERVICE"},
+	# Third cook is a permanent upgrade for the saved night; keep the legacy id for saves.
+	"temp": {"name": "THIRD COOK", "cost": 45, "says": "JO JOINS FOR THE NIGHT"},
 	# Duff, Nov 26: "make the stations upgradable later on so that you can fire multiple dishes".
 	# A kitchen upgrade, not a cook perk: it stays when a cook walks out.
 	"burners": {"name": "DOUBLE BURNERS", "cost": 100, "says": "FIRE COOKS 2 OF A DISH"},
@@ -25,10 +25,9 @@ const ORDER := ["meal", "lamps", "tray", "tray2", "temp", "burners", "iron", "co
 const MAX_TRAY := 4
 
 
-## What it costs now. A temp cook doubles each time one is hired tonight (8.5 plan #2: a first-timer
-## hired one every service and the night went flat).
-static func price(id: String, temp_buys: int = 0) -> int:
-	return int(ALL[id].cost) * (1 << clampi(temp_buys, 0, 8)) if id == "temp" else int(ALL[id].cost)
+## Each upgrade has a fixed one-time price.
+static func price(id: String) -> int:
+	return int(ALL[id].cost)
 
 
 ## Extra tables a service brings for the kitchen you've built: one per two upgrades owned.
@@ -36,8 +35,8 @@ static func load_tickets(owned: Array) -> int:
 	return owned.size() / 2
 
 
-static func can_buy(id: String, cash: int, owned: Array, temp_buys: int = 0) -> bool:
-	if not ALL.has(id) or owned.has(id) or cash < price(id, temp_buys):
+static func can_buy(id: String, cash: int, owned: Array) -> bool:
+	if not ALL.has(id) or owned.has(id) or cash < price(id):
 		return false
 	return not ALL[id].has("needs") or owned.has(ALL[id].needs)
 
@@ -49,11 +48,11 @@ static func shown(owned: Array) -> Array:
 
 
 ## Returns the cash left, or -1 if it can't be bought (owned array gains the id).
-static func buy(id: String, cash: int, owned: Array, temp_buys: int = 0) -> int:
-	if not can_buy(id, cash, owned, temp_buys):
+static func buy(id: String, cash: int, owned: Array) -> int:
+	if not can_buy(id, cash, owned):
 		return -1
 	owned.append(id)
-	return cash - price(id, temp_buys)
+	return cash - price(id)
 
 
 ## The service's numbers with the owned upgrades on top.

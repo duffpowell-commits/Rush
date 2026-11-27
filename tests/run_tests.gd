@@ -622,7 +622,7 @@ func test_rush_save_no_double_count() -> void:
 func test_save_migrates_v1() -> void:
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 1, "level": 3, "score": 9, "lives": 2})
-	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 5, "v1 -> v5")
+	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 6, "v1 -> v6")
 	sv.free()
 
 
@@ -704,7 +704,7 @@ func test_save_migrates_v2() -> void:
 	kd.erase("window")
 	kd.crew[0].hand = {"tid": 1, "dish": "BURGER"}
 	var d: Dictionary = sv._migrate({"_version": 2, "level": 1, "score": 0, "kitchen": kd})
-	check(int(d._version) == 5 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
+	check(int(d._version) == 6 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
 	var b := Kitchen.new()
 	check(b.from_dict(d.kitchen) and b.window.size() == 1, "and it loads")
 	sv.free()
@@ -768,7 +768,7 @@ func test_upgrades_carry() -> void:
 		check(String(Upgrades.ALL[id].says).length() <= 26, id + " fits the button")
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 3, "level": 2, "score": 8})
-	check(int(d._version) == 5 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v4")
+	check(int(d._version) == 6 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v4")
 	sv.free()
 
 
@@ -988,7 +988,7 @@ func test_table_numbers_unique() -> void:
 	check(dup == 0, "no service deals two tickets the same table number (%d of 200 did)" % dup)
 
 
-## 8.5 pass: the shop's TEMP COOK adds a third cook for one service, starting at the pass; the
+## 8.5 pass: the shop's THIRD COOK adds a third cook to the roster, starting at the pass; the
 ## second ticket lands with the first from service 2 on; service 4 is a ticket lighter.
 func test_temp_cook_and_curve_tweaks() -> void:
 	var owned: Array = []
@@ -1015,15 +1015,39 @@ func test_temp_cook_and_curve_tweaks() -> void:
 	check(s4.total == s3.total, "service 4 is a ticket lighter than the +1 curve (same as service 3)")
 
 
-## 8.5 plan #2: the shop pushes back. A temp cook doubles each hire; every two upgrades bring a table.
+## Permanent third cook: one payment, and previous paid rentals migrate without another charge.
 func test_shop_pushes_back() -> void:
-	check(Upgrades.price("temp", 0) == 45 and Upgrades.price("temp", 1) == 90 and Upgrades.price("temp", 2) == 180, "temp: 45, 90, 180")
-	check(Upgrades.price("lamps", 3) == Upgrades.ALL.lamps.cost, "other prices don't move")
 	var owned: Array = []
-	check(Upgrades.buy("temp", 89, owned, 1) == -1, "second temp needs $90")
-	check(Upgrades.buy("temp", 100, owned, 1) == 10, "second temp bought for $90")
+	check(Upgrades.price("temp") == 45, "third cook costs $45")
+	check(Upgrades.buy("temp", 44, owned) == -1 and owned.is_empty(), "cannot afford crew")
+	check(Upgrades.buy("temp", 45, owned) == 0 and owned == ["temp"], "crew bought once")
+	check(Upgrades.buy("temp", 100, owned) == -1 and owned == ["temp"], "no duplicate charge")
 	check(Upgrades.load_tickets([]) == 0 and Upgrades.load_tickets(["meal"]) == 0 and Upgrades.load_tickets(["meal", "lamps"]) == 1
 		and Upgrades.load_tickets(["meal", "lamps", "iron", "tray"]) == 2, "one table per two upgrades")
+	var sv = load("res://scripts/save_game.gd").new()
+	var old: Dictionary = sv._migrate({"_version": 5, "cash": 73, "perks": ["tray"], "temp_buys": 2})
+	check(int(old._version) == 6 and old.perks == ["tray", "temp"] and old.cash == 73, "past hires unlock crew without charge")
+	var active: Dictionary = sv._migrate({"_version": 5, "perks": ["temp"], "temp_buys": 1})
+	check(active.perks == ["temp"], "active hire migrates without duplication")
+	var legacy := Kitchen.new()
+	legacy.hires = 1
+	legacy.start(3, 9)
+	legacy.turn = 4
+	var legacy_state := {"_version": 5, "level": 3, "cash": 9, "perks": ["temp"], "temp_buys": 1, "kitchen": legacy.to_dict()}
+	sv.path = "user://test_crew_v5.json"
+	var f := FileAccess.open(sv.path, FileAccess.WRITE)
+	f.store_string(JSON.stringify(legacy_state))
+	f.close()
+	var restored: Dictionary = sv.read()
+	var resumed := Kitchen.new()
+	check(resumed.from_dict(restored.kitchen) and resumed.crew.size() == 3 and resumed.turn == 4 and restored.cash == 9,
+		"legacy mid-service save restores Jo, cash and turn")
+	check(sv.write(restored) and sv.read().perks == ["temp"] and not Upgrades.can_buy("temp", 100, sv.read().perks),
+		"migrated ownership stays on disk and blocks another charge")
+	sv.clear()
+	var fresh: Dictionary = sv._migrate({"_version": 5, "perks": [], "temp_buys": 0})
+	check(fresh.perks.is_empty(), "old unpaid save keeps two cooks")
+	sv.free()
 
 
 ## CROSS PREP (Duff, Nov 26): a marked dish can't fire until a cook at its prep station pulls the

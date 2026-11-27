@@ -7,7 +7,8 @@ extends Node
 ## Writes go to a temp file first, then replace the real one, so a kill mid-write can't leave
 ## a half-written save.
 
-const VERSION := 5   # 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
+const VERSION := 6   # 6: paid third-cook ownership no longer expires; migrate prior hires
+# 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
 # 3 (Rush, Nov 25 playtest): the kitchen gains a pass "window"; plates in a cook's hand move onto it
 # 5 (Rush, Nov 25): a COLD station before the pass (PASS 3 -> 4, a 4th pan); a service saved before it
 #   keeps every station open (its tickets may need saute in service 1)
@@ -83,4 +84,12 @@ func _migrate(d: Dictionary) -> Dictionary:
 					c.at = 4   # was at the pass
 			kd5["all_open"] = int(kd5.get("service", 1)) == 1   # only service 1 had saute closed
 		d["_version"] = 5
+	if int(d.get("_version", 1)) < 6:
+		# Honor any previously paid hire, even if its one-service perk was already consumed.
+		var owned: Array = d.get("perks", [])
+		if int(d.get("temp_buys", 0)) > 0 and not owned.has("temp"):
+			owned.append("temp")
+		d["perks"] = owned
+		d.erase("temp_buys")
+		d["_version"] = 6
 	return d

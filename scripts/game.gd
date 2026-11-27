@@ -56,7 +56,6 @@ var lives_max := LIVES     # LIVES, +1 with SECOND CHANCE
 var cash := 0                # tips banked tonight, spent in the SHOP between services
 var twist_box: VBoxContainer   # the TONIGHT card while it's up
 var perks: Array = []        # upgrades owned tonight (upgrades.gd)
-var temp_buys := 0           # temp cooks hired tonight: each one costs double the last
 var cook_perks := {}         # cook name -> perk ids earned tonight (8.5 plan #4: level-ups, Duff's pick)
 var _undo := {}               # the state before the last move this turn (8.5 plan #4: one UNDO a turn)
 var _undo_used := false
@@ -101,7 +100,6 @@ func _ready() -> void:
 		_night_before = score
 		cash = int(d.get("cash", 0))
 		perks = (d.get("perks", []) as Array).filter(func(p): return Upgrades.ALL.has(p))
-		temp_buys = int(d.get("temp_buys", 0))
 		var cp: Variant = d.get("cook_perks", {})
 		if cp is Dictionary:
 			for nm in cp:
@@ -133,7 +131,7 @@ func _ready() -> void:
 ## score = finished services only; the service in progress rides along in "kitchen" (its own
 ## served count), so a reload can't count tickets twice.
 func state() -> Dictionary:
-	var d := {"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(), "temp_buys": temp_buys,
+	var d := {"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(),
 		"cook_perks": cook_perks.duplicate(true), "levelup": levelup, "gone": gone.duplicate()}
 	if k != null and not between and not over and not k.done:
 		d["kitchen"] = k.to_dict()
@@ -631,7 +629,6 @@ var _night_before := 0       # tickets out in earlier services tonight
 ## Service survived: a grade sheet (the moment it lands), then NEXT SERVICE. The checkpoint is
 ## already the next service, so quitting here loses nothing.
 func _service_done() -> void:
-	perks.erase("temp")   # the temp cook worked this service only: the shop sells another
 	_night_before += k.served
 	score = _night_before
 	var bonus: int = Kitchen.GRADE_BONUS.get(k.grade(), 10)   # every grade pays something (Duff, Nov 26)
@@ -725,7 +722,7 @@ func _stamp(l: Control) -> void:
 func _shop_label() -> void:
 	var b: Button = sheet_box.get_node_or_null("ShopButton") if sheet_box != null else null
 	if b != null:
-		var can := Upgrades.ORDER.any(func(id): return Upgrades.can_buy(id, cash, perks, temp_buys))
+		var can := Upgrades.ORDER.any(func(id): return Upgrades.can_buy(id, cash, perks))
 		b.text = "SHOP ($%d)%s" % [cash, " NEW!" if can and not _shop_opened else ""]   # NEW until you've looked
 
 
@@ -740,7 +737,7 @@ func open_shop() -> void:
 	var bank := UI.label("Bank: $%d. Every 2 upgrades bring +1 table." % cash, 20, UI.DIM)
 	if not perks.has("temp"):   # build-84 review: nothing said a third cook was the answer to a busier night
 		var left := 2 - gone.size()
-		bank.text += "\nNext: %d tickets, %d cook%s. TEMP COOK helps." % [tickets_for(level), left, "" if left == 1 else "s"]
+		bank.text += "\nNext: %d tickets, %d cook%s. THIRD COOK helps." % [tickets_for(level), left, "" if left == 1 else "s"]
 	bank.name = "Bank"
 	bank.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(bank)
@@ -754,7 +751,7 @@ func open_shop() -> void:
 		ol.name = "Owned"
 		ol.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		box.add_child(ol)
-	# The rows scroll once they'd push DONE off a phone at big text (the TEMP COOK row made six).
+	# The rows scroll once they'd push DONE off a phone at big text (the THIRD COOK row made six).
 	var rows := VBoxContainer.new()
 	rows.add_theme_constant_override("separation", UI.GAP)
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -776,10 +773,10 @@ func open_shop() -> void:
 			b = UI.button("%s: OWNED\n%s" % [u.name, u.says], Callable(), 88)
 			b.disabled = true
 		else:
-			var cost := Upgrades.price(id, temp_buys)
+			var cost := Upgrades.price(id)
 			var short := cash < cost   # say it in words, not just the disabled colour
 			b = UI.button("%s  %s\n%s" % [u.name, ("NEED $%d" if short else "$%d") % cost, u.says], func(): buy(id, box), 88)
-			b.disabled = not Upgrades.can_buy(id, cash, perks, temp_buys)
+			b.disabled = not Upgrades.can_buy(id, cash, perks)
 		b.name = "Buy_" + id
 		b.add_theme_font_size_override("font_size", UI.font_size(20))
 		rows.add_child(b)
@@ -787,20 +784,58 @@ func open_shop() -> void:
 
 
 func buy(id: String, box: VBoxContainer) -> void:
-	var left := Upgrades.buy(id, cash, perks, temp_buys)
+	var left := Upgrades.buy(id, cash, perks)
 	if left < 0:
 		return
+	var previous_cash := cash
 	cash = left
-	if id == "temp":
-		temp_buys += 1   # the next one costs double
+	if not _save.write(state()):
+		cash = previous_cash
+		perks.erase(id)
+		return
 	get_node("/root/Audio").sfx("level", 1.3)
 	get_node("/root/Subs").cue("[register: %s bought]" % Upgrades.ALL[id].name.to_lower())
 	UI.buzz(25)
-	checkpoint()
 	_shop_label()
 	_refresh_points()   # a bigger kitchen draws more tables: the grade sheet's "Next" says so
 	UI.close_sheet(box)
-	open_shop()
+	if id == "temp":
+		_crew_expanded()
+	else:
+		open_shop()
+
+
+## One-time celebration: the existing flat-ink crew art, with Jo highlighted.
+func _crew_expanded() -> void:
+	var box := UI.sheet(self)
+	var head := UI.label("CREW EXPANDED", 34, UI.ACCENT)
+	head.name = "CrewExpanded"
+	box.add_child(head)
+	_stamp(head)
+	box.add_child(UI.label("WELCOME TO THE LINE, JO!", 22, UI.key("good")))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+	for nm in ["DEV", "MO", "JO"]:
+		var column := VBoxContainer.new()
+		row.add_child(column)
+		var atlas := AtlasTexture.new()
+		atlas.atlas = CREW_SHEETS[nm]
+		atlas.region = Rect2(0, 0, 128, 176)
+		var pic := TextureRect.new()
+		pic.texture = atlas
+		pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pic.custom_minimum_size = Vector2(116, 160)
+		column.add_child(pic)
+		column.add_child(UI.label(nm + ("  +" if nm == "JO" else ""), 20, UI.key("good") if nm == "JO" else UI.DIM))
+	var info := UI.label("Jo joins every remaining service.\nOne payment. No more hire fees.", 22)
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(info)
+	box.add_child(MenuArt.primary(UI.button("LET'S COOK!", func():
+		UI.close_sheet(box)
+		open_shop(), 88)))
 
 
 ## Best night on this phone (shown on the title): survives GAME OVER and NEW GAME.
@@ -812,7 +847,7 @@ func _record_best(services_cleared: int) -> void:
 		_settings.set_value("best_tickets", score)
 
 
-## The cook who did the most this service (actions taken; the house cooks only, temps move on).
+## The cook who did the most this service (actions taken; the original house cooks only; Jo retains the existing hire rules).
 ## Ties go to the one with fewer perks, so both cooks grow.
 func mvp() -> String:
 	var best := ""
@@ -1964,7 +1999,7 @@ func game_over() -> void:
 
 ## Replay the service that was lost: same night, same bank and upgrades, fresh tickets.
 func retry_service() -> void:
-	_save.write({"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(), "temp_buys": temp_buys,
+	_save.write({"level": level, "score": _night_before, "cash": cash, "perks": perks.duplicate(),
 		"cook_perks": cook_perks.duplicate(true)})   # earned perks stay; a pending pick was for the service you beat; a walked-out cook comes back
 	get_node("/root/Loader").go("res://scenes/game.tscn")
 
