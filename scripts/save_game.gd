@@ -7,7 +7,7 @@ extends Node
 ## Writes go to a temp file first, then replace the real one, so a kill mid-write can't leave
 ## a half-written save.
 
-const VERSION := 6   # 6: paid third-cook ownership no longer expires; migrate prior hires
+const VERSION := 7   # 6: paid third-cook ownership no longer expires; migrate prior hires
 # 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
 # 3 (Rush, Nov 25 playtest): the kitchen gains a pass "window"; plates in a cook's hand move onto it
 # 5 (Rush, Nov 25): a COLD station before the pass (PASS 3 -> 4, a 4th pan); a service saved before it
@@ -92,4 +92,16 @@ func _migrate(d: Dictionary) -> Dictionary:
 		d["perks"] = owned
 		d.erase("temp_buys")
 		d["_version"] = 6
+	if int(d.get("_version", 1)) < 7:
+		# Existing owners paid for all stations; honor their purchase, no second charge.
+		var old_perks: Array = d.get("perks", [])
+		if old_perks.has("burners"):
+			old_perks.erase("burners")
+			for s in range(4):
+				var id := "burners_%d" % s
+				if not old_perks.has(id):
+					old_perks.append(id)
+		d["perks"] = old_perks
+		d["cook_xp"] = {}
+		d["_version"] = 7
 	return d
