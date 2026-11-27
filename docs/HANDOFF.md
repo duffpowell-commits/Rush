@@ -8,6 +8,19 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
+## Nov 27 — final diner menu consistency (candidate)
+- Isolated from build 112 / `55bb072`. Title, Crew Expanded, grade, Tonight, pause, game-over,
+  Settings/controls/credits, how-to-play and bug report now reuse the diner theme. Red enamel
+  primary actions, cream secondary actions, warm panels, scrollbars/sliders and paper note field.
+  Settings wraps long Huge-text option names so the footer stays within the viewport.
+- Save v8, kitchen rules, controls, perks, balance, semantic colours, studio splash and the
+  approved V4 raster assets are unchanged. ART_LOG records V4 provenance and the legacy atlas
+  generator now writes 512×880 prototypes only to an explicit scratch directory.
+- Four-mode native viewport bounds checks passed at 360×640, 390×780, 907×510, and 1216×684.
+  Real before/after evidence: [menu renders](renders/menu_consistency/README.md).
+  Both desktop sizes also reached title and Settings in the actual WebGL2 iframe export.
+- Exact-head CI and fresh-eyes review still required before merge. No CrazyGames submission.
+
 ## Nov 27 — All Orders paper tickets (Duff feedback)
 - Duff flagged the blue All Orders modal in the V4 preview; requested matching diner art before merge.
 - Presentation-only: reuse diner sheet and cream paper ticket chrome, red enamel DONE, urgent ticket red border plus existing URGENT text. High contrast stays intact; no rules, order sort, input, save or balance changes.

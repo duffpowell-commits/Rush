@@ -29,6 +29,7 @@ func _build() -> void:
 		if not c.is_in_group("sheet"):
 			c.queue_free()
 	theme = UI.theme()
+	Art.diner_theme(theme)
 	var bg := ColorRect.new()
 	bg.color = UI.BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)

@@ -75,6 +75,11 @@ func _run() -> void:
 	var dressed: bool = title.get_node_or_null("Backdrop") != null and title.get_node_or_null("Logo") != null
 	await _click("HOW TO PLAY")
 	var how_open := _find("GOT IT") != null
+	var got_it := _find("GOT IT") as Button
+	var how_sheet: Control = get_tree().get_nodes_in_group("sheet").back()
+	_check(how_open and (got_it.get_theme_stylebox("normal") as StyleBoxFlat).bg_color == Color("f3ead2")
+		and (how_sheet.theme.get_stylebox("panel", "PanelContainer") as StyleBoxFlat).bg_color == Color("392321"),
+		"DINER MENU PASS (How to Play uses cream tickets and warm charcoal)")
 	var subs: Node = get_node("/root/Subs")
 	subs.cue("[test caption]")
 	await _frames(3)
