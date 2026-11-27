@@ -131,41 +131,52 @@ func _run() -> void:
 	await _shot("first_minute")
 	# Walk MO from FRY to the PASS with a tap: one action, because the closed saute and cold
 	# stations in service 1 are walked past for free. A tap on a closed station goes nowhere.
-	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
+	await _tap_at(game.field.get_global_transform() * game.cook_visual_pos(1))
 	await _tap_at(game.field.get_global_transform() * game.station_rect(2).get_center())
 	var closed_ok: bool = k.crew[1].at == 1 and "OPENS IN SERVICE 2" in game.note.text
 	await _tap_at(game.field.get_global_transform() * game.station_rect(Kitchen.PASS_IX).get_center())
 	var moved: bool = closed_ok and k.crew[1].at == Kitchen.PASS_IX and k.crew[1].ap == k.ap - 1
-	await _tap_at(game.field.get_global_transform() * game.cook_pos(0))
-	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
+	await _tap_at(game.field.get_global_transform() * game.cook_visual_pos(0))
+	await _click_node(game.act_btn)
 	await _frames(2)
 	fired_by_tap = k.pans[0].get("dish", "") == "BURGER"
 	var fire_fx: bool = game.fx.any(func(e): return e.kind == "spark")
 	_check(coach_up and moved and fired_by_tap, "TAP PASS (hint shown, closed SAUTE refused, MO walked FRY->PASS past closed stations for 1 action, DEV fired the burger)")
-	# Tap a station, get its cook (Duff, Nov 25): with MO picked, a tap on the GRILL (DEV stands
-	# there) picks DEV and sends nobody anywhere. With DEV stepped off, the GRILL still picks DEV,
-	# because his burger is on it: the pan wears his initial.
-	game.sel = 1   # MO picked earlier (not by a face tap just now)
+	# Occupied destinations do not switch cooks; repeated taps never act.
+	game.sel = 1
 	game._after_move()
 	var mo_ap: int = k.crew[1].ap
+	var cost: int = k.move_cost(1, 0)
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
-	var picked_here: bool = game.sel == 0 and k.crew[1].at == Kitchen.PASS_IX and k.crew[1].ap == mo_ap
-	game.sel = 1
-	k.crew[0].at = 1
+	var occupied: bool = game.sel == 1 and k.crew[1].at == 0 and k.crew[1].ap == mo_ap - cost
+	var same_snapshot: Dictionary = k.to_dict()
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
-	var picked_pan: bool = game.sel == 0 and k.crew[0].at == 1 and k.crew[1].at == Kitchen.PASS_IX and k.crew[1].ap == mo_ap
-	# A second tap on the same station hands off: MO (picked before) walks to DEV's pan after all.
-	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
-	var handoff: bool = game.sel == 1 and k.crew[1].at == 0 and k.crew[0].at == 1
+	var same_safe: bool = k.to_dict() == same_snapshot
 	k.crew[1].at = Kitchen.PASS_IX
 	k.crew[1].ap = mo_ap
-	k.crew[0].at = 0
+	game._cook_draw.clear()
 	game._after_move()
 	await _shot("station_pick")
-	_check(picked_here and picked_pan and handoff, "STATION PICK PASS (MO picked, GRILL tap picked DEV who stands there; with DEV away it picked him by his burger; a 2nd GRILL tap sent MO to it)")
+	_check(occupied and same_safe, "TAP COMMAND PASS (occupied destination moves selected cook; same station never acts)")
+	# Actual touchscreen events, including the project's mouse emulation setting.
+	var touch_start: Vector2 = game.field.get_global_transform() * game.cook_visual_pos(1)
+	var touch_end: Vector2 = game.field.get_global_transform() * game.station_rect(0).get_center()
+	game.sel = 0
+	await _touch_at(touch_start, touch_start)
+	var touch_select: bool = game.sel == 1 and k.crew[1].ap == mo_ap
+	await _touch_at(touch_start, touch_end)
+	var drag_once: bool = game.sel == 1 and k.crew[1].at == 0 and k.crew[1].ap == mo_ap - cost
+	await _shot("drag_command")
+	k.crew[1].at = Kitchen.PASS_IX
+	k.crew[1].ap = mo_ap
+	game._cook_draw.clear()
+	game._after_move()
+	await _touch_at(game.field.get_global_transform() * game.cook_visual_pos(1), Vector2(5, 5))
+	var invalid_drop: bool = k.crew[1].at == Kitchen.PASS_IX and k.crew[1].ap == mo_ap
+	_check(touch_select and drag_once and invalid_drop, "DRAG COMMAND PASS (real touch, drag spent one move cost, invalid drop spent nothing)")
 	# Movement pass (build-73 reviews): a face tap always wins. Tap MO, then the GRILL where DEV
 	# stands: MO walks over instead of the tap swapping to DEV. A walk too far says so.
-	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
+	await _tap_at(game.field.get_global_transform() * game.cook_visual_pos(1))
 	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
 	var face_went: bool = game.sel == 1 and k.crew[1].at == 0 and k.crew[1].ap == mo_ap - k.walk_cost(Kitchen.PASS_IX, 0)
 	game.field.queue_redraw()
@@ -232,7 +243,7 @@ func _run() -> void:
 	await _tap_at(game.field.get_global_transform() * game.ticket_rect(1).get_center())   # table 22: less urgent
 	var pick_ok: bool = game.pick_tid == 902 and game.act_btn.text.get_slice("\n", 0) == "DEV: FIRE T22"
 	var pick_dbg := "default '%s', after tap pick %d '%s'" % [fire_default, game.pick_tid, game.act_btn.text]
-	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())   # DEV's own station: act
+	await _click_node(game.act_btn)
 	pick_ok = pick_ok and kk.pans[0].get("tid", 0) == 902 and fire_default.get_slice("\n", 0) == "DEV: FIRE T21"
 	_check(pick_ok, "PICK PASS (button said FIRE T21, tapped table 22's ticket, FIRE cooked its burger; %s, pan %s)" % [pick_dbg.replace("\n", " / "), str(kk.pans[0].get("tid", 0))])
 	# Tap a dish (Duff, Nov 25): table 22 now wants a burger and a steak, both grill. A tap on the
@@ -252,7 +263,7 @@ func _run() -> void:
 	var dish_label: String = game.act_btn.text
 	await _frames(2)
 	await _shot("dish_pick")
-	await _tap_at(game.field.get_global_transform() * game.station_rect(0).get_center())
+	await _click_node(game.act_btn)
 	_check(game.pick_ix == -1 and dish_label == "DEV: FIRE STEAK" and kk.pans[0].get("dish", "") == "STEAK"
 		and kk.tickets[1].items[0].state == "wait",
 		"DISH PICK PASS (tapped T22's STEAK row: button said '%s', FIRE cooked the steak, the burger still waits)" % dish_label)
@@ -266,8 +277,8 @@ func _run() -> void:
 	game.act()
 	_check(rush_label == "DEV: RUSH +1 STRESS" and kk.pans[0].left == left0 - 1 and kk.crew[0].stress == kk.rush_stress,
 		"RUSH PASS (burger %d -> %d minutes, DEV stress %d)" % [left0, kk.pans[0].left, kk.crew[0].stress])
-	await _tap_at(game.field.get_global_transform() * game.cook_pos(1))
-	await _tap_at(game.field.get_global_transform() * game.station_rect(1).get_center())   # MO plates the fries
+	await _tap_at(game.field.get_global_transform() * game.cook_visual_pos(1))
+	await _click_node(game.act_btn)   # MO plates the fries
 	var up: bool = kk.window.size() == 1 and kk.crew[1].hand.is_empty()
 	game.field.queue_redraw()
 	await _shot("pick_rush_window")
@@ -302,8 +313,8 @@ func _run() -> void:
 	for s in [0, Kitchen.PASS_IX]:
 		game.k.crew[0].at = s
 		game.k.crew[1].at = s
-		var a: Vector2 = game.cook_pos(0)
-		var b: Vector2 = game.cook_pos(1)
+		var a: Vector2 = game.cook_visual_pos(0)
+		var b: Vector2 = game.cook_visual_pos(1)
 		gap = absf(a.x - b.x)
 		for p in [a, b]:
 			edge_ok = edge_ok and p.x - game.COOK_R >= 0.0 and p.x + game.COOK_R <= game.field.size.x
@@ -458,14 +469,12 @@ func _run() -> void:
 	var u_ap: int = game.k.crew[0].ap
 	var u_to: int = u_at + 1 if game.k.is_open(u_at + 1) else Kitchen.PASS_IX
 	game.sel = 0
-	game._portrait_pick = true
 	game.tap(game.station_rect(u_to).get_center())
 	await _frames(2)
 	var u_moved: bool = game.k.crew[0].at == u_to and game.undo_btn.visible
 	await _click("UNDO")
 	await _frames(2)
 	var u_back: bool = game.k.crew[0].at == u_at and game.k.crew[0].ap == u_ap and not game.undo_btn.visible
-	game._portrait_pick = true
 	game.tap(game.station_rect(u_to).get_center())
 	await _frames(2)
 	var u_once: bool = not game.undo_btn.visible   # used this turn: no second undo
@@ -591,14 +600,12 @@ func _run() -> void:
 	await _shot("temp_cook")
 	var three: bool = game.k.crew.size() == 3 and game.k.crew[2].at == Kitchen.PASS_IX
 	game.sel = 0
-	game._portrait_pick = false
-	var pr3: Rect2 = game.station_rect(Kitchen.PASS_IX)
-	game.tap(Vector2(pr3.get_center().x, pr3.end.y + 120.0))
+	game.tap(game.cook_visual_pos(2))
 	var jo_pick: bool = game.sel == 2
 	game._service_done()
 	await _frames(5)
 	_check(three and jo_pick and not game.perks.has("temp"),
-		"TEMP PASS (TEMP COOK adds %s at the pass, a tap under PASS picks them: %s, gone after the service)" % [game.k.crew[2].name if game.k.crew.size() > 2 else "-", jo_pick])
+		"TEMP PASS (TEMP COOK adds %s at the pass, a tap on JO picks them: %s, gone after the service)" % [game.k.crew[2].name if game.k.crew.size() > 2 else "-", jo_pick])
 	# Duff, Nov 26 ("Gone for the whole night"): a cook who walked out sits out the next services.
 	game.gone = ["MO"]
 	game._new_service()
@@ -1234,15 +1241,13 @@ func _polish_checks(game: Node) -> void:
 	kk.tickets = tickets_was
 	game.pick_tid = 0
 	game.sel = 0
-	game._portrait_pick = false
-	var sr1: Rect2 = game.station_rect(1)
-	game.tap(Vector2(sr1.position.x + 6.0, sr1.end.y + 140.0))
+	game._cook_draw.clear()
+	game.tap(game.cook_visual_pos(1))
 	var strip_pick: bool = game.sel == 1
-	game._portrait_pick = false
 	var want_q: String = "END TURN\n%s + %s QUIT" % [kk.crew[0].name, kk.crew[1].name]
 	_check(two_burns == "END TURN\nGRILL + FRY BURN" and two_quits == want_q and "TOO LATE" in late and "+1 STRESS" in late and strip_pick
 		and plate_lbl.begins_with("DEV: PLATE") and plate_lbl.ends_with("+1 STRESS") and rest_lbl.ends_with("SKIPS REST"),
-		"WARN PASS ('%s', '%s', '%s', '%s', strip tap picks the cook: %s)" % [two_burns.replace("\n", " / "), two_quits.replace("\n", " / "), late.replace("\n", " / "), rest_lbl.replace("\n", " / "), strip_pick])
+		"WARN PASS ('%s', '%s', '%s', '%s', sprite tap picks the cook: %s)" % [two_burns.replace("\n", " / "), two_quits.replace("\n", " / "), late.replace("\n", " / "), rest_lbl.replace("\n", " / "), strip_pick])
 	_check(wind_quits == "END TURN\n%s QUITS" % kk.crew[1].name and wind_lbl == "END TURN\n%s TAKES 5" % kk.crew[0].name,
 		"WIND PASS ('%s', '%s')" % [wind_quits.replace("\n", " / "), wind_lbl.replace("\n", " / ")])
 	# 8.5 plan #3: the first-to-walk table wears URGENT; dishes waiting at a station nobody stands at
@@ -1531,6 +1536,28 @@ func _tap_at(p: Vector2) -> void:
 		e.global_position = w
 		Input.parse_input_event(e)
 		await _frames(2)
+
+
+func _touch_at(from: Vector2, to: Vector2) -> void:
+	var tr := get_viewport().get_final_transform()
+	var press := InputEventScreenTouch.new()
+	press.index = 0
+	press.pressed = true
+	press.position = tr * from
+	Input.parse_input_event(press)
+	await _frames(2)
+	if from != to:
+		var motion := InputEventScreenDrag.new()
+		motion.index = 0
+		motion.position = tr * to
+		motion.relative = tr.basis_xform(to - from)
+		Input.parse_input_event(motion)
+		await _frames(2)
+	var release := InputEventScreenTouch.new()
+	release.index = 0
+	release.position = tr * to
+	Input.parse_input_event(release)
+	await _frames(2)
 
 
 

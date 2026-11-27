@@ -25,3 +25,10 @@
 - [ ] Settings still offers INVERT LOOK, LOOK SENSITIVITY and a controls legend for a tap-only game.
 - [ ] The Credits sheet is one line.
 - [ ] Autoplay is still mostly the template's 3D checks; Rush's own PASS lines are the minority.
+
+## PR #41 approved sprite and touch-control round
+- [x] Full-body Dev, Mo and Jo sprite atlas and animation states.
+- [x] Tap-to-command, optional gesture shortcut, visible-position selection, and explicit actions.
+- [x] Regression tests for occupied stations, no-op repeated taps, native touch and cancellation.
+- [ ] Full verification, fresh-eyes and green CI; verify merged APK and web build.
+- [ ] Duff's phone playtest (no new review score until evidence).

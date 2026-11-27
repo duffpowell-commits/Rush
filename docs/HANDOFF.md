@@ -171,3 +171,14 @@ changes, how far it got. Never give it the target score or the change list.
 - Nothing posts publicly (ads, socials) without Duff's yes. No AI disclosure in marketing copy.
 - Signing uses the shared keystone (secret KEYSTONE_PASS). Never make a new key.
 - Shop rows sit in a ScrollContainer at big text sizes; autoplay's `_click_node` scrolls to them.
+
+## PR #41 implementation (Nov 27, 2026; candidate, not live)
+- Full-body Dev/Mo/Jo atlas, tap-to-command and optional drag. Existing rules, save format and
+  stress preview calculations unchanged. Tap a cook then a station; action only from the button.
+- Local real-engine autoplay: `TAP COMMAND PASS`, `DRAG COMMAND PASS`, `AUTOPLAY PASS` and
+  `CLIP PASS` (15 seconds). Touch smoke: 360x640 and 390x780, including three cooks at an edge
+  with huge text. Screenshots: `docs/renders/crew_*.png`. Test suite: 54 passing tests.
+- Local virtual display was Xorg (Xvfb unavailable); first autoplay run hit a 3D camera timing
+  check, second passed. Eyes dependency installation and release gates still need verification.
+- Do not label this build live until the review, combined CI checks, APK and gh-pages SHA match.
+  No fresh playtest score; Duff's blind review pause still applies.
