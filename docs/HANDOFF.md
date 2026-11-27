@@ -8,6 +8,21 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
+## Nov 27 — v4 visual handoff (Codex)
+- Isolated branch `codex/rush-handoff-v4` from build 109 / `6d389c5`; v4 ZIP supersedes v3.
+  Both ZIP checksums verified and all 21 patch files applied. No conflicting Rush lease found.
+  Save v8, Chef Challenge, order rail, equipment, crew perks and input rules remain unchanged.
+- Godot 4.7.2: `tools/test.sh` 57/57; full rendered `tools/autoplay.sh` AUTOPLAY PASS,
+  including kitchen feedback, tray, rail paging, persistent crew and Chef Challenge.
+  Rendered `tests/mobile_touch.gd` passed at 360x640 and 390x780.
+- High-contrast kitchen and HUGE shop checked on the 390x780 viewport: scroll range 1142
+  with 430 page height, bottom rows and DONE visible. All four walk atlas columns observed
+  across repeated legal station moves for each cook; raw engine captures in
+  [v4 renders](renders/v4/). No additional runtime changes made beyond the ZIP.
+- Autoplay completes despite existing 3D transform/exit warnings and virtual audio fallback.
+  Exact-head CI and fresh-eyes code review are required on the PR; no new blind gameplay
+  review, merge or release until Duff approves.
+
 ## Nov 27 — 8.5 refinement (Codex)
 - Build 106 independent first-timer rated 8/10, 37/37 served, four A+ services. Review:
   `docs/reviews/firsttimer_rush_build106.md`.

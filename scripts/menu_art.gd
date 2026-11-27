@@ -128,3 +128,58 @@ static func primary(b: Button) -> Button:
 		b.add_theme_color_override(c, PAPER_INK)
 	b.add_theme_font_size_override("font_size", UI.font_size(26))
 	return b
+
+
+## Diner ticket chrome for the progression sheets. Keep the gameplay colours,
+## accessible text sizes and high-contrast theme owned by UI.
+static func diner_sheet(box: VBoxContainer) -> void:
+	if UI.contrast():
+		return
+	var root: Control = box.get_meta("sheet")
+	var t := root.theme
+	var panel := t.get_stylebox("panel", "PanelContainer").duplicate() as StyleBoxFlat
+	panel.bg_color = Color("392321")
+	panel.border_color = PAPER
+	panel.set_corner_radius_all(5)
+	t.set_stylebox("panel", "PanelContainer", panel)
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var b := t.get_stylebox(state, "Button").duplicate() as StyleBoxFlat
+		b.bg_color = PAPER if state != "disabled" else Color("806b60")
+		if state == "pressed":
+			b.bg_color = Color("e4bda0")
+		b.border_color = Color("953b30") if state == "pressed" else Color("b86450")
+		b.set_corner_radius_all(5)
+		t.set_stylebox(state, "Button", b)
+	for c in ["font_color", "font_pressed_color", "font_hover_color", "font_focus_color"]:
+		t.set_color(c, "Button", PAPER_INK)
+	t.set_color("font_disabled_color", "Button", Color("fff1dc"))
+
+
+## Gameplay enamel buttons: preserve touch targets, labels, button nodes and accessibility.
+## Cream action, red end-turn/control buttons; disabled states remain visibly muted.
+static func diner_button(b: Button, paper: bool = false) -> void:
+	if UI.contrast():
+		return
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var sb := StyleBoxFlat.new()
+		var disabled: bool = state == "disabled"
+		var base := PAPER if paper else Color("792e2a")
+		if state == "hover":
+			base = base.lightened(0.10)
+		elif state == "pressed":
+			base = base.darkened(0.14)
+		sb.bg_color = Color("514842") if disabled else base
+		sb.border_color = Color("9a8a77") if disabled else (Color("762e29") if paper else PAPER)
+		sb.set_border_width_all(3)
+		sb.set_corner_radius_all(6)
+		sb.shadow_color = Color("1d1714")
+		sb.shadow_size = 3 if state == "pressed" else 5
+		sb.shadow_offset = Vector2(0, 3)
+		sb.content_margin_left = 10
+		sb.content_margin_right = 10
+		sb.content_margin_top = 10
+		sb.content_margin_bottom = 10
+		b.add_theme_stylebox_override(state, sb)
+	for c in ["font_color", "font_pressed_color", "font_hover_color", "font_focus_color"]:
+		b.add_theme_color_override(c, PAPER_INK if paper else PAPER)
+	b.add_theme_color_override("font_disabled_color", Color("d8cbbc"))
