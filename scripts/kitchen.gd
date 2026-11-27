@@ -638,6 +638,16 @@ func run(c: int) -> bool:
 	return true
 
 
+## Preview a legal RUN exactly, without consuming the actual plates, perk allowance, or stress.
+## The result includes red/heat stress after this RUN, which may clear an urgent table.
+func run_stress_preview(c: int) -> int:
+	var preview_k = get_script().new()
+	if not preview_k.from_dict(to_dict()) or not preview_k.run(c):
+		return -1
+	var red: bool = preview_k.tickets.any(func(t): return t.time - 1 > 0 and t.time - 1 <= 2)
+	return int(preview_k.crew[c].stress) + (1 if red else 0) + (1 if preview_k.heat_turn() else 0)
+
+
 func _serve(h: Dictionary) -> void:
 	var t := ticket(h.tid)
 	if t.is_empty():

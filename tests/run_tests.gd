@@ -1314,11 +1314,14 @@ func test_advanced_specialization_and_pressure_save() -> void:
 	k.crew[0].at = 0
 	check(k.fire(0) and k.burn_limit(k.pans[0]) == k.burn_after + 1, "heat master gives its specialty pan grace")
 	k.crew[1].at = Kitchen.PASS_IX
-	k.crew[1].stress = 3
+	k.crew[1].stress = 5
 	k.tray = 2
 	k.tickets.append({"id": 92, "table": 3, "items": [{"dish": "FRIES", "state": "carried"}, {"dish": "WINGS", "state": "carried"}], "time": 9, "big": false})
 	k.window = [{"tid": 92, "dish": "FRIES"}, {"tid": 92, "dish": "WINGS"}]
-	check(k.run(1) and k.crew[1].stress == 2 and k.crew[1].captain_used, "captain calms on first batched run")
+	k.tickets.append({"id": 93, "table": 4, "items": [{"dish": "STEAK", "state": "wait"}], "time": 3, "big": false})
+	var before := k.to_dict()
+	check(k.run_stress_preview(1) == 5 and k.to_dict() == before, "batched captain RUN avoids false quit warning, preview is read-only")
+	check(k.run(1) and k.crew[1].stress == 4 and k.crew[1].captain_used, "captain calms on first batched run")
 	k.crew[2].stress = 5
 	check(k.rest_recovery(2) == 4, "veteran deep rest")
 	var back := Kitchen.new()

@@ -317,7 +317,9 @@ func _refresh_hud() -> void:
 	if a != "" and a != "RUSH" and not k.crew[sel].out and not k.crew[sel].acted:
 		# The first move of a turn ends this cook's rest: say what it costs before the tap (8.5 pass).
 		# PLATE empties the pan here, so its burn never lands on this cook (fresh-eyes PR #27)
-		var then := stress_after(sel, true, k.crew[sel].at if a == "PLATE" else -1)
+		var then := k.run_stress_preview(sel) if a == "RUN" else stress_after(sel, true, k.crew[sel].at if a == "PLATE" else -1)
+		if then < 0:
+			then = stress_after(sel, true)
 		if then >= k.stress_cap:
 			act_btn.text += "\n(%s %s)" % [k.crew[sel].name, "TAKES 5" if _wind_for(sel) else "QUITS"]
 		elif then > k.crew[sel].stress:
@@ -1784,7 +1786,7 @@ func _draw_field(f: Control) -> void:
 	if k.tickets.size() > 4:   # tap to inspect all, swipe cards to page
 		var all_t: Array = k.tickets.duplicate()
 		all_t.sort_custom(func(a, b): return a.time < b.time)
-		var hid: Array = shown.slice(4) if shown.size() > 4 else all_t.slice(0, rail_off)
+		var hid: Array = all_t.slice(0, rail_off) + shown.slice(4)
 		var hot := hid.any(func(t): return t.time <= 2)   # red when a ticket off screen is about to walk
 		var mt := "ALL %d" % all_t.size()
 		if hot:

@@ -1263,20 +1263,24 @@ func _polish_checks(game: Node) -> void:
 	# A promised FREE action remains usable at zero paid moves through the actual action button.
 	var free_keep: Dictionary = kk.to_dict()
 	var score_was: int = game.score
-	kk.crew[0].perks = ["run"]
+	kk.crew[0].perks = ["run", "pass_captain"]
 	kk.crew[0].used = []
+	kk.crew[0].captain_used = false
+	kk.crew[0].stress = kk.stress_cap - 1
+	kk.crew[0].acted = false
+	kk.tray = 2
 	kk.crew[0].ap = 0
 	kk.crew[0].at = Kitchen.PASS_IX
-	kk.tickets = [{"id": 991, "table": 51, "items": [{"dish": "FRIES", "state": "carried"}], "time": 8, "big": false}]
-	kk.window = [{"tid": 991, "dish": "FRIES"}]
+	kk.tickets = [{"id": 991, "table": 51, "items": [{"dish": "FRIES", "state": "carried"}, {"dish": "WINGS", "state": "carried"}], "time": 8, "big": false}, {"id": 992, "table": 52, "items": [{"dish": "STEAK", "state": "wait"}], "time": 3, "big": false}]
+	kk.window = [{"tid": 991, "dish": "FRIES"}, {"tid": 991, "dish": "WINGS"}]
 	game.sel = 0
 	game._after_move()
 	await _frames(3)
-	var free_button: bool = not game.act_btn.disabled and game.act_btn.text.contains("FREE")
+	var free_button: bool = not game.act_btn.disabled and game.act_btn.text.contains("FREE") and not game.act_btn.text.contains("QUIT") and not game.act_btn.text.contains("TAKES 5")
 	await _shot("free_at_zero")
 	await _click_node(game.act_btn)
-	_check(free_button and kk.crew[0].ap == 0 and kk.crew[0].used.has("run") and kk.tickets.is_empty(),
-		"ZERO AP PASS (free RUN is enabled and consumes the allowance, not an action)")
+	_check(free_button and kk.crew[0].ap == 0 and kk.crew[0].used.has("run") and kk.ticket(991).is_empty() and kk.crew[0].stress == kk.stress_cap - 2,
+		"ZERO AP PASS (captain RUN at zero moves calms, no false quit warning)")
 	kk.from_dict(free_keep)
 	game.score = score_was
 	game._after_move()
