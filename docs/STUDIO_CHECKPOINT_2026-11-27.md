@@ -1,0 +1,7 @@
+# Studio checkpoint — 2026-11-27
+
+Current published build: 109, main 6d389c5 (PR #45). 57 rule tests, rendered autoplay and independent code review for that published refinement passed. Prior AI first-timer review 8/10; genuine player enjoyment and 8.5 release acceptance remain unverified.
+
+Approved visual direction: antique hand-ink/gouache Dev (blue apron), Mo (red), Jo (mustard cap/glasses); worn diner enamel controls, cream tickets, painted kitchen and dish assets. Local isolated preview/rush-ink-build109 integrates 21 art/UI files atop build 109, preserves save v8, order rail, Chef Challenge, advanced perks and inputs, and replaces third/fourth walk frames for all three cooks. 57/57 local tests after import; dummy input smoke at 64x64 only. No rendered autoplay or 360x640/390x780 checks on this revision. Portable handoff filename rush-handoff-v4.zip is the current source, superseding v3; obtain from the studio owner. No remote code branch or new release yet.
+
+Next: render full autoplay, touch at both phone sizes, contrast, shop scroll and order-rail layout; inspect walking cycle and asset edges. Maintain existing code-review/CI rules. No blind gameplay review unless requested. Dec 1 viability (real human fun and voluntary replay) is separate from 8.5 release quality. Hold CrazyGames preparation/submission until release-quality acceptance. No new system or economy changes approved.
