@@ -8,6 +8,10 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
+## Nov 28 — guided service candidate (offline)
+- Isolated gameplay candidate from local `4a25b47`, not the unmerged polish changes. Guided three-table opener, 2 AP long walk cap, dedicated RUSH, exact walkout cap, explicit stress/cook forecasts. No new shop items or price changes.
+- 61/61 tests, isolated rendered autoplay, both portrait touch and All Orders checks passed. Manual guided opening A, 3/3, no walks. See dated [DECISIONS](DECISIONS.md) for why and compatibility notes. Remote GitHub 403; do not treat local candidate as a live release.
+
 ## Nov 28 — Jo shop wording
 - Applied Duff’s supplied description patch: THIRD COOK ($45) now says “JO STAYS THE ENTIRE RUN”.
 - The existing permanent unlock and legacy save identifier `temp` are unchanged.
