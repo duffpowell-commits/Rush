@@ -8,6 +8,12 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
+## Nov 28 — Jo shop wording
+- Applied Duff’s supplied description patch: THIRD COOK ($45) now says “JO STAYS THE ENTIRE RUN”.
+- The existing permanent unlock and legacy save identifier `temp` are unchanged.
+- Godot 4.7.2: 57/57 rule tests and full rendered autoplay passed. CREW EXPANDED and
+  CREW RESTART pass; the new copy fits the shop button ([render](renders/jo-description/shop.png)).
+
 ## Nov 27 — final diner menu consistency (candidate)
 - Isolated from build 112 / `55bb072`. Title, Crew Expanded, grade, Tonight, pause, game-over,
   Settings/controls/credits, how-to-play and bug report now reuse the diner theme. Red enamel
