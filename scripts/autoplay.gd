@@ -132,7 +132,7 @@ func _run() -> void:
 	var start_score: int = game.score
 	var k: Object = game.k
 	var fired_by_tap := false
-	var coach_up: bool = game.has_node("Coach_fire")
+	var coach_up: bool = game.guide_step() == 0 and game.guide_target() == "ACT" and game.act_btn.modulate != Color.WHITE
 	await _shot("first_minute")
 	# Walk MO from FRY to the PASS with a tap: one action, because the closed saute and cold
 	# stations in service 1 are walked past for free. A tap on a closed station goes nowhere.
@@ -199,26 +199,16 @@ func _run() -> void:
 	await _tap_at(game.field.get_global_transform() * game.station_rect(Kitchen.PASS_IX).get_center())
 	var far_note: String = game.note.text
 	k.all_open = false
-	far_said = far_said and k.crew[1].at == 0 and far_note == "TOO FAR: MO NEEDS 4 MOVES, HAS 1"
+	far_said = far_said and k.crew[1].at == 0 and far_note == "TOO FAR: MO NEEDS 2 MOVES, HAS 1"
 	k.crew[1].at = Kitchen.PASS_IX
 	k.crew[1].ap = mo_ap
 	game.sel = 1
 	game._after_move()
 	_check(face_went and far_said, "MOVE PASS (MO tapped by face walked to DEV's GRILL; a spent walk said NO MOVES; a long one said '%s')" % far_note)
-	# The next hint follows by itself: after FIRE, END TURN is taught.
-	var next_hint := false
-	for i in 60:
-		await _frames(1)
-		if game.has_node("Coach_end_turn"):
-			next_hint = true
-			break
+	# The checklist advances from FIRE to PLATE, with END TURN highlighted while cooking.
 	await _shot("hint_end_turn")
-	# The hint sits between the NEXT line and the stations, never over the station names (it did on a
-	# tall phone's web browser, Nov 25).
-	var hint_rect: Rect2 = (game.get_node("Coach_end_turn") as Control).get_global_rect() if next_hint else Rect2()
-	var st_top: float = (game.field.get_global_transform() * game.station_rect(0).position).y
-	_check(next_hint and not game.has_node("Coach_fire") and hint_rect.end.y <= st_top + 1.0,
-		"COACH PASS (FIRE hint gone, END TURN hint up, %d px above the stations)" % int(st_top - hint_rect.end.y))
+	_check(game.guide_step() == 1 and game.guide_target() == "END" and game.end_btn.modulate != Color.WHITE,
+		"GUIDE PASS (FIRE complete, PLATE next, END TURN highlighted while cooking)")
 	var until := Time.get_ticks_msec() + 15000
 	while Time.get_ticks_msec() < until and game.score < start_score + 1 and not game.over:
 		game.bot_play_turn()
@@ -278,9 +268,11 @@ func _run() -> void:
 	game.pick_tid = 0
 	game._after_move()
 	var left0: int = kk.pans[0].left
-	var rush_label: String = game.act_btn.text
+	var rush_label: String = game.rush_btn.text
 	game.act()
-	_check(rush_label == "DEV: RUSH +1 STRESS" and kk.pans[0].left == left0 - 1 and kk.crew[0].stress == kk.rush_stress,
+	_check(kk.pans[0].left == left0, "CONTEXT DOES NOT RUSH PASS")
+	await _click_node(game.rush_btn)
+	_check(rush_label == "RUSH\n+1 STRESS" and kk.pans[0].left == left0 - 1 and kk.crew[0].stress == kk.rush_stress,
 		"RUSH PASS (burger %d -> %d minutes, DEV stress %d)" % [left0, kk.pans[0].left, kk.crew[0].stress])
 	await _tap_at(game.field.get_global_transform() * game.cook_visual_pos(1))
 	await _click_node(game.act_btn)   # MO plates the fries
@@ -1259,7 +1251,7 @@ func _polish_checks(game: Node) -> void:
 	kk.pans[0] = {"tid": kk.tickets[0].id, "dish": "STEAK", "left": 2, "sat": 0, "rushed": false, "by": 0}
 	game.sel = 0
 	game._refresh_hud()
-	var free_lbl: String = game.act_btn.text
+	var free_lbl: String = game.rush_btn.text
 	kk.rush_stress = rs_was
 	kk.pans[0] = {}
 	kk.tickets.clear()
@@ -1268,7 +1260,7 @@ func _polish_checks(game: Node) -> void:
 		c.stress = 0
 	game._refresh_hud()
 	var finish: String = game.end_btn.text
-	_check(free_lbl == "DEV: RUSH 0 STRESS" and finish == "END TURN\nFINISH SERVICE",
+	_check(free_lbl == "RUSH\n0 STRESS" and finish == "END TURN\nFINISH SERVICE",
 		"FINISH PASS (Cast Iron rush reads '%s'; an empty rail says '%s')" % [free_lbl, finish.replace("\n", " / ")])
 	# A promised FREE action remains usable at zero paid moves through the actual action button.
 	var free_keep: Dictionary = kk.to_dict()
