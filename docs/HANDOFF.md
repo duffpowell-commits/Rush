@@ -105,6 +105,9 @@ Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a
   that matters but never ruins a run. Duff OKs the fox art on a card before it's built. Rule + this game's idea: `docs/MASCOT.md`.
 
 ## Where it is right now
+- Nov 26 (Claude, studio harness audit): rule lock copied in from the starter (`tools/rule_lock.py`,
+  `tools/test_rule_lock.sh`, `.github/workflows/rule_lock.yml`, guard.py's `duff-ok` check). Rush was the only game
+  without it. PR needs Duff's `duff-ok` label.
 - main = `6e641a5` (PR #36, fox cameo), **build 99 live** (`version.json` = {"code": 99, "sha": "6e641a5"}).
   Live builds:
   - Web: https://duffpowell-commits.github.io/Rush/ (gh-pages, pushed by CI on every main push;
