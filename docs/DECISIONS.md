@@ -1,5 +1,19 @@
 # Decisions log (catch-up file for Claude, Grok and any agent)
 
+## 2026-11-28 — Guided service, explicit rush and forecasts (owner landscape playtest)
+
+Duff lost service 1 after serving three tables, with two tickets expiring on the same turn. This candidate is isolated from the unmerged visual polish branches and starts at the local #49 baseline (`4a25b47`); live v0.1.116 is owner-reported, remote main could not be verified.
+
+- **Why — walkouts:** cap simultaneous expiration penalties at the current service limit (including VIP and purchased comps), finish cleanup and stop dealing tickets after the loss. Display is clamped as a second layer. No change to the value of a VIP walk when under the cap.
+- **Why — stress:** hide all next-turn forecasts once a service ends; label visible deltas `next`, or omit the delta when space cannot fit the label. Clear transient feedback on loss.
+- **Why — onboarding:** normal service 1 has two one-dish tickets at opening and one later, no large tables; 3/5/7/9 default early ticket ramp, later curve unchanged. Pace still adjusts count (the Slammed first service can add follow-up tickets). Checklist follows actual Fire/Plate/Walk to Pass/Run and highlights buttons or destination station; it retires after first served table. Legacy in-progress saves remain unguided; new deals carry an optional flag.
+- **Why — walking:** cap long trips at two AP rather than automate RUN, preserving the tactical pass decision and adjacent moves. Existing free-walk perks still discount that cost; no shop changes. This intentionally changes balance and may make distant trips more attractive.
+- **Why — rush:** dedicated center button with explicit stress/quit warning; context cannot invoke RUSH even after firing. Keep the three controls in fixed portrait locations so double taps do not spend stress by accident.
+- **Why — forecasts:** ticket rows show remaining cook turns; big ticket total sums remaining cooking work, not parallel wall-clock time or walking/serving overhead. NEXT WALK labels the earliest clock without implying it is already expiring.
+
+Regression tests explicitly cover simultaneous expiries, upgraded/VIP limits, legacy save fields, guided milestones and stress forecast clearing. Existing tests updated only where intentional behavior/copy changed. Rendered autoplay checks actual separate RUSH button and checklist, and portrait touch checks at 360×640 and 390×780. Final exact-code run: 61/61 tests, AUTOPLAY PASS, 360×640 and 390×780 touch and four-mode All Orders PASS. Manual portrait opening A, 3/3 served, zero walks, $48 bank; screenshot evidence in offline bundle. Concurrent software-rendered autoplay had unrelated 3D turn/camera timing failures, clean isolated retry passed. Existing Godot teardown warnings remain. GitHub returned 403, no PR or release.
+
+
 ## 2026-11-24 — Eyes copied in from the starter (tools/eyes)
 Approved by Duff on Nov 24 ("go ahead and do them both", Rush and Lethemoor; Lethemoor waits for its
 other session). Same tool as starter PRs #22/#23: godot-mcp-runtime 4.0.1 (pinned) under xvfb. Rush's
