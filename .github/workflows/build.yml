@@ -51,6 +51,15 @@ jobs:
           tools/autoplay.sh $PWD/renders
           ! grep -qE "^FAIL|SCRIPT ERROR" autoplay.log
           grep -q "^CLIP PASS" autoplay.log
+      - name: Portrait guidance and accessibility renders
+        run: |
+          set -euo pipefail
+          for size in 360x640 390x780; do
+            export XDG_DATA_HOME=$(mktemp -d)
+            timeout 120 xvfb-run -a -s "-screen 0 1080x1920x24" godot --path . --rendering-driver opengl3 --resolution "$size" --script tests/guidance_render.gd -- --shots="$PWD/renders/guidance/$size" 2>&1 | tee "guidance-$size.log"
+            grep -q '^GUIDANCE RENDER PASS$' "guidance-$size.log"
+            ! grep -qE '^FAIL|SCRIPT ERROR' "guidance-$size.log"
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

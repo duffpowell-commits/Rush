@@ -215,14 +215,14 @@ func _build() -> void:
 	MenuArt.diner_button(rush_btn, true)
 	rush_btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	rush_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	rush_btn.add_theme_font_size_override("font_size", mini(UI.font_size(20), 20))
+	rush_btn.add_theme_font_size_override("font_size", UI.font_size(18))
 	rush_btn.anchor_left = 0.5
 	rush_btn.anchor_right = 0.5
 	rush_btn.anchor_top = 1.0
 	rush_btn.anchor_bottom = 1.0
 	rush_btn.offset_left = -62
 	rush_btn.offset_right = 62
-	rush_btn.offset_top = -136
+	rush_btn.offset_top = -40 - rush_height()
 	rush_btn.offset_bottom = -40
 	add_child(rush_btn)
 	note = UI.label("", 15, UI.ACCENT)
@@ -285,7 +285,10 @@ func _refresh_hud() -> void:
 			b.modulate = Color.WHITE
 		act_btn.text = "SERVICE ENDED"
 		rush_btn.text = "RUSH"
+		fit_rush_text()
 		end_btn.text = "END TURN"
+		fit_button_text(act_btn, Vector2(176, 96), 24)
+		fit_button_text(end_btn, Vector2(176, 96), 24)
 		undo_btn.visible = false
 		if is_instance_valid(feedback):
 			feedback.text = ""
@@ -370,11 +373,14 @@ func _refresh_hud() -> void:
 	if can_rush:
 		var projected := stress_after(sel, true) + k.rush_cost()
 		rush_btn.text = "RUSH\n" + (("TAKES 5" if _wind_for(sel) else "QUITS!") if projected >= k.stress_cap else ("0 STRESS" if k.rush_cost() <= 0 else "+%d STRESS" % k.rush_cost()))
+	fit_rush_text()
 	var next_tap := guide_target()
 	# Keep the explicit cue legible without a disabled helper wrapping into crew/stress.
-	act_btn.add_theme_font_size_override("font_size", mini(UI.font_size(24), 28) if not next_tap.is_empty() else UI.font_size(24))
+
 	if a == "" and not next_tap.is_empty() and next_tap != "ACT":
 		act_btn.text = "WAIT" if next_tap == "END" else "MOVE"
+	fit_button_text(act_btn, Vector2(176, 96), 24)
+	fit_button_text(end_btn, Vector2(176, 96), 24)
 	act_btn.modulate = Color(1.25, 1.15, 0.65) if next_tap == "ACT" else Color.WHITE
 	end_btn.modulate = Color(1.25, 1.15, 0.65) if next_tap == "END" else Color.WHITE
 	if undo_btn != null:   # only while there's a move to take back this turn
@@ -1385,7 +1391,7 @@ var _more_rect := Rect2()  # where that badge was drawn, for the tap
 func ticket_rect(i: int) -> Rect2:
 	var pad := 10.0
 	var cw := (field.size.x - pad * 5.0) / 4.0
-	return Rect2(pad + i * (cw + pad), _rail_y(), cw, 200.0)
+	return Rect2(pad + i * (cw + pad), _rail_y(), cw, 210.0 + rail_extra())
 
 
 
@@ -1396,13 +1402,102 @@ func dish_at(i: int, p: Vector2) -> int:
 		return -1
 	var r := ticket_rect(i)
 	for ix in rail[i].items.size():
-		if Rect2(r.position.x, r.position.y + DISH_ROW0 + ix * DISH_ROW, r.size.x, DISH_ROW).has_point(p):
+		if Rect2(r.position.x, r.position.y + DISH_ROW0 + ix * dish_row_height(), r.size.x, dish_row_height()).has_point(p):
 			return ix
 	return -1
 
 
 const DISH_ROW0 := 46.0   # first dish row's top inside a ticket card (its text baseline is 20 lower)
-const DISH_ROW := 33.0
+const DISH_ROW := 35.0
+
+
+# Make more room for large ticket type without moving the cooks into the thumb buttons.
+func rail_extra() -> float:
+	return maxf(0.0, (UI.font_size(100) - 100) * 1.2)
+
+
+func dish_row_height() -> float:
+	return DISH_ROW + rail_extra() / 4.0
+
+
+func rush_height() -> float:
+	return 110.0 if UI.font_size(100) > 100 else 96.0
+
+
+## Fit the requested accessibility scale to its real text box, not a magic fixed font cap.
+func fit_scaled_text(font: Font, value: String, box: Vector2, base: int) -> int:
+	var lines := value.split("\n")
+	var size := UI.font_size(base)
+	while size > 8:
+		var fits := font.get_height(size) * lines.size() <= box.y
+		for line in lines:
+			fits = fits and font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x <= box.x
+		if fits:
+			break
+		size -= 1
+	return size
+
+
+## Measure wrapped button words before selecting a font, including fixed line breaks.
+func button_text_fits(font: Font, value: String, box: Vector2, size: int) -> bool:
+	var rows := 0
+	for paragraph in value.split("\n"):
+		var line := ""
+		for word in paragraph.split(" ", false):
+			if font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > box.x:
+				return false
+			var joined := word if line.is_empty() else line + " " + word
+			if font.get_string_size(joined, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > box.x:
+				rows += 1
+				line = word
+			else:
+				line = joined
+		rows += 1
+	return rows * font.get_height(size) <= box.y
+
+
+func fit_button_text(b: Button, bounds: Vector2, base: int) -> void:
+	var font := b.get_theme_font("font")
+	var margins := b.get_theme_stylebox("normal").get_minimum_size()
+	var room := bounds - margins - Vector2(4, 4)
+	var size := UI.font_size(base)
+	while size > 8 and not button_text_fits(font, b.text, room, size):
+		size -= 1
+	b.add_theme_font_size_override("font_size", size)
+
+
+func fit_rush_text() -> void:
+	fit_button_text(rush_btn, Vector2(124, rush_height()), 18)
+
+
+func ticket_text_line(kind: String, value: String, box: Rect2, base: int, item := -1) -> Dictionary:
+	return {"kind": kind, "text": value, "box": box, "size": fit_scaled_text(ThemeDB.fallback_font, value, box.size, base), "item": item}
+
+
+## All measured timing rows use these same non-overlapping regions for drawing and tests.
+func ticket_accessibility_layout(r: Rect2, t: Dictionary) -> Array:
+	var lines: Array = []
+	if t.id == urgent_tid():
+		lines.append(ticket_text_line("next", "NEXT WALK", Rect2(r.position + Vector2(2, -23), Vector2(r.size.x - 4, 22)), 11))
+	for n in t.items.size():
+		var it: Dictionary = t.items[n]
+		var y: float = r.position.y + DISH_ROW0 + n * dish_row_height()
+		var title: String = it.dish + (" %dT" % dish_turns(t, it) if not service_ended() and it.state in ["wait", "cooking"] else "")
+		var sub: String = {"wait": "at " + Kitchen.station_of(it.dish), "cooking": "cooking", "carried": "on the pass", "served": "served"}[it.state]
+		if it.state == "wait" and it.has("needs"):
+			sub = "PREP AT " + Kitchen.STATIONS[int(it.needs)]
+		var title_h := 21.0 + rail_extra() / 6.0
+		lines.append(ticket_text_line("dish", title, Rect2(r.position.x + 6, y, r.size.x - 12, title_h), 15, n))
+		lines.append(ticket_text_line("state", sub, Rect2(r.position.x + 6, y + title_h, r.size.x - 12, dish_row_height() - title_h), 12, n))
+	if t.big and not service_ended():
+		lines.append(ticket_text_line("total", "COOK TOTAL %dT" % ticket_cook_total(t), Rect2(r.position.x + 2, r.end.y - 23, r.size.x - 4, 22), 11))
+	return lines
+
+
+func draw_ticket_line(f: Control, font: Font, line: Dictionary, col: Color, centered := false) -> void:
+	var r: Rect2 = line.box
+	var fs: int = line.size
+	f.draw_string(font, r.position + Vector2(0, (r.size.y - font.get_height(fs)) / 2.0 + font.get_ascent(fs)), line.text, HORIZONTAL_ALIGNMENT_CENTER if centered else HORIZONTAL_ALIGNMENT_LEFT, r.size.x, fs, col)
 
 
 func _rail_y() -> float:
@@ -1428,8 +1523,8 @@ func station_rect(i: int) -> Rect2:
 	var x := pad
 	for j in i:
 		x += shares[j] * unit + pad
-	var y := _rail_y() + 300.0
-	return Rect2(x, y, shares[i] * unit, 170.0)
+	var y := _rail_y() + 300.0 + rail_extra()
+	return Rect2(x, y, shares[i] * unit, 170.0 - rail_extra())
 
 
 ## Where a tap counts as this station: its whole column, gaps split with the neighbours, plus a
@@ -1530,7 +1625,7 @@ func _begin_gesture(id: int, p: Vector2) -> void:
 	_press_pos = p
 	_drag_pos = p
 	_press_cook = cook_at(p)
-	_press_rail = p.y >= _rail_y() and p.y < _rail_y() + 200.0
+	_press_rail = p.y >= _rail_y() and p.y < ticket_rect(0).end.y
 
 
 func _move_gesture(id: int, p: Vector2) -> void:
@@ -1916,56 +2011,46 @@ func _draw_field(f: Control) -> void:
 			f.draw_rect(r.grow(3.0 + 3.0 * throb), Color(UI.key("bad"), 0.5 * throb), false, 3.0)
 		if not service_ended() and t.id == pick_tid:   # picked: a thick accent frame plus a tab on the bottom (shape, not colour alone)
 			f.draw_rect(r.grow(4.0), UI.ACCENT, false, 4.0)
-			f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), UI.ACCENT)
-			f.draw_string(font, Vector2(r.position.x, r.end.y - 7), "COOK FIRST", HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
-				UI.font_size(13), UI.BG)
-		if t.id == urgent:
-			var tw := minf(r.size.x, 112.0)
-			var tab := Rect2(r.get_center().x - tw / 2, r.position.y - 10, tw, 18)
-			f.draw_rect(tab, UI.key("bad") if t.time <= 2 else UI.ACCENT)
-			f.draw_string(font, tab.position + Vector2(0, 13), "NEXT WALK", HORIZONTAL_ALIGNMENT_CENTER, tw, 11, UI.BG)
-		f.draw_string(font, r.position + Vector2(8, 26), "T%d" % t.table,
-			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 56, UI.font_size(18), ticket_ink)
-		if t.big:   # small, between the table number and the clock, so it never runs into either
-			f.draw_string(font, r.position + Vector2(46, 25), "BIG", HORIZONTAL_ALIGNMENT_LEFT, 28, UI.font_size(11), UI.key("warn") if UI.contrast() else Color("704713"))
+			if not t.big:
+				f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), UI.ACCENT)
+				draw_ticket_line(f, font, ticket_text_line("pick", "COOK FIRST", Rect2(r.position.x, r.end.y - 26, r.size.x, 26), 13), UI.BG, true)
+		var header_w := (r.size.x - 12) / 3.0
+		draw_ticket_line(f, font, ticket_text_line("table", "T%d" % t.table, Rect2(r.position + Vector2(6, 3), Vector2(header_w, 30)), 18), ticket_ink)
+		if t.big:
+			var flag := "PICK" if t.id == pick_tid else ("VIP" if t.get("vip", false) else ("CRIT" if t.get("critic", false) else "BIG"))
+			draw_ticket_line(f, font, ticket_text_line("flag", flag, Rect2(r.position + Vector2(6 + header_w, 3), Vector2(header_w, 30)), 11), ticket_ink, true)
 		for tag in ["vip", "critic"]:   # tonight's twist: a word band on the bottom plus a doubled frame
 			if t.get(tag, false):
 				f.draw_rect(r.grow(-6.0), MenuArt.FLAME, false, 2.0)
-			if t.get(tag, false) and t.id != pick_tid:   # picked: the COOK FIRST tab wins the band
+			if t.get(tag, false) and t.id != pick_tid and not t.big:   # picked: the COOK FIRST tab wins the band
 				f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), MenuArt.FLAME)
 				f.draw_string(font, Vector2(r.position.x, r.end.y - 7), tag.to_upper(), HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
 					UI.font_size(13), MenuArt.PAPER_INK)
 		# Clock: number plus a shape cue (filled bars), not colour alone.
-		f.draw_string(font, r.position + Vector2(r.size.x - 44, 28), "%d'" % t.time,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(24), UI.key(tone) if UI.contrast() else UI.key(tone).darkened(0.55))
+		draw_ticket_line(f, font, ticket_text_line("clock", "%d'" % t.time, Rect2(r.position + Vector2(6 + header_w * 2, 3), Vector2(header_w, 30)), 24), UI.key(tone) if UI.contrast() else UI.key(tone).darkened(0.55), true)
 		for b in mini(t.time, 10):
 			f.draw_rect(Rect2(r.position.x + 8 + b * ((r.size.x - 16) / 10.0), r.position.y + 36, (r.size.x - 16) / 10.0 - 2, 6), UI.key(tone))
-		var iy := r.position.y + DISH_ROW0 + 20.0
-		for n in t.items.size():
-			var it: Dictionary = t.items[n]
-			if t.id == pick_tid and n == pick_ix:   # the tapped dish: an accent bar and a pointer, not colour alone
-				f.draw_rect(Rect2(r.position.x + 3, iy - 20, r.size.x - 6, DISH_ROW - 2), Color(UI.ACCENT, 0.25))
-				f.draw_rect(Rect2(r.position.x + 3, iy - 20, 4, DISH_ROW - 2), UI.ACCENT)
-			var col: Color = ticket_dim if it.state == "served" else ticket_ink
-			f.draw_string(font, Vector2(r.position.x + 8, iy), it.dish + (" %dT" % dish_turns(t, it) if not service_ended() and it.state in ["wait", "cooking"] else ""), HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, mini(UI.font_size(16), 16), col)
-			if it.state == "served":   # struck through: done, in shape as well as colour
-				var dw := minf(font.get_string_size(it.dish, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(16)).x, r.size.x - 12)
-				f.draw_line(Vector2(r.position.x + 8, iy - 6), Vector2(r.position.x + 8 + dw, iy - 6), ticket_dim, 2.0)
-			# Its state in words on a small line under it (no symbol to learn): where it cooks while it waits.
-			var sub: String = {"wait": "at " + Kitchen.station_of(it.dish), "cooking": "cooking", "carried": "on the pass", "served": "served"}[it.state]
-			if it.state == "wait" and it.has("needs"):   # CROSS PREP: say what to prep and where, first
-				sub = "PREP AT " + Kitchen.STATIONS[int(it.needs)]   # the button names the ingredient
-			var sc: Color = UI.key("warn") if it.state == "wait" else (UI.key("info") if it.state != "served" else UI.DIM)
-			if not UI.contrast():
-				sc = ticket_dim if it.state == "served" else sc.darkened(0.60)
-			f.draw_string(font, Vector2(r.position.x + 8, iy + 14), sub,
-				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(14), sc)
-			iy += DISH_ROW
-		if t.big and not service_ended():
-			var total_text := "COOK TOTAL %dT" % ticket_cook_total(t)
-			f.draw_rect(Rect2(r.position.x + 2, r.end.y - 20, r.size.x - 4, 18), UI.panel_color())
-			f.draw_string(font, Vector2(r.position.x, r.end.y - 6), total_text, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11, ink)
-	_plate(f, Rect2(pad - 6, y0 + 218, f.size.x - 2 * pad + 12, 30))
+		for line in ticket_accessibility_layout(r, t):
+			var box: Rect2 = line.box
+			if line.kind == "next" or line.kind == "total":
+				f.draw_rect(box, (UI.key("bad") if t.time <= 2 else UI.ACCENT) if line.kind == "next" else UI.panel_color())
+				draw_ticket_line(f, font, line, UI.BG if line.kind == "next" else ink, true)
+				continue
+			var it: Dictionary = t.items[line.item]
+			if line.kind == "dish":
+				if t.id == pick_tid and line.item == pick_ix:
+					f.draw_rect(Rect2(box.position, Vector2(box.size.x, dish_row_height())), Color(UI.ACCENT, 0.25))
+					f.draw_rect(Rect2(box.position, Vector2(4, dish_row_height())), UI.ACCENT)
+				draw_ticket_line(f, font, line, ticket_dim if it.state == "served" else ticket_ink)
+				if it.state == "served":
+					var dw := font.get_string_size(line.text, HORIZONTAL_ALIGNMENT_LEFT, -1, line.size).x
+					f.draw_line(box.position + Vector2(0, box.size.y / 2), box.position + Vector2(dw, box.size.y / 2), ticket_dim, 2.0)
+			else:
+				var sc: Color = UI.key("warn") if it.state == "wait" else (UI.key("info") if it.state != "served" else UI.DIM)
+				if not UI.contrast():
+					sc = ticket_dim if it.state == "served" else sc.darkened(0.60)
+				draw_ticket_line(f, font, line, sc)
+	_plate(f, Rect2(pad - 6, y0 + 218 + rail_extra(), f.size.x - 2 * pad + 12, 30))
 	var more_w := 0.0
 	_more_rect = Rect2()
 	if not service_ended() and k.tickets.size() > 4:   # tap to inspect all, swipe cards to page
@@ -1977,18 +2062,18 @@ func _draw_field(f: Control) -> void:
 		if hot:
 			mt += "!"   # hot: a "!" as well as red
 		more_w = font.get_string_size(mt, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(16)).x + 16
-		var mr := Rect2(f.size.x - pad - more_w, y0 + 220, more_w, 26)
+		var mr := Rect2(f.size.x - pad - more_w, y0 + 220 + rail_extra(), more_w, 26)
 		f.draw_rect(mr, UI.key("bad") if hot else UI.key("warn"))
 		_more_rect = mr.grow(8.0)   # a bit of slack for a thumb
 		f.draw_string(font, mr.position + Vector2(0, 19), mt, HORIZONTAL_ALIGNMENT_CENTER, more_w, UI.font_size(16), UI.BG)
-	_plate(f, Rect2(pad - 6, y0 - 36, f.size.x - 2 * pad + 12, 30))   # busy kitchen wall behind: text sits on plates
-	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [k.served, mini(k.walked, lives_max), lives_max, k.tips],
+	_plate(f, Rect2(pad - 6, y0 - 54, f.size.x - 2 * pad + 12, 30))   # busy kitchen wall behind: text sits on plates
+	f.draw_string(font, Vector2(pad, y0 - 32), "OUT %d   WALKED %d/%d   TIPS $%d" % [k.served, mini(k.walked, lives_max), lives_max, k.tips],
 		HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20, UI.font_size(18), UI.key("bad") if k.walked >= lives_max - 1 else ink)
-	f.draw_string(font, Vector2(pad, y0 + 240), ("SWIPE %d–%d/%d" % [rail_off + 1, mini(rail_off + 4, k.tickets.size()), k.tickets.size()] if k.tickets.size() > 4 and not service_ended() else next_line(font, f.size.x - 20 - more_w)), HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20 - more_w, UI.font_size(18), ink)
+	f.draw_string(font, Vector2(pad, y0 + 240 + rail_extra()), ("SWIPE %d–%d/%d" % [rail_off + 1, mini(rail_off + 4, k.tickets.size()), k.tickets.size()] if k.tickets.size() > 4 and not service_ended() else next_line(font, f.size.x - 20 - more_w)), HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20 - more_w, UI.font_size(18), ink)
 	# Explicit step and tap: a dark strip, scaled text and a separate target outline.
 	var cue := guide_cue()
 	if not cue.is_empty():
-		var box := Rect2(10, y0 + 270, f.size.x - 20, 28)
+		var box := Rect2(10, y0 + 270 + rail_extra(), f.size.x - 20, 28)
 		var fs := guide_font_size(font, box.size.x - 12)
 		f.draw_rect(box, Color.BLACK)
 		f.draw_rect(box, ink, false, 2.0)

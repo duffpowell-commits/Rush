@@ -8,6 +8,10 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
+## Nov 28 — PR #50 accessibility sizing follow-up
+- From `1d8b38b`: RUSH, dish timing lines, NEXT WALK and COOK TOTAL now measure requested font scale against actual text boxes. Larger text adds rail height while the station bottoms/cook positions remain fixed; separate footer and deadline regions prevent overlap. Wrapped thumb buttons fit their own bounds. No balance, save, art or signing changes.
+- `guidance_render.gd` now checks growth, text bounds, non-overlap and matching resized dish hit rows, and captures normal/contrast/huge/combined modes. Existing build workflow runs it at 360×640 and 390×780 and uploads captures with the existing renders artifact; all prior CI steps retained. Local Godot 4.7.2: 63/63, rendered AUTOPLAY PASS, guidance/touch/All Orders at both sizes PASS; hosted CI not run.
+
 ## Nov 28 — PR #50 independent-review correction
 - Continue exactly from `dc39541` (owner reports Vig recovered it into PR #50). Save v9 migrates missing active-run fields without redealing or losing purchases; existing candidate v8 fields remain intact.
 - Guided tap text follows the picked/earliest live order and real station, scales with text settings, and names the step/table/control without relying on color. Ended-service buttons are neutral/disabled; next-walk, arrival and stress forecasts retire. Approved simulation, balance and artwork unchanged.
