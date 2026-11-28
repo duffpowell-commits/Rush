@@ -104,6 +104,7 @@ var prep_every := 3      # CROSS PREP: every Nth dish needs an ingredient preppe
 var first_tickets := 7   # tickets in service 1 (8.5 plan #3 tried 8: the bot lost s1 26% vs 8%, so it stays 7) (Nov 25 stations: bot s1 ~8%, s2 ~32%, s3 ~48%, s4 ~71% game over, twists on)
 var more_tickets := 1    # extra tickets each later service (greedy bot with the pass window, 200 seeds: s2 ~41% game over, s3 ~69%; was 6+1 before the window)
 
+var guided_opening := false # Only fresh service-one deals use the guided layout.
 var service := 1
 var turn := 0
 var crew: Array = []        # {name, at, ap, stress, out, hand: {} or {tid, dish}, acted}
@@ -112,6 +113,7 @@ var window: Array = []      # plated dishes up on the pass: {tid, dish}
 var tickets: Array = []     # active: {id, table, items: [{dish, state}], time, big}
 var incoming: Array = []    # not yet on the rail: {arrive, ticket}
 var served := 0             # tickets out complete
+var walk_limit := 3 # Comp upgrades may raise the service limit.
 var walked := 0             # tickets comped this service
 var tips := 0
 var all_open := false      # true: every station open from service 1 (old tests, sweeps)
@@ -135,6 +137,7 @@ var rng := RandomNumberGenerator.new()
 ## A fresh service. Later services bring more tickets, faster, with a big table in the push.
 func start(n: int, seed_value: int = 0) -> void:
 	service = n
+	guided_opening = n == 1
 	turn = 0
 	served = 0
 	walked = 0
@@ -170,14 +173,16 @@ func start(n: int, seed_value: int = 0) -> void:
 	var last_arrival := maxi(turns - ticket_time - 2, 4)
 	for i in count:
 		var arrive := int(round(float(i) * last_arrival / maxf(count - 1, 1)))
-		var big := i == count / 2 + 1 or ((n >= late_big_start or (n >= 4 and challenge >= 2)) and i == count / 3 and i > 1)
+		var big := n > 1 and (i == count / 2 + 1 or ((n >= late_big_start or (n >= 4 and challenge >= 2)) and i == count / 3 and i > 1))
 		incoming.append({"arrive": arrive, "ticket": _make_ticket(big)})
 	# No dead opening turns (build-76 review: "fire one dish, END TURN, END TURN"): the second ticket
 	# lands at 7:00 from service 2, and a minute in on service 1 while the first one teaches.
 	if count > 1:
-		incoming[1].arrive = 0 if n >= 2 else 1
-	if n == 1:   # the first ticket of the night teaches the grill: DEV starts there
-		incoming[0].ticket.items = [{"dish": "BURGER", "state": "wait"}]
+		incoming[1].arrive = 0
+	if n == 1:   # Guided practice: two small opening tickets, one follow-up, no large table.
+		for i in incoming.size():
+			incoming[i].ticket.items = [{"dish": ["BURGER", "FRIES", "STEAK"][i % 3], "state": "wait"}]
+			incoming[i].arrive = 0 if i < 2 else 4 + (i - 2) * 3
 	event = ""
 	critic = ""
 	# The fox shows up on the quiet night (service 3 never rolls a twist): halfway through, one cook
@@ -196,7 +201,9 @@ static func count_for(first: int, more: int, n: int, late: int = 1) -> int:
 	# Difficulty review (Nov 26, Duff: "ramps up at a bearable rate"): past service 5 the rail grows
 	# every other service, not every one (the bot lost 91% of service 6).
 	var steps := mini(n, 5) - 1 + maxi(n - 5, 0) / 2
-	return maxi(1, first + more * steps - (1 if n >= 4 else 0) + late * (maxi(n - 2, 0) / 2))
+	var planned := maxi(1, first + more * steps - (1 if n >= 4 else 0) + late * (maxi(n - 2, 0) / 2))
+	# A short opening and gradual ramp; later services keep their existing curve.
+	return maxi(1, planned - maxi(5 - n, 0))
 
 
 func _set_up_event() -> void:
@@ -269,7 +276,8 @@ func walk_cost(from: int, to: int) -> int:
 	for st in range(mini(from, to) + 1, maxi(from, to) + 1):
 		if is_open(st):
 			cost += 1
-	return cost
+	# Cap long trips, preserving adjacent steps and free-walk perk discounts.
+	return mini(cost, 2)
 
 
 func _cook(nm: String) -> Dictionary:
@@ -712,7 +720,7 @@ func heat_turn() -> bool:
 	return event == "heat" and turn % 4 == 1   # difficulty review (Nov 26): every fourth turn; every other was a 30-point spike
 
 
-func end_turn() -> void:
+func end_turn(ignore_walk_limit := false) -> void:
 	if done:
 		return
 	events.clear()
@@ -747,6 +755,8 @@ func end_turn() -> void:
 		if t.time <= 0:
 			tickets.erase(t)
 			walked += 2 if t.get("vip", false) else 1
+			if not ignore_walk_limit:
+				walked = mini(walked, walk_limit)
 			if t.get("critic", false):
 				critic = "walked"
 			_say("TABLE %d WALKED" % t.table)
@@ -798,6 +808,10 @@ func end_turn() -> void:
 		cr.erase("fox")
 	iron_used = false
 	turn += 1
+	# Finish simultaneous cleanup and stress, but never deal more tickets after the loss.
+	if not ignore_walk_limit and walked >= walk_limit:
+		done = true
+		return
 	_arrivals()
 	if turn == fox_turn:
 		_fox_runs()
@@ -877,9 +891,9 @@ static func station_of(dish: String) -> String:
 ## Everything needed to pick the service back up exactly where it was (JSON-safe). The service's own
 ## tuning rides along on purpose: a TUNE change applies from the next service, not mid-service.
 func to_dict() -> Dictionary:
-	return {"service": service, "turn": turn, "crew": crew.duplicate(true), "pans": pans.duplicate(true),
+	return {"service": service, "guided_opening": guided_opening, "turn": turn, "crew": crew.duplicate(true), "pans": pans.duplicate(true),
 		"tickets": tickets.duplicate(true), "incoming": incoming.duplicate(true), "served": served,
-		"walked": walked, "tips": tips, "done": done, "total": total, "next_id": _next_id,
+		"walked": walked, "walk_limit": walk_limit, "tips": tips, "done": done, "total": total, "next_id": _next_id,
 		"rng": str(rng.state), "turns": turns, "ticket_time": ticket_time, "ap": ap,
 		"stress_cap": stress_cap, "burn_after": burn_after,
 		"window": window.duplicate(true), "rush_stress": rush_stress, "event": event, "critic": critic, "all_open": all_open,
@@ -893,9 +907,11 @@ func from_dict(d: Dictionary) -> bool:
 		if not d.has(key):
 			return false   # a mangled save: keep the fresh service instead
 	service = int(d.service)
+	guided_opening = bool(d.get("guided_opening", false))
 	turn = int(d.turn)
 	served = int(d.served)
-	walked = int(d.walked)
+	walk_limit = int(d.get("walk_limit", walk_limit))
+	walked = mini(int(d.walked), walk_limit)
 	tips = int(d.tips)
 	done = bool(d.done)
 	total = int(d.get("total", 0))
