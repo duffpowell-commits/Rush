@@ -278,7 +278,26 @@ func _refresh_hud() -> void:
 	if hud == null:
 		return
 	var god := " GOD" if get_node("/root/DebugMenu").god_mode else ""
-	hud.text = "%s%s\nSERVICE %d" % [k.clock(), god, level]
+	hud.text = "%s%s\nSERVICE %d" % [k.clock(), god, k.service]
+	if service_ended():
+		for b in [act_btn, rush_btn, end_btn]:
+			b.disabled = true
+			b.modulate = Color.WHITE
+		act_btn.text = "SERVICE ENDED"
+		rush_btn.text = "RUSH"
+		end_btn.text = "END TURN"
+		undo_btn.visible = false
+		if is_instance_valid(feedback):
+			feedback.text = ""
+		for ch in get_children():
+			if ch.name.begins_with("Coach_"):
+				ch.hide()
+				ch.queue_free()
+		fx.clear()
+		if is_instance_valid(note):
+			note.text = " | ".join(k.events)
+		return
+	end_btn.disabled = false
 
 	if pick_tid != 0 and k.ticket(pick_tid).is_empty():
 		pick_tid = 0   # served or walked: back to most urgent
@@ -352,6 +371,10 @@ func _refresh_hud() -> void:
 		var projected := stress_after(sel, true) + k.rush_cost()
 		rush_btn.text = "RUSH\n" + (("TAKES 5" if _wind_for(sel) else "QUITS!") if projected >= k.stress_cap else ("0 STRESS" if k.rush_cost() <= 0 else "+%d STRESS" % k.rush_cost()))
 	var next_tap := guide_target()
+	# Keep the explicit cue legible without a disabled helper wrapping into crew/stress.
+	act_btn.add_theme_font_size_override("font_size", mini(UI.font_size(24), 28) if not next_tap.is_empty() else UI.font_size(24))
+	if a == "" and not next_tap.is_empty() and next_tap != "ACT":
+		act_btn.text = "WAIT" if next_tap == "END" else "MOVE"
 	act_btn.modulate = Color(1.25, 1.15, 0.65) if next_tap == "ACT" else Color.WHITE
 	end_btn.modulate = Color(1.25, 1.15, 0.65) if next_tap == "END" else Color.WHITE
 	if undo_btn != null:   # only while there's a move to take back this turn
@@ -1220,14 +1243,31 @@ func _spent_seen() -> bool:
 	return _spent_turn >= 0
 
 
-## The checklist is reconstructed from the first burger's actual state (no new saved fields).
+## Follow the selected live order, or the earliest actual incomplete order when it disappears.
+func guide_order() -> Dictionary:
+	if k == null or not k.guided_opening or k.service != 1 or k.served > 0 or service_ended():
+		return {}
+	var orders := k.tickets.duplicate()
+	orders.sort_custom(func(a, b): return a.time < b.time)
+	var picked := k.ticket(pick_tid)
+	if not picked.is_empty():
+		if pick_ix >= 0 and pick_ix < picked.items.size() and picked.items[pick_ix].state != "served":
+			var it: Dictionary = picked.items[pick_ix]
+			return {"ticket": picked, "item": it, "station": Kitchen.DISHES[it.dish].st}
+		orders.erase(picked)
+		orders.push_front(picked)
+	for t in orders:
+		for it in t.items:
+			if it.state != "served":
+				return {"ticket": t, "item": it, "station": Kitchen.DISHES[it.dish].st}
+	return {}
+
+
 func guide_step() -> int:
-	if k == null or not k.guided_opening or k.service != 1 or k.served > 0 or k.done or over or between or k.tickets.is_empty():
+	var order := guide_order()
+	if order.is_empty():
 		return 4
-	var first: Dictionary = k.tickets[0]
-	if first.items.is_empty():
-		return 4
-	match first.items[0].state:
+	match order.item.state:
 		"wait": return 0
 		"cooking": return 1
 		"carried": return 3 if k.crew[sel].at == Kitchen.PASS_IX else 2
@@ -1235,14 +1275,41 @@ func guide_step() -> int:
 
 
 func guide_target() -> String:
-	match guide_step():
-		0: return ("ACT" if k.action_here(sel, false) != "" else "END") if k.crew[sel].at == 0 else "GRILL"
-		1:
-			var pan: Dictionary = k.pans[0]
-			return "END" if not pan.is_empty() and pan.left > 0 else (("ACT" if k.action_here(sel, false) != "" else "END") if k.crew[sel].at == 0 else "GRILL")
-		2: return "PASS"
-		3: return "ACT" if k.action_here(sel, false) == "RUN" else "END"
-	return ""
+	var order := guide_order()
+	if order.is_empty():
+		return ""
+	var step := guide_step()
+	var st: int = order.station if step < 2 else Kitchen.PASS_IX
+	if step == 1 and dish_turns(order.ticket, order.item) > 0:
+		return "END"
+	if k.crew[sel].at != st:
+		return Kitchen.STATIONS[st] if k.can_act(sel, "MOVE") and k.move_cost(sel, st) <= k.crew[sel].ap else "END"
+	var needed: String = ["FIRE", "PLATE", "RUN", "RUN"][step]
+	var actual := k.action_here(sel, false)
+	return "ACT" if actual == needed or (step == 0 and actual == "PLATE") else "END"
+
+
+## Text names the exact next tap even without color; size follows the accessibility setting.
+func guide_cue() -> String:
+	var order := guide_order()
+	if order.is_empty():
+		return ""
+	var step := guide_step()
+	var target := guide_target()
+	var verb: String = ["FIRE", "PLATE", "WALK TO PASS", "RUN"][step]
+	var tap := k.action_here(sel, false) if target == "ACT" else ("END TURN" if target == "END" else target)
+	return "%d/4 %s T%d: TAP %s" % [step + 1, verb, order.ticket.table, tap]
+
+
+func guide_font_size(font: Font, width: float) -> int:
+	var size := mini(UI.font_size(18), 24)
+	while size > 12 and font.get_string_size(guide_cue(), HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width:
+		size -= 1
+	return size
+
+
+func service_ended() -> bool:
+	return over or between or k == null or k.done
 
 
 ## Remaining cooking work, not wall clock: parallel stations may finish faster.
@@ -1717,6 +1784,8 @@ func _draw_cover(f: Control, tex: Texture2D, box: Rect2) -> void:
 ## their station +2, a worked cook +1 while a ticket will be red, an idle one rests).
 func cooks_quitting() -> Array:
 	var out: Array = []
+	if service_ended():
+		return out
 	var wind: int = k.breaks
 	for c in k.crew.size():
 		if not k.crew[c].out and stress_after(c) >= k.stress_cap:
@@ -1741,6 +1810,8 @@ func _wind_for(c: int) -> bool:
 ## Cooks who'd hit the cap but take five instead (second wind), in end_turn's order.
 func cooks_breaking() -> Array:
 	var out: Array = []
+	if service_ended():
+		return out
 	for c in k.crew.size():
 		if out.size() < k.breaks and not k.crew[c].out and stress_after(c) >= k.stress_cap:
 			out.append(k.crew[c].name)
@@ -1763,6 +1834,8 @@ func stress_after(c: int, as_acted := false, emptied := -1) -> int:
 
 ## The NEXT bar in plain words ("NEXT: 2 dishes in 3 min"), as many as fit the width.
 func next_line(font: Font, width: float) -> String:
+	if service_ended():
+		return "SERVICE ENDED"
 	var pv: Array = k.preview(3)
 	if pv.is_empty():
 		return "NEXT: no more tickets"
@@ -1791,7 +1864,7 @@ func _plate(f: Control, box: Rect2) -> void:
 ## 8.5 plan #3: the one table that walks first wears URGENT (build-84 review: a busy rail was
 ## unreadable). Only with two or more tickets on: one ticket is urgent by default. -1 = none.
 func urgent_tid() -> int:
-	if k.tickets.is_empty():
+	if service_ended() or k.tickets.is_empty():
 		return -1
 	var lo: Dictionary = k.tickets[0]
 	for t in k.tickets:
@@ -1841,7 +1914,7 @@ func _draw_field(f: Control) -> void:
 		if tone == "bad" and not (paused or over or between) and not _settings.get_value("low_graphics"):   # about to walk: the frame throbs
 			var throb := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 120.0)
 			f.draw_rect(r.grow(3.0 + 3.0 * throb), Color(UI.key("bad"), 0.5 * throb), false, 3.0)
-		if t.id == pick_tid:   # picked: a thick accent frame plus a tab on the bottom (shape, not colour alone)
+		if not service_ended() and t.id == pick_tid:   # picked: a thick accent frame plus a tab on the bottom (shape, not colour alone)
 			f.draw_rect(r.grow(4.0), UI.ACCENT, false, 4.0)
 			f.draw_rect(Rect2(r.position.x, r.end.y - 26, r.size.x, 26), UI.ACCENT)
 			f.draw_string(font, Vector2(r.position.x, r.end.y - 7), "COOK FIRST", HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
@@ -1874,7 +1947,7 @@ func _draw_field(f: Control) -> void:
 				f.draw_rect(Rect2(r.position.x + 3, iy - 20, r.size.x - 6, DISH_ROW - 2), Color(UI.ACCENT, 0.25))
 				f.draw_rect(Rect2(r.position.x + 3, iy - 20, 4, DISH_ROW - 2), UI.ACCENT)
 			var col: Color = ticket_dim if it.state == "served" else ticket_ink
-			f.draw_string(font, Vector2(r.position.x + 8, iy), it.dish + (" %dT" % dish_turns(t, it) if it.state in ["wait", "cooking"] else ""), HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, mini(UI.font_size(16), 16), col)
+			f.draw_string(font, Vector2(r.position.x + 8, iy), it.dish + (" %dT" % dish_turns(t, it) if not service_ended() and it.state in ["wait", "cooking"] else ""), HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, mini(UI.font_size(16), 16), col)
 			if it.state == "served":   # struck through: done, in shape as well as colour
 				var dw := minf(font.get_string_size(it.dish, HORIZONTAL_ALIGNMENT_LEFT, -1, UI.font_size(16)).x, r.size.x - 12)
 				f.draw_line(Vector2(r.position.x + 8, iy - 6), Vector2(r.position.x + 8 + dw, iy - 6), ticket_dim, 2.0)
@@ -1888,14 +1961,14 @@ func _draw_field(f: Control) -> void:
 			f.draw_string(font, Vector2(r.position.x + 8, iy + 14), sub,
 				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12, UI.font_size(14), sc)
 			iy += DISH_ROW
-		if t.big:
+		if t.big and not service_ended():
 			var total_text := "COOK TOTAL %dT" % ticket_cook_total(t)
 			f.draw_rect(Rect2(r.position.x + 2, r.end.y - 20, r.size.x - 4, 18), UI.panel_color())
 			f.draw_string(font, Vector2(r.position.x, r.end.y - 6), total_text, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11, ink)
 	_plate(f, Rect2(pad - 6, y0 + 218, f.size.x - 2 * pad + 12, 30))
 	var more_w := 0.0
 	_more_rect = Rect2()
-	if k.tickets.size() > 4:   # tap to inspect all, swipe cards to page
+	if not service_ended() and k.tickets.size() > 4:   # tap to inspect all, swipe cards to page
 		var all_t: Array = k.tickets.duplicate()
 		all_t.sort_custom(func(a, b): return a.time < b.time)
 		var hid: Array = all_t.slice(0, rail_off) + shown.slice(4)
@@ -1911,15 +1984,16 @@ func _draw_field(f: Control) -> void:
 	_plate(f, Rect2(pad - 6, y0 - 36, f.size.x - 2 * pad + 12, 30))   # busy kitchen wall behind: text sits on plates
 	f.draw_string(font, Vector2(pad, y0 - 14), "OUT %d   WALKED %d/%d   TIPS $%d" % [k.served, mini(k.walked, lives_max), lives_max, k.tips],
 		HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20, UI.font_size(18), UI.key("bad") if k.walked >= lives_max - 1 else ink)
-	f.draw_string(font, Vector2(pad, y0 + 240), ("SWIPE %d–%d/%d" % [rail_off + 1, mini(rail_off + 4, k.tickets.size()), k.tickets.size()] if k.tickets.size() > 4 else next_line(font, f.size.x - 20 - more_w)), HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20 - more_w, UI.font_size(18), ink)
-	# Checklist stays below the next-arrival rail, above the stations.
-	if guide_step() < 4:
-		var labels := ["FIRE", "PLATE", "WALK TO PASS", "RUN"]
-		var w := (f.size.x - 20) / 4.0
-		for j in labels.size():
-			var box := Rect2(10 + j * w, y0 + 272, w - 3, 24)
-			f.draw_rect(box, UI.ACCENT if j == guide_step() else Color(0, 0, 0, 0.85))
-			f.draw_string(font, box.position + Vector2(0, 17), ("✓ " if j < guide_step() else "") + labels[j], HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 13, UI.BG if j == guide_step() else ink)
+	f.draw_string(font, Vector2(pad, y0 + 240), ("SWIPE %d–%d/%d" % [rail_off + 1, mini(rail_off + 4, k.tickets.size()), k.tickets.size()] if k.tickets.size() > 4 and not service_ended() else next_line(font, f.size.x - 20 - more_w)), HORIZONTAL_ALIGNMENT_LEFT, f.size.x - 20 - more_w, UI.font_size(18), ink)
+	# Explicit step and tap: a dark strip, scaled text and a separate target outline.
+	var cue := guide_cue()
+	if not cue.is_empty():
+		var box := Rect2(10, y0 + 270, f.size.x - 20, 28)
+		var fs := guide_font_size(font, box.size.x - 12)
+		f.draw_rect(box, Color.BLACK)
+		f.draw_rect(box, ink, false, 2.0)
+		f.draw_string(font, box.position + Vector2(0, (box.size.y - font.get_height(fs)) / 2.0 + font.get_ascent(fs)), cue, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, fs, ink)
+
 	# --- the line
 	for i in Kitchen.STATIONS.size():
 		var r := station_rect(i)
@@ -1951,7 +2025,7 @@ func _draw_field(f: Control) -> void:
 		if i < k.pans.size() and not k.pans[i].is_empty():
 			var p: Dictionary = k.pans[i]
 			var up: bool = p.left <= 0
-			var burning: bool = up and p.sat >= k.burn_limit(p)
+			var burning: bool = not service_ended() and up and p.sat >= k.burn_limit(p)
 			var tone := ("bad" if burning else "warn") if up else "info"
 			if not low and up:
 				f.draw_circle(r.get_center() + Vector2(0, 20), 46.0, Color(UI.key(tone), 0.2))
@@ -2019,7 +2093,7 @@ func _draw_field(f: Control) -> void:
 	# Walk costs (movement pass, build-73 reviews: walking ate turns unseen): with a cook picked,
 	# every other open station says what getting there costs, or TOO FAR.
 	var command_cook := _press_cook if _dragging else sel
-	if not k.crew[command_cook].out and not k.done and k.can_act(command_cook, "MOVE"):   # spent: the button already says NO MOVES
+	if not service_ended() and not k.crew[command_cook].out and k.can_act(command_cook, "MOVE"):   # spent: the button already says NO MOVES
 		var me: Dictionary = k.crew[command_cook]
 		for i in Kitchen.STATIONS.size():
 			if i == me.at or not k.is_open(i):

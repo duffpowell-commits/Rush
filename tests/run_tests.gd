@@ -623,7 +623,7 @@ func test_rush_save_no_double_count() -> void:
 func test_save_migrates_v1() -> void:
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 1, "level": 3, "score": 9, "lives": 2})
-	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 8, "v1 -> v8")
+	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 9, "v1 -> v9")
 	sv.free()
 
 
@@ -705,7 +705,7 @@ func test_save_migrates_v2() -> void:
 	kd.erase("window")
 	kd.crew[0].hand = {"tid": 1, "dish": "BURGER"}
 	var d: Dictionary = sv._migrate({"_version": 2, "level": 1, "score": 0, "kitchen": kd})
-	check(int(d._version) == 8 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
+	check(int(d._version) == 9 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
 	var b := Kitchen.new()
 	check(b.from_dict(d.kitchen) and b.window.size() == 1, "and it loads")
 	sv.free()
@@ -769,7 +769,7 @@ func test_upgrades_carry() -> void:
 		check(String(Upgrades.ALL[id].says).length() <= 26, id + " fits the button")
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 3, "level": 2, "score": 8})
-	check(int(d._version) == 8 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v8")
+	check(int(d._version) == 9 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v9")
 	sv.free()
 
 
@@ -1027,7 +1027,7 @@ func test_shop_pushes_back() -> void:
 		and Upgrades.load_tickets(["meal", "lamps", "iron", "tray"]) == 0, "no purchase penalty")
 	var sv = load("res://scripts/save_game.gd").new()
 	var old: Dictionary = sv._migrate({"_version": 5, "cash": 73, "perks": ["tray"], "temp_buys": 2})
-	check(int(old._version) == 8 and old.perks == ["tray", "temp"] and old.cash == 73, "past hires unlock crew without charge")
+	check(int(old._version) == 9 and old.perks == ["tray", "temp"] and old.cash == 73, "past hires unlock crew without charge")
 	var active: Dictionary = sv._migrate({"_version": 5, "perks": ["temp"], "temp_buys": 1})
 	check(active.perks == ["temp"], "active hire migrates without duplication")
 	var legacy := Kitchen.new()
@@ -1394,4 +1394,48 @@ func test_guided_forecasts() -> void:
 	k.crew[0].stress = 2
 	g.over = true
 	check(g.stress_after(0) == 2, "no stress forecast once game is over")
+	g.free()
+
+
+func test_v9_active_run_migration() -> void:
+	var sv = load("res://scripts/save_game.gd").new()
+	var k := Kitchen.new()
+	k.start(1, 77)
+	k.fire(0)
+	k.end_turn()
+	k.crew[1].stress = 2
+	k.walked = 2
+	var old := k.to_dict()
+	old.erase("guided_opening")
+	old.erase("walk_limit")
+	var save := {"_version": 8, "level": 1, "cash": 73, "perks": ["comps", "temp"], "kitchen": old.duplicate(true)}
+	var migrated: Dictionary = sv._migrate(save)
+	check(migrated._version == 9 and not migrated.kitchen.get("guided_opening", true) and migrated.kitchen.get("walk_limit", 0) == 4, "v8 active run gets explicit v9 fields")
+	check(migrated.kitchen.tickets == old.tickets and migrated.kitchen.crew == old.crew and migrated.kitchen.rng == old.rng and migrated.kitchen.pans == old.pans and migrated.kitchen.incoming == old.incoming and migrated.kitchen.turn == old.turn and migrated.cash == 73, "migration preserves play state")
+	var already := k.to_dict()
+	already.guided_opening = true
+	already.walk_limit = 4
+	var staged: Dictionary = sv._migrate({"_version": 8, "kitchen": already, "perks": ["comps"]})
+	check(staged.kitchen.guided_opening and staged.kitchen.walk_limit == 4, "preserve recovered candidate v8 fields")
+	sv.free()
+
+
+func test_guide_tracks_ticket_station_and_ended_state() -> void:
+	var g = load("res://scripts/game.gd").new()
+	var k := Kitchen.new()
+	k.start(1)
+	g.k = k
+	g.pick_tid = k.tickets[1].id
+	check(g.guide_target() == "FRY" and g.guide_cue().contains("TAP FRY"), "explicitly picked fries guides to fry")
+	g.pick_tid = 0
+	k.tickets.pop_front()
+	check(g.guide_target() == "FRY", "after burger walks, guide points to fries station")
+	g.sel = 1
+	check(g.guide_target() == "ACT", "with fry cook selected, guide points to actual fire")
+	k.fire(1)
+	check(g.guide_target() == "END", "actual fry pan cooking")
+	k.end_turn()
+	check(g.guide_target() == "ACT", "actual fry pan ready to plate")
+	g.over = true
+	check(g.urgent_tid() == -1 and g.cooks_quitting().is_empty() and g.cooks_breaking().is_empty() and g.next_line(ThemeDB.fallback_font, 500) == "SERVICE ENDED", "ended service has no forecasts")
 	g.free()

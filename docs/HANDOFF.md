@@ -8,6 +8,11 @@ version: where we are, what's next, how to check it.
 
 Last updated: 2026-11-26 20:00 UTC (Claude, handoff refresh against main `6e641a5`).
 
+## Nov 28 — PR #50 independent-review correction
+- Continue exactly from `dc39541` (owner reports Vig recovered it into PR #50). Save v9 migrates missing active-run fields without redealing or losing purchases; existing candidate v8 fields remain intact.
+- Guided tap text follows the picked/earliest live order and real station, scales with text settings, and names the step/table/control without relying on color. Ended-service buttons are neutral/disabled; next-walk, arrival and stress forecasts retire. Approved simulation, balance and artwork unchanged.
+- Original 61 plus two focused rule tests: 63/63, isolated rendered AUTOPLAY PASS; guidance, native touch and four-mode All Orders renders passed at 360×640 and 390×780. No merge or publication.
+
 ## Nov 28 — guided service candidate (offline)
 - Isolated gameplay candidate from local `4a25b47`, not the unmerged polish changes. Guided three-table opener, 2 AP long walk cap, dedicated RUSH, exact walkout cap, explicit stress/cook forecasts. No new shop items or price changes.
 - 61/61 tests, isolated rendered autoplay, both portrait touch and All Orders checks passed. Manual guided opening A, 3/3, no walks. See dated [DECISIONS](DECISIONS.md) for why and compatibility notes. Remote GitHub 403; do not treat local candidate as a live release.
