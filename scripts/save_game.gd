@@ -7,7 +7,7 @@ extends Node
 ## Writes go to a temp file first, then replace the real one, so a kill mid-write can't leave
 ## a half-written save.
 
-const VERSION := 8   # 6: paid third-cook ownership no longer expires; migrate prior hires
+const VERSION := 9   # 6: paid third-cook ownership no longer expires; migrate prior hires
 # 2 (Rush, Nov 25): adds "kitchen", the service in progress; "lives" dropped
 # 3 (Rush, Nov 25 playtest): the kitchen gains a pass "window"; plates in a cook's hand move onto it
 # 5 (Rush, Nov 25): a COLD station before the pass (PASS 3 -> 4, a 4th pan); a service saved before it
@@ -107,4 +107,13 @@ func _migrate(d: Dictionary) -> Dictionary:
 	if int(d.get("_version", 1)) < 8:
 		d["chef_pressure"] = 0
 		d["_version"] = 8
+	if int(d.get("_version", 1)) < 9:
+		# Keep the active deal, including any guided-service v8 candidate save.
+		var active: Variant = d.get("kitchen", null)
+		if active is Dictionary:
+			if not active.has("guided_opening"):
+				active["guided_opening"] = false
+			if not active.has("walk_limit"):
+				active["walk_limit"] = 4 if (d.get("perks", []) as Array).has("comps") else 3
+		d["_version"] = 9
 	return d

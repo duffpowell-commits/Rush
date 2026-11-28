@@ -7,13 +7,13 @@ const MenuArt = preload("res://scripts/menu_art.gd")
 
 const STEPS := [
 	["dish_burger", "Tickets are the enemy. Each one has a clock. Get its food out before it hits zero."],
-	["cook_dev", "Tap a cook, then a station, to walk there. Use the big action button to cook. You can also drag a cook to a station to walk there. Moves and jobs cost actions."],
+	["cook_dev", "Tap a cook, then a station, to walk there. Use the big action button to cook. You can also drag a cook to a station to walk there. Moves and jobs cost actions; long walks cost at most 2."],
 	["station_grill", "At a station, FIRE starts the next dish. When the pan is done, PLATE it."],
 	["station_pass", "Plates wait on the pass. Any cook at the PASS can RUN one to its table. Trays in the SHOP carry more."],
 	["cook_mo", "END TURN and every clock ticks a minute. Hot work adds stress. Max stress and that cook walks out."],
 	["dish_steak", "Walk 3 tables in one service and the night is over. Clear the service to get a grade: tables out, speed and clean pans all count."],
 ]
-const TIPS := "Tap a ticket to make FIRE cook it first, or tap one dish on it to fire exactly that.\nRUSH takes a minute off a pan, for stress.\nThe line grows: saute opens in service 2, cold in service 3.\nBuy equipment between services; pick an earned cook perk. PAUSE -> CREW shows your cooks. 0+ moves means a free perk action remains. Swipe crowded orders or tap ALL.\nToo hot or too easy? Settings -> PACE. The kitchen also eases off after a rough night."
+const TIPS := "Tap a ticket to make FIRE cook it first, or tap one dish on it to fire exactly that.\nThe separate RUSH button takes a minute off a pan, for stress. Ticket T = cooking turns left; NEXT WALK marks the closest deadline.\nThe line grows: saute opens in service 2, cold in service 3.\nBuy equipment between services; pick an earned cook perk. PAUSE -> CREW shows your cooks. 0+ moves means a free perk action remains. Swipe crowded orders or tap ALL.\nToo hot or too easy? Settings -> PACE. The kitchen also eases off after a rough night."
 
 
 static func open(parent: Node) -> VBoxContainer:

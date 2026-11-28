@@ -365,7 +365,7 @@ func _kitchen() -> Kitchen:
 ## A dish goes the whole way: fire, cook, plate, walk to the pass, run. Ticket out, tips paid.
 func test_kitchen_fire_to_table() -> void:
 	var k := _kitchen()
-	check(k.tickets.size() == 1 and k.tickets[0].items[0].dish == "BURGER", "first ticket is a burger")
+	check(k.tickets.size() == 2 and k.tickets[0].items[0].dish == "BURGER", "first ticket is a burger")
 	check(k.action_here(0) == "FIRE" and k.fire(0), "DEV fires at the grill")
 	check(k.crew[0].ap == k.ap - 1, "firing costs 1 action")
 	check(not k.plate(0), "can't plate a raw burger")
@@ -373,10 +373,9 @@ func test_kitchen_fire_to_table() -> void:
 	k.end_turn()
 	check(k.pans[0].left == 0 and k.action_here(0) == "PLATE", "burger is up after 2 minutes")
 	check(k.plate(0) and k.window.size() == 1 and k.window[0].dish == "BURGER", "plated up onto the pass window")
-	check(not k.move(0, Kitchen.PASS_IX), "can't cross 4 stations on 2 actions")
-	check(k.move(0, 2) and k.crew[0].ap == 0, "2 stations = 2 actions")
+	check(k.move(0, Kitchen.PASS_IX) and k.crew[0].ap == 0, "long walk costs at most two actions")
 	k.end_turn()
-	check(k.move(0, Kitchen.PASS_IX) and k.action_here(0) == "RUN" and k.run(0), "walk to the pass and run it")
+	check(k.action_here(0) == "RUN" and k.run(0), "run it from the pass")
 	check(k.served == 1 and k.tips > 0 and k.ticket(1).is_empty(), "ticket out, tips paid")
 
 
@@ -408,6 +407,8 @@ func test_kitchen_walks_and_stress() -> void:
 	for i in 10:
 		k.end_turn()
 	check(k.walked >= 1, "untouched tickets walk (%d)" % k.walked)
+	k = _kitchen() # A separate live service for the stress-cap check.
+	k.breaks = 0
 	k.crew[1].stress = k.stress_cap - 1
 	k.crew[1].acted = true
 	k.tickets.append({"id": 999, "table": 9, "items": [{"dish": "FRIES", "state": "wait"}], "time": 2, "big": false})
@@ -548,8 +549,8 @@ func test_second_wind_and_ramp() -> void:
 	check(back.from_dict(JSON.parse_string(JSON.stringify(k.to_dict()))) and back.crew[0].brk and back.breaks == 0, "a break survives a save")
 	k.end_turn()
 	check(not k.crew[0].brk and k.crew[0].ap == k.ap and k.crew[0].stress == k.stress_cap - 5, "back after one turn, rested")
-	check(Kitchen.count_for(7, 1, 1) == 7 and Kitchen.count_for(7, 1, 2) == 8 and Kitchen.count_for(7, 1, 3) == 9
-		and Kitchen.count_for(7, 1, 4) == 10 and Kitchen.count_for(7, 1, 5) == 11 and Kitchen.count_for(7, 1, 6) == 12, "ramp: 7, 8, 9, 10, 11, 12")
+	check(Kitchen.count_for(7, 1, 1) == 3 and Kitchen.count_for(7, 1, 2) == 5 and Kitchen.count_for(7, 1, 3) == 7
+		and Kitchen.count_for(7, 1, 4) == 9 and Kitchen.count_for(7, 1, 5) == 11 and Kitchen.count_for(7, 1, 6) == 12, "ramp: 3, 5, 7, 9, 11, 12")
 
 
 ## 8.5 plan #4 (Duff: "make the perks earn able like a level up system"): perks ride on the cook,
@@ -622,7 +623,7 @@ func test_rush_save_no_double_count() -> void:
 func test_save_migrates_v1() -> void:
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 1, "level": 3, "score": 9, "lives": 2})
-	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 8, "v1 -> v8")
+	check(int(d.level) == 3 and int(d.score) == 9 and not d.has("lives") and int(d._version) == 9, "v1 -> v9")
 	sv.free()
 
 
@@ -704,7 +705,7 @@ func test_save_migrates_v2() -> void:
 	kd.erase("window")
 	kd.crew[0].hand = {"tid": 1, "dish": "BURGER"}
 	var d: Dictionary = sv._migrate({"_version": 2, "level": 1, "score": 0, "kitchen": kd})
-	check(int(d._version) == 8 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
+	check(int(d._version) == 9 and d.kitchen.window.size() == 1 and d.kitchen.crew[0].hand.is_empty(), "hand -> window")
 	var b := Kitchen.new()
 	check(b.from_dict(d.kitchen) and b.window.size() == 1, "and it loads")
 	sv.free()
@@ -768,7 +769,7 @@ func test_upgrades_carry() -> void:
 		check(String(Upgrades.ALL[id].says).length() <= 26, id + " fits the button")
 	var sv = load("res://scripts/save_game.gd").new()
 	var d: Dictionary = sv._migrate({"_version": 3, "level": 2, "score": 8})
-	check(int(d._version) == 8 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v8")
+	check(int(d._version) == 9 and int(d.cash) == 0 and (d.perks as Array).is_empty(), "v3 -> v9")
 	sv.free()
 
 
@@ -958,7 +959,7 @@ func test_kitchen_stations_open() -> void:
 	check(one.move(1, Kitchen.PASS_IX) and one.crew[1].ap == one.ap - 1, "and it really costs 1")
 	var three := Kitchen.new()
 	three.start(3, 5)
-	check(three.walk_cost(0, Kitchen.PASS_IX) == 4, "service 3: grill to pass is 4 stops")
+	check(three.walk_cost(0, Kitchen.PASS_IX) == 2, "service 3: long walks cost two AP")
 	var sv = load("res://scripts/save_game.gd").new()
 	var old := Kitchen.new()
 	old.all_open = true
@@ -1007,12 +1008,12 @@ func test_temp_cook_and_curve_tweaks() -> void:
 	check(plain.tickets.size() >= 2, "service 2's second ticket comes at once")
 	var s1 := Kitchen.new()
 	s1.start(1, 5)
-	check(s1.tickets.size() == 1 and not s1.incoming.is_empty() and int(s1.incoming[0].arrive) == 1, "service 1 still eases in")
+	check(s1.tickets.size() == 2 and not s1.incoming.is_empty() and int(s1.incoming[0].arrive) == 4, "service 1 still eases in")
 	var s3 := Kitchen.new()
 	s3.start(3, 5)
 	var s4 := Kitchen.new()
 	s4.start(4, 5)
-	check(s4.total == s3.total + 1, "service 4 resumes the ramp")
+	check(s4.total == s3.total + 2, "service 4 resumes the ramp")
 
 
 ## Permanent third cook: one payment, and previous paid rentals migrate without another charge.
@@ -1026,7 +1027,7 @@ func test_shop_pushes_back() -> void:
 		and Upgrades.load_tickets(["meal", "lamps", "iron", "tray"]) == 0, "no purchase penalty")
 	var sv = load("res://scripts/save_game.gd").new()
 	var old: Dictionary = sv._migrate({"_version": 5, "cash": 73, "perks": ["tray"], "temp_buys": 2})
-	check(int(old._version) == 8 and old.perks == ["tray", "temp"] and old.cash == 73, "past hires unlock crew without charge")
+	check(int(old._version) == 9 and old.perks == ["tray", "temp"] and old.cash == 73, "past hires unlock crew without charge")
 	var active: Dictionary = sv._migrate({"_version": 5, "perks": ["temp"], "temp_buys": 1})
 	check(active.perks == ["temp"], "active hire migrates without duplication")
 	var legacy := Kitchen.new()
@@ -1330,3 +1331,111 @@ func test_advanced_specialization_and_pressure_save() -> void:
 	var old: Dictionary = sv._migrate({"_version": 7, "level": 5, "perks": ["temp"], "cash": 71})
 	check(old.chef_pressure == 0 and old.perks == ["temp"] and old.cash == 71, "old save starts neutral without losing purchases")
 	sv.free()
+
+
+## Why: two simultaneous expiry penalties must stop at the service's walkout limit.
+func test_walkout_limit_exact() -> void:
+	var k := Kitchen.new()
+	k.start(1)
+	k.walked = 2
+	k.tickets = [{"id": 91, "table": 1, "time": 1, "big": false, "items": [{"dish": "BURGER", "state": "wait"}]},
+		{"id": 92, "table": 2, "time": 1, "big": false, "items": [{"dish": "FRIES", "state": "wait"}]}]
+	k.end_turn()
+	check(k.walked == 3 and k.done, "simultaneous expiries end at three")
+
+
+## Why: a newcomer needs a small, low-pressure practice service before big tables.
+func test_guided_opening() -> void:
+	var k := Kitchen.new()
+	k.start(1, 17)
+	check(k.total == 3 and k.tickets.size() == 2, "three small tables, two at opening")
+	check(k.tickets.all(func(t): return not t.big and t.items.size() == 1) and k.incoming.all(func(i): return not i.ticket.big and i.ticket.items.size() == 1), "no big first-service orders")
+
+
+## Why: a comp perk changes the cap; VIP's double penalty must not overflow it.
+func test_vip_limit_and_legacy_guidance() -> void:
+	var k := Kitchen.new()
+	k.walk_limit = 4
+	k.start(1)
+	k.walked = 3
+	k.tickets = [{"id": 92, "table": 2, "time": 1, "big": false, "vip": true, "items": [{"dish": "FRIES", "state": "wait"}]}]
+	k.end_turn()
+	check(k.walked == 4 and k.done, "VIP clipped at upgraded cap")
+	var back := Kitchen.new()
+	check(back.from_dict(k.to_dict()) and back.walk_limit == 4 and back.guided_opening, "new flags roundtrip")
+	var legacy := k.to_dict()
+	legacy.erase("walk_limit")
+	legacy.erase("guided_opening")
+	back = Kitchen.new()
+	back.walk_limit = 4
+	check(back.from_dict(legacy) and not back.guided_opening and back.walk_limit == 4, "legacy stays unguided and uses configured cap")
+
+
+## Why: the displayed forecast must describe remaining work and disappear once a service ends.
+func test_guided_forecasts() -> void:
+	var g = load("res://scripts/game.gd").new()
+	var k := Kitchen.new()
+	k.start(1)
+	g.k = k
+	check(g.guide_step() == 0 and g.guide_target() == "ACT", "opening highlights FIRE")
+	check(g.dish_turns(k.tickets[0], k.tickets[0].items[0]) == 2, "burger forecast two turns")
+	k.fire(0)
+	check(g.guide_step() == 1 and g.guide_target() == "END", "after fire, highlight END TURN")
+	k.end_turn()
+	check(g.dish_turns(k.tickets[0], k.tickets[0].items[0]) == 1, "forecast counts remaining cook time")
+	k.end_turn()
+	k.plate(0)
+	check(g.guide_step() == 2 and g.guide_target() == "PASS", "after plate, highlight PASS")
+	k.move(1, Kitchen.PASS_IX)
+	g.sel = 1
+	check(g.guide_step() == 3 and g.guide_target() == "ACT", "at pass, highlight RUN")
+	k.run(1)
+	check(g.guide_step() == 4, "after serving, checklist retires")
+	k.crew[0].stress = 2
+	g.over = true
+	check(g.stress_after(0) == 2, "no stress forecast once game is over")
+	g.free()
+
+
+func test_v9_active_run_migration() -> void:
+	var sv = load("res://scripts/save_game.gd").new()
+	var k := Kitchen.new()
+	k.start(1, 77)
+	k.fire(0)
+	k.end_turn()
+	k.crew[1].stress = 2
+	k.walked = 2
+	var old := k.to_dict()
+	old.erase("guided_opening")
+	old.erase("walk_limit")
+	var save := {"_version": 8, "level": 1, "cash": 73, "perks": ["comps", "temp"], "kitchen": old.duplicate(true)}
+	var migrated: Dictionary = sv._migrate(save)
+	check(migrated._version == 9 and not migrated.kitchen.get("guided_opening", true) and migrated.kitchen.get("walk_limit", 0) == 4, "v8 active run gets explicit v9 fields")
+	check(migrated.kitchen.tickets == old.tickets and migrated.kitchen.crew == old.crew and migrated.kitchen.rng == old.rng and migrated.kitchen.pans == old.pans and migrated.kitchen.incoming == old.incoming and migrated.kitchen.turn == old.turn and migrated.cash == 73, "migration preserves play state")
+	var already := k.to_dict()
+	already.guided_opening = true
+	already.walk_limit = 4
+	var staged: Dictionary = sv._migrate({"_version": 8, "kitchen": already, "perks": ["comps"]})
+	check(staged.kitchen.guided_opening and staged.kitchen.walk_limit == 4, "preserve recovered candidate v8 fields")
+	sv.free()
+
+
+func test_guide_tracks_ticket_station_and_ended_state() -> void:
+	var g = load("res://scripts/game.gd").new()
+	var k := Kitchen.new()
+	k.start(1)
+	g.k = k
+	g.pick_tid = k.tickets[1].id
+	check(g.guide_target() == "FRY" and g.guide_cue().contains("TAP FRY"), "explicitly picked fries guides to fry")
+	g.pick_tid = 0
+	k.tickets.pop_front()
+	check(g.guide_target() == "FRY", "after burger walks, guide points to fries station")
+	g.sel = 1
+	check(g.guide_target() == "ACT", "with fry cook selected, guide points to actual fire")
+	k.fire(1)
+	check(g.guide_target() == "END", "actual fry pan cooking")
+	k.end_turn()
+	check(g.guide_target() == "ACT", "actual fry pan ready to plate")
+	g.over = true
+	check(g.urgent_tid() == -1 and g.cooks_quitting().is_empty() and g.cooks_breaking().is_empty() and g.next_line(ThemeDB.fallback_font, 500) == "SERVICE ENDED", "ended service has no forecasts")
+	g.free()
