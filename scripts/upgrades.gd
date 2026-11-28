@@ -16,7 +16,7 @@ const ALL := {
 	"tray": {"name": "SERVER TRAY", "cost": 30, "says": "RUN 2 PLATES AT ONCE"},
 	"tray2": {"name": "ENTREE TRAY", "cost": 65, "says": "RUN 4 PLATES AT ONCE", "needs": "tray", "opens": 4},
 	# Third cook is a permanent upgrade for the saved night; keep the legacy id for saves.
-	"temp": {"name": "THIRD COOK", "cost": 45, "says": "JO JOINS FOR THE NIGHT"},
+	"temp": {"name": "THIRD COOK", "cost": 45, "says": "JO STAYS THE ENTIRE RUN"},
 	# Duff, Nov 26: "make the stations upgradable later on so that you can fire multiple dishes".
 	# A kitchen upgrade, not a cook perk: it stays when a cook walks out.
 	"burners_0": {"name": "GRILL BURNERS", "cost": 100, "says": "GRILL FIRES 2 OF A DISH", "opens": 4},
